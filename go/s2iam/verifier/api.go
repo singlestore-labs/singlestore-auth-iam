@@ -51,18 +51,6 @@ type Logger interface {
 	Logf(format string, args ...interface{})
 }
 
-// DefaultLogger implements the Logger interface
-type DefaultLogger struct {
-	Level LogLevel
-}
-
-// Logf logs a message with the specified format and arguments
-func (l *DefaultLogger) Logf(format string, args ...interface{}) {
-	// All logs are prefixed with [IAM]
-	prefixedFormat := "[IAM] " + format
-	fmt.Printf(prefixedFormat+"\n", args...)
-}
-
 // VerifierConfig holds configuration for the verifier
 type VerifierConfig struct {
 	// AllowedAudiences is a list of allowed token audiences

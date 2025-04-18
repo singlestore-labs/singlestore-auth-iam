@@ -1,4 +1,4 @@
-package s2iam
+package s2iam_test
 
 import (
 	"context"
@@ -17,8 +17,18 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/verifier"
 )
+
+func TestGetDatabaseJWTMockServer(t *testing.T) {
+	if determineCurrentCloudProvider(t) == "none" {
+		t.Skip("must be on a cloud provider")
+	}
+	mockServer := startMockServer()
+	jwt, err := s2iam.GetDatabaseJWT(ctx, "fake-workspace", s2iam.WithExternalServerURL(mockServer.URL))
+	require.NoError(t, err)
+}
 
 // MockCloudVerifier is a mock implementation of the CloudVerifier interface
 type MockCloudVerifier struct {

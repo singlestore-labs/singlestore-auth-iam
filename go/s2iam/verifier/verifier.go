@@ -30,21 +30,21 @@ const (
 // logDebug logs a debug-level message
 func (v *Verifier) logDebug(format string, args ...interface{}) {
 	if v.config.LogLevel >= LogLevelDebug && v.logger != nil {
-		v.logger.Logf(format, args...)
+		v.logger.Logf("[IAM] Debug: "+format, args...)
 	}
 }
 
 // logInfo logs an info-level message
 func (v *Verifier) logInfo(format string, args ...interface{}) {
 	if v.config.LogLevel >= LogLevelInfo && v.logger != nil {
-		v.logger.Logf(format, args...)
+		v.logger.Logf("[IAM] "+format, args...)
 	}
 }
 
 // logError logs an error message
 func (v *Verifier) logError(format string, args ...interface{}) {
 	if v.logger != nil {
-		v.logger.Logf("Error: "+format, args...)
+		v.logger.Logf("[IAM] Error: "+format, args...)
 	}
 }
 
