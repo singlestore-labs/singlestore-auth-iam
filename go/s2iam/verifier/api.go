@@ -3,6 +3,7 @@ package verifier
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"google.golang.org/api/idtoken"
@@ -29,9 +30,6 @@ type CloudVerifier interface {
 	// VerifyRequest validates the cloud provider authentication in the request
 	// and returns the cloud identity information or an error
 	VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error)
-
-	// VerifyRequestAndGetBody validates the cloud provider authentication and returns the request body
-	VerifyRequestAndGetBody(ctx context.Context, r *http.Request) (*CloudIdentity, []byte, error)
 }
 
 // Ensure that the concrete Verifier implements the CloudVerifier interface
@@ -49,6 +47,12 @@ const (
 // Logger is a simple logging interface
 type Logger interface {
 	Logf(format string, args ...interface{})
+}
+
+type logger struct{}
+
+func (logger) Logf(f string, args ...any) {
+	log.Printf(f, args...)
 }
 
 // VerifierConfig holds configuration for the verifier
@@ -85,7 +89,7 @@ func NewVerifier(ctx context.Context, config VerifierConfig) (*Verifier, error) 
 	}
 
 	if config.Logger == nil {
-		config.Logger = &DefaultLogger{Level: config.LogLevel}
+		config.Logger = logger{}
 	}
 
 	// Create a GCP token validator

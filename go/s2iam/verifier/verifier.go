@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net/http"
 	"sync"
@@ -75,27 +74,6 @@ func (v *Verifier) VerifyRequest(ctx context.Context, r *http.Request) (*CloudId
 
 	v.logError("Request does not contain valid cloud provider authentication headers")
 	return nil, errors.New("request does not contain valid cloud provider authentication headers")
-}
-
-// VerifyRequestAndGetBody validates the cloud provider authentication in the request
-// and also reads and returns the request body for convenience.
-func (v *Verifier) VerifyRequestAndGetBody(ctx context.Context, r *http.Request) (*CloudIdentity, []byte, error) {
-	// Verify the request authentication
-	identity, err := v.VerifyRequest(ctx, r)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Read the request body
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		v.logError("Failed to read request body: %v", err)
-		return nil, nil, fmt.Errorf("failed to read request body: %w", err)
-	}
-	defer r.Body.Close()
-
-	v.logDebug("Successfully verified request and read body (length: %d)", len(bodyBytes))
-	return identity, bodyBytes, nil
 }
 
 // jwksManager handles fetching and caching of JWKS (JSON Web Key Sets)

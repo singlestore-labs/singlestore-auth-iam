@@ -19,7 +19,7 @@ import (
 
 const (
 	// Service endpoints and defaults
-	defaultServer = "https://auth.singlestore.com/auth/iam"
+	defaultServer = "https://auth.singlestore.com/auth/iam/:jwtType"
 
 	// Metadata service URLs
 	awsMetadataURL   = "http://169.254.169.254/latest/meta-data/"

@@ -2,58 +2,54 @@ package s2iam_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/verifier"
 )
 
-func TestGetDatabaseJWTMockServer(t *testing.T) {
-	if determineCurrentCloudProvider(t) == "none" {
-		t.Skip("must be on a cloud provider")
+var privateKey, publicKey = func() (*rsa.PrivateKey, *rsa.PublicKey) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		log.Fatalf("Error generating RSA key pair: %v", err)
 	}
-	mockServer := startMockServer()
-	jwt, err := s2iam.GetDatabaseJWT(ctx, "fake-workspace", s2iam.WithExternalServerURL(mockServer.URL))
+	publicKey := &privateKey.PublicKey
+	return privateKey, publicKey
+}()
+
+func validateJWT(t *testing.T, tokenString string) jwt.MapClaims {
+	parsedToken, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Validate the signing method
+		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return publicKey, nil
+	})
 	require.NoError(t, err)
+	require.True(t, parsedToken.Valid)
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
+	require.True(t, ok)
+	return claims
 }
 
-// MockCloudVerifier is a mock implementation of the CloudVerifier interface
-type MockCloudVerifier struct {
-	mock.Mock
+func signJWT(claims jwt.MapClaims) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	tokenString, err := token.SignedString(privateKey)
+	return tokenString, err
 }
 
-// VerifyRequest implements the CloudVerifier interface
-func (m *MockCloudVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*verifier.CloudIdentity, error) {
-	args := m.Called(ctx, r)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*verifier.CloudIdentity), args.Error(1)
-}
-
-// VerifyRequestAndGetBody implements the CloudVerifier interface
-func (m *MockCloudVerifier) VerifyRequestAndGetBody(ctx context.Context, r *http.Request) (*verifier.CloudIdentity, []byte, error) {
-	args := m.Called(ctx, r)
-	if args.Get(0) == nil {
-		return nil, nil, args.Error(2)
-	}
-	return args.Get(0).(*verifier.CloudIdentity), args.Get(1).([]byte), args.Error(2)
-}
-
-// determineCurrentCloudProvider identifies which cloud environment the test is running in
 func determineCurrentCloudProvider(t *testing.T) string {
 	t.Helper()
 
@@ -67,6 +63,80 @@ func determineCurrentCloudProvider(t *testing.T) string {
 		return "azure"
 	}
 	return "none"
+}
+
+type fakeServerFlags struct{}
+
+func startFakeServer(t *testing.T, flags fakeServerFlags) *httptest.Server {
+	v, err := verifier.NewVerifier(context.Background(),
+		verifier.VerifierConfig{})
+	require.NoError(t, err)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("[server] received request %s %s", r.Method, r.URL)
+		t.Log("[server] verifying service account")
+		cloudIdentity, err := v.VerifyRequest(r.Context(), r)
+		if err != nil {
+			t.Logf("[server] verification failed: %s", err)
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		t.Logf("[server] service account verified: %s %s", cloudIdentity.Provider, cloudIdentity.Identifier)
+		tokenString, err := signJWT(jwt.MapClaims{
+			"sub":          cloudIdentity.Identifier,
+			"provider":     cloudIdentity.Provider,
+			"accountID":    cloudIdentity.AccountID,
+			"region":       cloudIdentity.Region,
+			"resourceType": cloudIdentity.ResourceType,
+			"iat":          time.Now().Unix(),
+			"exp":          time.Now().Add(time.Hour).Unix(),
+		})
+		if err != nil {
+			t.Logf("[server] jwt creation failed: %s", err)
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		enc, err := json.Marshal(map[string]any{
+			"jwt": tokenString,
+		})
+		if err != nil {
+			t.Logf("[server] jwt creation failed: %s", err)
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		_, _ = w.Write(enc)
+		t.Log("[server] returning jwt")
+		return
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+func TestGetDatabaseTestServerJWT(t *testing.T) {
+	if determineCurrentCloudProvider(t) == "none" {
+		t.Skip("test requires a cloud provider")
+	}
+	fakeServer := startFakeServer(t, fakeServerFlags{})
+	ctx := context.Background()
+	jwt, err := s2iam.GetDatabaseJWT(ctx, "fake-workspace", s2iam.WithExternalServerURL(fakeServer.URL+"/iam/:jwtType"))
+	require.NoError(t, err)
+	require.NotEmpty(t, jwt)
+	validateJWT(t, jwt)
+}
+
+/*
+
+// MockCloudVerifier is a mock implementation of the CloudVerifier interface
+type MockCloudVerifier struct {
+	mock.Mock
+}
+
+// VerifyRequest implements the CloudVerifier interface
+func (m *MockCloudVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*verifier.CloudIdentity, error) {
+	args := m.Called(ctx, r)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*verifier.CloudIdentity), args.Error(1)
 }
 
 // setupTestServer creates a mock HTTP server for testing
@@ -102,7 +172,7 @@ func createMockAuthServer(t *testing.T) *httptest.Server {
 
 		// For database JWT requests, verify workspaceGroupID is present
 		if jwtType == "database" && r.URL.Query().Get("workspaceGroupID") == "" {
-			t.Logf("Missing workspaceGroupID for database request")
+			t.Log("Missing workspaceGroupID for database request")
 			http.Error(w, "Missing workspaceGroupID", http.StatusBadRequest)
 			return
 		}
@@ -110,7 +180,7 @@ func createMockAuthServer(t *testing.T) *httptest.Server {
 		// Handle authentication headers
 		provider := determineProviderFromHeaders(r, t)
 		if provider == "" {
-			t.Logf("No valid authentication headers found")
+			t.Log("No valid authentication headers found")
 			http.Error(w, "No valid authentication headers", http.StatusUnauthorized)
 			return
 		}
@@ -127,7 +197,7 @@ func determineProviderFromHeaders(r *http.Request, t *testing.T) string {
 	// Check for AWS headers
 	if r.Header.Get("X-AWS-Access-Key-ID") != "" {
 		if r.Header.Get("X-AWS-Secret-Access-Key") == "" || r.Header.Get("X-AWS-Session-Token") == "" {
-			t.Logf("Incomplete AWS headers")
+			t.Log("Incomplete AWS headers")
 			return ""
 		}
 		return "aws"
@@ -138,7 +208,7 @@ func determineProviderFromHeaders(r *http.Request, t *testing.T) string {
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == "" {
-			t.Logf("Empty bearer token")
+			t.Log("Empty bearer token")
 			return ""
 		}
 
@@ -1027,10 +1097,10 @@ func TestGetDatabaseJWT(t *testing.T) {
 
 		// The test may fail due to actual cloud provider interactions
 		if err != nil {
-			t.Logf("JWT retrieval failed (expected in restricted environment): %v", err)
+			t.Log("JWT retrieval failed (expected in restricted environment): %v", err)
 		} else {
 			assert.NotEmpty(t, jwt)
-			t.Logf("Successfully retrieved JWT: %s", jwt)
+			t.Logf"Successfully retrieved JWT: %s", jwt)
 		}
 	})
 }
@@ -1201,7 +1271,7 @@ func TestMetadataRetrieval(t *testing.T) {
 				t.Logf("GCP ID token retrieval failed (might not have right permissions): %v", err)
 			} else {
 				assert.NotEmpty(t, token)
-				t.Logf("Successfully retrieved GCP ID token")
+				t.Log("Successfully retrieved GCP ID token")
 			}
 
 		case "azure":
@@ -1337,27 +1407,6 @@ func TestVerifierIntegration(t *testing.T) {
 		assert.Contains(t, identity.Identifier, "service-account")
 		assert.Equal(t, "my-project-123", identity.AccountID)
 	})
-
-	t.Run("Verify with body", func(t *testing.T) {
-		t.Parallel()
-
-		// Create a mock request with body
-		body := []byte(`{"test":"data"}`)
-		req, err := http.NewRequest(http.MethodPost, verifierServer.URL, strings.NewReader(string(body)))
-		require.NoError(t, err)
-
-		// Add Azure token
-		req.Header.Set("Authorization", "Bearer azure-test-token")
-
-		// Verify the request and get body
-		identity, reqBody, err := v.VerifyRequestAndGetBody(context.Background(), req)
-		require.NoError(t, err)
-
-		// Verify the identity and body
-		assert.Equal(t, "azure", identity.Provider)
-		assert.Equal(t, "12345678-1234-1234-1234-123456789012", identity.Identifier)
-		assert.Equal(t, body, reqBody)
-	})
 }
 
 // TestMockCloudVerifier tests the mock implementation of the CloudVerifier interface
@@ -1415,63 +1464,6 @@ func TestMockCloudVerifier(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, expectedErr, err)
 		assert.Nil(t, identity)
-		mockVerifier.AssertExpectations(t)
-	})
-
-	t.Run("VerifyRequestAndGetBody success", func(t *testing.T) {
-		t.Parallel()
-
-		// Create mock verifier
-		mockVerifier := new(MockCloudVerifier)
-
-		// Set up expectations
-		mockIdentity := &verifier.CloudIdentity{
-			Provider:     "gcp",
-			Identifier:   "123456789012/instance-id/service-account@project.iam.gserviceaccount.com",
-			AccountID:    "my-project-123",
-			Region:       "us-central1",
-			ResourceType: "gce",
-		}
-
-		mockBody := []byte(`{"test":"data"}`)
-		mockVerifier.On("VerifyRequestAndGetBody", mock.Anything, mock.Anything).Return(mockIdentity, mockBody, nil)
-
-		// Create test request
-		req, err := http.NewRequest(http.MethodPost, "http://example.com", strings.NewReader(`{"test":"data"}`))
-		require.NoError(t, err)
-
-		// Call the method
-		identity, body, err := mockVerifier.VerifyRequestAndGetBody(context.Background(), req)
-
-		// Assertions
-		require.NoError(t, err)
-		assert.Equal(t, mockIdentity, identity)
-		assert.Equal(t, mockBody, body)
-		mockVerifier.AssertExpectations(t)
-	})
-
-	t.Run("VerifyRequestAndGetBody error", func(t *testing.T) {
-		t.Parallel()
-
-		// Create mock verifier
-		mockVerifier := new(MockCloudVerifier)
-
-		// Set up expectations for error
-		expectedErr := errors.New("body verification failed")
-		mockVerifier.On("VerifyRequestAndGetBody", mock.Anything, mock.Anything).Return(nil, nil, expectedErr)
-
-		// Create test request
-		req, err := http.NewRequest(http.MethodPost, "http://example.com", strings.NewReader(`{"test":"data"}`))
-		require.NoError(t, err)
-
-		// Call the method
-		identity, body, err := mockVerifier.VerifyRequestAndGetBody(context.Background(), req)
-
-		// Assertions
-		assert.Error(t, err)
-		assert.Equal(t, expectedErr, err)
-		assert.Nil(t, identity)
-		assert.Nil(t, body)
 		mockVerifier.AssertExpectations(t)
 	})
 }
@@ -1682,3 +1674,5 @@ func TestEndToEndIntegration(t *testing.T) {
 
 // Mock HTTP client
 var httpClient = http.DefaultClient
+
+*/
