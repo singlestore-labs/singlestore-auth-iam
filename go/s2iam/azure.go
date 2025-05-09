@@ -93,12 +93,16 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		return nil
 	}
 
-	// Check Azure environment variable (fast check first)
+	if c.logger != nil {
+		c.logger.Logf("Azure Detection - Starting detection")
+	}
+
+	// Fast path: Check Azure environment variable
 	if os.Getenv("AZURE_ENV") != "" {
-		c.detected = true
 		if c.logger != nil {
 			c.logger.Logf("Azure Detection - Found AZURE_ENV environment variable")
 		}
+		c.detected = true
 		return nil
 	}
 
@@ -110,11 +114,16 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"http://169.254.169.254/metadata/instance?api-version=2021-02-01", nil)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Failed to create request: %v", err)
+		}
 		return fmt.Errorf("not running on Azure: %w", err)
 	}
 
 	req.Header.Set("Metadata", "true")
-	client := &http.Client{Timeout: 3 * time.Second}
+
+	// Use an HTTP client without a fixed timeout to respect the context
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		if c.logger != nil {
@@ -122,19 +131,86 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		}
 		return fmt.Errorf("not running on Azure: metadata service unavailable: %w", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
 		if c.logger != nil {
 			c.logger.Logf("Azure Detection - Metadata service returned status %d", resp.StatusCode)
 		}
 		return fmt.Errorf("not running on Azure: metadata service returned status %d", resp.StatusCode)
 	}
 
-	resp.Body.Close()
+	// We've confirmed we're on Azure
 	c.detected = true
 	if c.logger != nil {
 		c.logger.Logf("Azure Detection - Successfully detected Azure environment")
+	}
+	return nil
+}
+
+// CheckIdentityAvailability verifies that a managed identity is available and can be used
+// This should be called after Detect() confirms we're on Azure
+func (c *AzureClient) CheckIdentityAvailability(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.detected {
+		return ErrProviderNotDetected
+	}
+
+	if c.logger != nil {
+		c.logger.Logf("Azure - Checking for managed identity")
+	}
+
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// Continue normally
+	}
+
+	// Try to get an identity token with a simple resource that should be widely accessible
+	url := fmt.Sprintf("%s?api-version=%s&resource=%s",
+		azureMetadataURL, azureAPIVersion, azureResourceServer)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create identity check request: %w", err)
+	}
+
+	req.Header.Set("Metadata", "true")
+
+	// Use an HTTP client without a fixed timeout to respect the context
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to check identity availability: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body for error details
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		// Try to parse the error response
+		var errorResponse struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &errorResponse); err == nil &&
+			errorResponse.Error == "invalid_request" &&
+			strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
+			return errors.New("no managed identity assigned to this resource - please assign a managed identity in the Azure portal")
+		}
+
+		return fmt.Errorf("managed identity check failed: status %d, response: %s",
+			resp.StatusCode, string(bodyBytes))
+	}
+
+	if c.logger != nil {
+		c.logger.Logf("Azure - Managed identity available and working")
 	}
 	return nil
 }
@@ -149,17 +225,43 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	c.mu.Lock()
 	detected := c.detected
 	managedIdentityID := c.managedIdentityID
+	logger := c.logger
 	c.mu.Unlock()
 
 	if !detected {
 		return nil, nil, ErrProviderNotDetected
 	}
 
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+		// Continue normally
+	}
+
 	url := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
+
+	// Use custom resource if provided in additionalParams
+	if customResource, ok := additionalParams["azure_resource"]; ok && customResource != "" {
+		url = fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, customResource)
+		if logger != nil {
+			logger.Logf("Azure: Using custom resource audience: %s", customResource)
+		}
+	}
 
 	// If a specific managed identity ID is provided, add it to the request
 	if managedIdentityID != "" {
 		url = fmt.Sprintf("%s&client_id=%s", url, managedIdentityID)
+		if logger != nil {
+			logger.Logf("Azure: Using specific managed identity ID: %s", managedIdentityID)
+		}
+	} else if logger != nil {
+		logger.Logf("Azure: Using system-assigned managed identity")
+	}
+
+	if logger != nil {
+		logger.Logf("Azure: Requesting token from URL: %s", url)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -170,7 +272,8 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	// Azure requires this header for managed identity requests
 	req.Header.Set("Metadata", "true")
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	// Use an HTTP client without a fixed timeout to respect the context
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get Azure Managed Identity token: %w", err)
@@ -183,6 +286,29 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Try to parse the error for more information
+		var errorResponse struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+
+		jsonErr := json.Unmarshal(bodyBytes, &errorResponse)
+		if jsonErr == nil && errorResponse.Error != "" {
+			if logger != nil {
+				logger.Logf("Azure: Token request failed with error: %s - %s",
+					errorResponse.Error, errorResponse.ErrorDescription)
+			}
+
+			// Handle common error cases
+			if errorResponse.Error == "invalid_request" && strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
+				if managedIdentityID != "" {
+					return nil, nil, fmt.Errorf("Azure token request failed: user-assigned managed identity with ID %s not found. Ensure the identity is assigned to this resource", managedIdentityID)
+				} else {
+					return nil, nil, errors.New("Azure token request failed: no system-assigned managed identity found on this resource. Please assign a managed identity to this resource in the Azure portal")
+				}
+			}
+		}
+
 		return nil, nil, fmt.Errorf("Azure token request failed: %d, %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -289,7 +415,7 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 			azureInstanceURL+"?api-version=2021-02-01", nil)
 		if err == nil {
 			instanceReq.Header.Set("Metadata", "true")
-			client := &http.Client{Timeout: 2 * time.Second}
+			client := &http.Client{}
 			resp, err := client.Do(instanceReq)
 			if err == nil && resp.StatusCode == http.StatusOK {
 				var instanceData map[string]interface{}
@@ -333,6 +459,7 @@ func (c *AzureClient) AssumeRole(roleIdentifier string) CloudProviderClient {
 		identity:          c.identity,
 		detected:          c.detected,
 		managedIdentityID: roleIdentifier,
+		logger:            c.logger,
 	}
 
 	return newClient
@@ -340,12 +467,21 @@ func (c *AzureClient) AssumeRole(roleIdentifier string) CloudProviderClient {
 
 // fetchOIDCConfig fetches the OpenID Connect configuration
 func fetchOIDCConfig(ctx context.Context, endpoint string) (*OIDCConfig, error) {
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue normally
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC config request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	// Use an HTTP client without a fixed timeout to respect the context
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch OIDC config: %w", err)
@@ -366,12 +502,21 @@ func fetchOIDCConfig(ctx context.Context, endpoint string) (*OIDCConfig, error) 
 
 // fetchJWKS fetches the JSON Web Key Set
 func fetchJWKS(ctx context.Context, jwksURI string) (*JWKS, error) {
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue normally
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURI, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JWKS request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	// Use an HTTP client without a fixed timeout to respect the context
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch JWKS: %w", err)
@@ -441,6 +586,14 @@ func newJWKSManager(tenant string) *jwksManager {
 
 // getKey retrieves a signing key by ID, refreshing the cache if needed
 func (m *jwksManager) getKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue normally
+	}
+
 	// Check cache first (read lock)
 	m.mutex.RLock()
 	key, found := m.keysCache[kid]
@@ -783,6 +936,14 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	allowedAudiences := v.allowedAudiences
 	jwksManager := v.jwksManager
 	v.mu.RUnlock()
+
+	// Check for context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue normally
+	}
 
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
