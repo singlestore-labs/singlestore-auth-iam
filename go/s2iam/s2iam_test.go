@@ -132,8 +132,7 @@ func startFakeServer(t *testing.T, flags fakeServerFlags) *httptest.Server {
 	// Create verifiers with enhanced logging
 	v, err := s2iam.CreateVerifiers(context.Background(),
 		s2iam.VerifierConfig{
-			LogLevel: 2, // Enable detailed logging
-			Logger:   loggerAdapter{t: t},
+			Logger: t,
 			// Set allowed audiences for GCP verification
 			AllowedAudiences: []string{
 				"https://auth.singlestore.com",
@@ -236,13 +235,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// loggerAdapter adapts testing.T to the Logger interface
-type loggerAdapter struct {
-	t *testing.T
-}
-
-func (l loggerAdapter) Logf(format string, args ...interface{}) {
-	l.t.Logf("[server-logger] "+format, args...)
 }

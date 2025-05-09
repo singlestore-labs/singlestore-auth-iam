@@ -11,6 +11,8 @@ import (
 	"github.com/memsql/errors"
 )
 
+const defaultTimeout = 5 * time.Second
+
 // Logger is a simple logging interface
 type Logger interface {
 	Logf(format string, args ...interface{})
@@ -116,48 +118,74 @@ type VerifierConfig struct {
 	Logger Logger
 }
 
-// DetectProviderOption represents an option for DetectProvider
-type DetectProviderOption func(*detectProviderOptions)
-
+// detectProviderOptions holds options for provider detection
 type detectProviderOptions struct {
 	logger  Logger
 	clients []CloudProviderClient
 	timeout time.Duration
 }
 
+// ProviderOption defines options for provider detection
+type ProviderOption interface {
+	applyProviderOption(*detectProviderOptions)
+}
+
+// Implementation struct for provider options
+type detectOption struct {
+	applyFunc func(*detectProviderOptions)
+}
+
+func (o detectOption) applyProviderOption(opts *detectProviderOptions) {
+	if o.applyFunc != nil {
+		o.applyFunc(opts)
+	}
+}
+
 // WithLogger sets a logger for provider detection
-func WithLogger(logger Logger) DetectProviderOption {
-	return func(o *detectProviderOptions) {
-		o.logger = logger
+func WithLogger(logger Logger) ProviderOption {
+	return detectOption{
+		applyFunc: func(o *detectProviderOptions) {
+			o.logger = logger
+		},
 	}
 }
 
 // WithClients sets the list of clients to use for detection
-func WithClients(clients []CloudProviderClient) DetectProviderOption {
-	return func(o *detectProviderOptions) {
-		o.clients = clients
+func WithClients(clients []CloudProviderClient) ProviderOption {
+	return detectOption{
+		applyFunc: func(o *detectProviderOptions) {
+			o.clients = clients
+		},
 	}
 }
 
 // WithTimeout sets the timeout for provider detection
-func WithTimeout(timeout time.Duration) DetectProviderOption {
-	return func(o *detectProviderOptions) {
-		o.timeout = timeout
+func WithTimeout(timeout time.Duration) ProviderOption {
+	return detectOption{
+		applyFunc: func(o *detectProviderOptions) {
+			o.timeout = timeout
+		},
 	}
 }
 
 // DetectProvider tries to detect which cloud provider is being used
-func DetectProvider(ctx context.Context, opts ...DetectProviderOption) (CloudProviderClient, error) {
-	// Default options
+func DetectProvider(ctx context.Context, opts ...ProviderOption) (CloudProviderClient, error) {
+	// Initialize default options
 	options := detectProviderOptions{
-		timeout: 5 * time.Second, // Default timeout
+		timeout: defaultTimeout,
 	}
 
 	// Apply provided options
 	for _, opt := range opts {
-		opt(&options)
+		opt.applyProviderOption(&options)
 	}
 
+	// Call implementation with prepared options
+	return detectProviderImpl(ctx, options)
+}
+
+// detectProviderImpl implements the provider detection with pre-filled options
+func detectProviderImpl(ctx context.Context, options detectProviderOptions) (CloudProviderClient, error) {
 	// If logger is not provided, check environment variable
 	if options.logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
 		options.logger = newDefaultLogger()
