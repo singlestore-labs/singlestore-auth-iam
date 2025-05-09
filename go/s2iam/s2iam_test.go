@@ -55,7 +55,18 @@ type fakeServerFlags struct{}
 /*
 func startFakeServer(t *testing.T, flags fakeServerFlags) *httptest.Server {
 	v, err := s2iam.CreateVerifiers(context.Background(),
-		s2iam.VerifierConfig{})
+		s2iam.VerifierConfig{
+			Logger: t, // Directly use testing.T as the logger
+			AllowedAudiences: []string{
+				"https://auth.singlestore.com",
+				"https://auth.singlestore.com/auth/iam/database",
+				"https://auth.singlestore.com/auth/iam/api",
+				// Add some more common values as fallbacks
+				"*",
+				"",
+				"https://localhost",
+			},
+})
 	require.NoError(t, err)
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Logf("[server] received request %s %s", r.Method, r.URL)
@@ -101,11 +112,13 @@ XXX
 */
 
 func TestGetDatabaseTestServerJWT(t *testing.T) {
-	client, err := s2iam.DetectProvider(context.Background(), time.Second*5)
+	client, err := s2iam.DetectProvider(context.Background(),
+		s2iam.WithLogger(t),
+		s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		t.Skipf("test requires a cloud provider: %+v", err)
 	}
-	t.Logf("[client] makeing request from %s client", client.GetType())
+	t.Logf("[client] making request from %s client", client.GetType())
 	fakeServer := startFakeServer(t, fakeServerFlags{})
 	ctx := context.Background()
 	jwt, err := s2iam.GetDatabaseJWT(ctx, "fake-workspace", s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))

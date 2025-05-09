@@ -22,15 +22,33 @@ type AWSClient struct {
 	roleARN   string
 	identity  *CloudIdentity
 	detected  bool
-	region    string     // AWS region to use for API calls
-	mu        sync.Mutex // Added for concurrency safety
+	region    string // AWS region to use for API calls
+	logger    Logger // Added logger field
+	mu        sync.Mutex
+}
+
+func (c *AWSClient) copy() *AWSClient {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return &AWSClient{
+		stsClient: c.stsClient,
+		roleARN:   c.roleARN,
+		identity:  c.identity,
+		detected:  c.detected,
+		region:    c.region,
+		logger:    c.logger,
+	}
 }
 
 // awsClient is a singleton instance of AWSClient
 var awsClient = &AWSClient{}
 
 // NewAWSClient returns the AWS client singleton
-func NewAWSClient() CloudProviderClient {
+func NewAWSClient(logger Logger) CloudProviderClient {
+	awsClient.mu.Lock()
+	defer awsClient.mu.Unlock()
+
+	awsClient.logger = logger
 	return awsClient
 }
 
@@ -40,8 +58,8 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 		return nil
 	}
 
-	if debugging {
-		fmt.Println("AWS ensureRegion - Determining region")
+	if c.logger != nil {
+		c.logger.Logf("AWS ensureRegion - Determining region")
 	}
 
 	// Try environment variables first (fastest method)
@@ -52,8 +70,8 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 
 	// Try to get region from metadata service
 	if region == "" {
-		if debugging {
-			fmt.Println("AWS ensureRegion - Trying metadata service for region")
+		if c.logger != nil {
+			c.logger.Logf("AWS ensureRegion - Trying metadata service for region")
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 			"http://169.254.169.254/latest/meta-data/placement/region", nil)
@@ -66,8 +84,8 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 					body, err := io.ReadAll(resp.Body)
 					if err == nil && len(body) > 0 {
 						region = string(body)
-						if debugging {
-							fmt.Printf("AWS ensureRegion - Got region from metadata: %s\n", region)
+						if c.logger != nil {
+							c.logger.Logf("AWS ensureRegion - Got region from metadata: %s", region)
 						}
 					}
 				}
@@ -77,14 +95,14 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 
 	// Try SDK config if needed
 	if region == "" {
-		if debugging {
-			fmt.Println("AWS ensureRegion - Trying SDK default config for region")
+		if c.logger != nil {
+			c.logger.Logf("AWS ensureRegion - Trying SDK default config for region")
 		}
 		cfg, err := config.LoadDefaultConfig(ctx)
 		if err == nil && cfg.Region != "" {
 			region = cfg.Region
-			if debugging {
-				fmt.Printf("AWS ensureRegion - Got region from SDK config: %s\n", region)
+			if c.logger != nil {
+				c.logger.Logf("AWS ensureRegion - Got region from SDK config: %s", region)
 			}
 		}
 	}
@@ -92,8 +110,8 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 	// Default to us-east-1 if all else fails
 	if region == "" {
 		region = "us-east-1"
-		if debugging {
-			fmt.Println("AWS ensureRegion - Using default region: us-east-1")
+		if c.logger != nil {
+			c.logger.Logf("AWS ensureRegion - Using default region: us-east-1")
 		}
 	}
 
@@ -111,15 +129,15 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		return nil
 	}
 
-	if debugging {
-		fmt.Println("AWS Detection - Starting detection")
+	if c.logger != nil {
+		c.logger.Logf("AWS Detection - Starting detection")
 	}
 
 	// Check common AWS environment variables (fast check first)
 	if os.Getenv("AWS_EXECUTION_ENV") != "" || os.Getenv("AWS_REGION") != "" ||
 		os.Getenv("AWS_DEFAULT_REGION") != "" || os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		if debugging {
-			fmt.Println("AWS Detection - Found AWS environment variables")
+		if c.logger != nil {
+			c.logger.Logf("AWS Detection - Found AWS environment variables")
 		}
 		c.detected = true // Mark detected first to avoid re-detection
 
@@ -145,8 +163,8 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		if err == nil {
 			defer resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				if debugging {
-					fmt.Println("AWS Detection - Metadata service detected")
+				if c.logger != nil {
+					c.logger.Logf("AWS Detection - Metadata service detected")
 				}
 				c.detected = true // Mark detected first to avoid re-detection
 
@@ -159,12 +177,12 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 				// Return success - the STS client will be created lazily when needed
 				return nil
 			}
-			if debugging {
-				fmt.Printf("AWS Detection - IMDSv2 token request failed with status: %d\n", resp.StatusCode)
+			if c.logger != nil {
+				c.logger.Logf("AWS Detection - IMDSv2 token request failed with status: %d", resp.StatusCode)
 			}
 		} else {
-			if debugging {
-				fmt.Printf("AWS Detection - IMDSv2 token request failed: %v\n", err)
+			if c.logger != nil {
+				c.logger.Logf("AWS Detection - IMDSv2 token request failed: %v", err)
 			}
 		}
 	}
@@ -180,8 +198,8 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
-			if debugging {
-				fmt.Println("AWS Detection - Direct metadata service detected")
+			if c.logger != nil {
+				c.logger.Logf("AWS Detection - Direct metadata service detected")
 			}
 			c.detected = true // Mark detected first to avoid re-detection
 
@@ -194,30 +212,30 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 			// Return success - the STS client will be created lazily when needed
 			return nil
 		}
-		if debugging {
-			fmt.Printf("AWS Detection - Direct metadata check failed with status: %d\n", resp.StatusCode)
+		if c.logger != nil {
+			c.logger.Logf("AWS Detection - Direct metadata check failed with status: %d", resp.StatusCode)
 		}
 	} else {
-		if debugging {
-			fmt.Printf("AWS Detection - Direct metadata check failed: %v\n", err)
+		if c.logger != nil {
+			c.logger.Logf("AWS Detection - Direct metadata check failed: %v", err)
 		}
 	}
 
 	return errors.New("not running on AWS: failed to access instance metadata service")
 }
 
-// initialize sets up the AWS SDK client
+// Initialize sets up the AWS SDK client
 func (c *AWSClient) initialize(ctx context.Context) error {
-	if debugging {
-		fmt.Println("AWS Initialize - Starting initialization")
+	if c.logger != nil {
+		c.logger.Logf("AWS Initialize - Starting initialization")
 	}
 
 	if err := c.ensureRegion(ctx); err != nil {
 		return err
 	}
 
-	if debugging {
-		fmt.Printf("AWS Initialize - Using region: %s\n", c.region)
+	if c.logger != nil {
+		c.logger.Logf("AWS Initialize - Using region: %s", c.region)
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx,
@@ -227,8 +245,8 @@ func (c *AWSClient) initialize(ctx context.Context) error {
 	}
 
 	c.stsClient = sts.NewFromConfig(cfg)
-	if debugging {
-		fmt.Println("AWS Initialize - Successfully created STS client")
+	if c.logger != nil {
+		c.logger.Logf("AWS Initialize - Successfully created STS client")
 	}
 	return nil
 }
@@ -240,13 +258,8 @@ func (c *AWSClient) GetType() CloudProviderType {
 
 // WithRegion returns a new client configured to use the specified AWS region
 func (c *AWSClient) WithRegion(region string) CloudProviderClient {
-	newClient := &AWSClient{
-		stsClient: c.stsClient,
-		identity:  c.identity,
-		detected:  c.detected,
-		roleARN:   c.roleARN,
-		region:    region,
-	}
+	newClient := c.copy()
+	newClient.region = region
 	return newClient
 }
 
@@ -264,8 +277,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// Initialize STS client if needed
 	c.mu.Lock()
 	if c.stsClient == nil {
-		if debugging {
-			fmt.Println("AWS GetIdentityHeaders - Initializing STS client")
+		if c.logger != nil {
+			c.logger.Logf("AWS GetIdentityHeaders - Initializing STS client")
 		}
 
 		if err := c.initialize(ctx); err != nil {
@@ -277,8 +290,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	// If roleARN is provided, assume that role first
 	if roleARN != "" {
-		if debugging {
-			fmt.Printf("AWS GetIdentityHeaders - Assuming role: %s\n", roleARN)
+		if c.logger != nil {
+			c.logger.Logf("AWS GetIdentityHeaders - Assuming role: %s\n", roleARN)
 		}
 		// Generate a unique session name
 		sessionName := fmt.Sprintf("SingleStoreAuth-%d", time.Now().Unix())
@@ -329,8 +342,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	}
 
 	// First try to get the caller identity to check if we're already using session credentials
-	if debugging {
-		fmt.Println("AWS GetIdentityHeaders - Getting caller identity")
+	if c.logger != nil {
+		c.logger.Logf("AWS GetIdentityHeaders - Getting caller identity")
 	}
 	callerIdentity, err := c.stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -345,8 +358,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// If we're using session credentials, we can't call GetSessionToken
 	// So we'll use the credentials we already have
 	if isUsingSessionCredentials {
-		if debugging {
-			fmt.Println("AWS GetIdentityHeaders - Using existing session credentials")
+		if c.logger != nil {
+			c.logger.Logf("AWS GetIdentityHeaders - Using existing session credentials")
 		}
 
 		// Get the current credentials from the SDK
@@ -376,8 +389,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	}
 
 	// We're using permanent credentials, so we can call GetSessionToken
-	if debugging {
-		fmt.Println("AWS GetIdentityHeaders - Getting session token")
+	if c.logger != nil {
+		c.logger.Logf("AWS GetIdentityHeaders - Getting session token")
 	}
 	input := &sts.GetSessionTokenInput{}
 	output, err := c.stsClient.GetSessionToken(ctx, input)
@@ -464,40 +477,26 @@ func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Clien
 
 // AssumeRole configures the provider to use an alternate identity
 func (c *AWSClient) AssumeRole(roleIdentifier string) CloudProviderClient {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Create a new client to avoid modifying the original
-	newClient := &AWSClient{
-		stsClient: c.stsClient,
-		identity:  c.identity,
-		detected:  c.detected,
-		roleARN:   roleIdentifier,
-		region:    c.region,
-	}
-
+	newClient := c.copy()
+	newClient.roleARN = roleIdentifier
 	return newClient
 }
 
 // AWSVerifier implements the CloudProviderVerifier interface for AWS
 type AWSVerifier struct {
-	logLevel int
-	logger   Logger
-	mu       sync.RWMutex
+	logger Logger
+	mu     sync.RWMutex
 }
 
 // awsVerifier is a singleton instance for AWSVerifier
 var awsVerifier = &AWSVerifier{}
 
 // NewAWSVerifier creates or configures the AWS verifier
-func NewAWSVerifier(logger Logger, logLevel int) CloudProviderVerifier {
+func NewAWSVerifier(logger Logger) CloudProviderVerifier {
 	awsVerifier.mu.Lock()
 	defer awsVerifier.mu.Unlock()
 
-	if logger != nil {
-		awsVerifier.logger = logger
-		awsVerifier.logLevel = logLevel
-	}
+	awsVerifier.logger = logger
 	return awsVerifier
 }
 
@@ -512,7 +511,6 @@ func (v *AWSVerifier) HasHeaders(r *http.Request) bool {
 func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error) {
 	v.mu.RLock()
 	logger := v.logger
-	logLevel := v.logLevel
 	v.mu.RUnlock()
 
 	accessKeyID := r.Header.Get("X-AWS-Access-Key-ID")
@@ -520,13 +518,13 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 	sessionToken := r.Header.Get("X-AWS-Session-Token")
 
 	if accessKeyID == "" || secretAccessKey == "" || sessionToken == "" {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Missing required AWS authentication headers")
 		}
 		return nil, errors.New("missing required AWS authentication headers")
 	}
 
-	if logger != nil && logLevel > 1 {
+	if logger != nil {
 		logger.Logf("Creating AWS config with provided credentials")
 	}
 
@@ -544,7 +542,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		)),
 	)
 	if err != nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to load AWS config: %v", err)
 		}
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
@@ -554,7 +552,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 	// STS is a global service but requires a region in the config
 	if cfg.Region == "" {
 		cfg.Region = "us-east-1"
-		if logger != nil && logLevel > 1 {
+		if logger != nil {
 			logger.Logf("No region specified, using us-east-1 for STS")
 		}
 	}
@@ -562,7 +560,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 	// Create an STS client with the configuration
 	stsClient := sts.NewFromConfig(cfg)
 
-	if logger != nil && logLevel > 1 {
+	if logger != nil {
 		logger.Logf("Calling GetCallerIdentity to verify AWS credentials")
 	}
 
@@ -570,14 +568,14 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 	// This operation is available in all regions and doesn't require region-specific endpoints
 	getCallerIdentityOutput, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to verify AWS credentials: %v", err)
 		}
 		return nil, fmt.Errorf("failed to verify AWS credentials: %w", err)
 	}
 
 	if getCallerIdentityOutput.Arn == nil || getCallerIdentityOutput.Account == nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("AWS returned empty ARN or Account")
 		}
 		return nil, errors.New("AWS returned empty ARN or Account")
@@ -600,7 +598,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		}
 	}
 
-	if logger != nil && logLevel > 0 {
+	if logger != nil {
 		logger.Logf("Successfully verified AWS identity: %s", *getCallerIdentityOutput.Arn)
 	}
 

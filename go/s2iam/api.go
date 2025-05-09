@@ -4,13 +4,37 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/memsql/errors"
 )
 
-var debugging = false
+// Logger is a simple logging interface
+type Logger interface {
+	Logf(format string, args ...interface{})
+}
+
+// defaultLogger provides a basic implementation that forwards to standard output
+type defaultLogger struct{}
+
+func (l defaultLogger) Logf(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
+// newDefaultLogger creates a default logger instance
+func newDefaultLogger() Logger {
+	return defaultLogger{}
+}
+
+// getLogger returns a logger based on environment settings
+func getLogger() Logger {
+	if os.Getenv("S2IAM_DEBUGGING") == "true" {
+		return newDefaultLogger()
+	}
+	return nil
+}
 
 type CloudProviderType string
 
@@ -81,32 +105,6 @@ type CloudProviderVerifier interface {
 	VerifyRequest(context.Context, *http.Request) (*CloudIdentity, error)
 }
 
-// Logger is a simple logging interface
-type Logger interface {
-	Logf(format string, args ...interface{})
-}
-
-// defaultLogger provides a basic implementation that forwards to standard output
-type defaultLogger struct{}
-
-func (l defaultLogger) Logf(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
-}
-
-// NewDefaultLogger creates a default logger instance
-func NewDefaultLogger() Logger {
-	return defaultLogger{}
-}
-
-// LogLevel controls the verbosity of logging
-type LogLevel int
-
-const (
-	LogLevelError LogLevel = iota // Only log errors
-	LogLevelInfo                  // Log info and errors
-	LogLevelDebug                 // Log debug, info, and errors
-)
-
 // VerifierConfig holds configuration for cloud provider verifiers
 type VerifierConfig struct {
 	// AllowedAudiences is a list of allowed token audiences for GCP and Azure
@@ -114,24 +112,70 @@ type VerifierConfig struct {
 	// AzureTenant is the Azure tenant ID to use for token validation
 	// If empty, "common" will be used
 	AzureTenant string
-	// Logger provides a logging interface (if nil, default logger will be used)
+	// Logger provides a logging interface (if nil, no logging occurs)
 	Logger Logger
-	// LogLevel controls the verbosity of logging
-	LogLevel LogLevel
 }
 
-// Clients is a list of available cloud provider clients
-var Clients = []CloudProviderClient{
-	NewAWSClient(),
-	NewGCPClient(),
-	NewAzureClient(),
+// DetectProviderOption represents an option for DetectProvider
+type DetectProviderOption func(*detectProviderOptions)
+
+type detectProviderOptions struct {
+	logger  Logger
+	clients []CloudProviderClient
+	timeout time.Duration
+}
+
+// WithLogger sets a logger for provider detection
+func WithLogger(logger Logger) DetectProviderOption {
+	return func(o *detectProviderOptions) {
+		o.logger = logger
+	}
+}
+
+// WithClients sets the list of clients to use for detection
+func WithClients(clients []CloudProviderClient) DetectProviderOption {
+	return func(o *detectProviderOptions) {
+		o.clients = clients
+	}
+}
+
+// WithTimeout sets the timeout for provider detection
+func WithTimeout(timeout time.Duration) DetectProviderOption {
+	return func(o *detectProviderOptions) {
+		o.timeout = timeout
+	}
 }
 
 // DetectProvider tries to detect which cloud provider is being used
-func DetectProvider(ctx context.Context, timeout time.Duration) (CloudProviderClient, error) {
+func DetectProvider(ctx context.Context, opts ...DetectProviderOption) (CloudProviderClient, error) {
+	// Default options
+	options := detectProviderOptions{
+		timeout: 5 * time.Second, // Default timeout
+	}
+
+	// Apply provided options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	// If logger is not provided, check environment variable
+	if options.logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
+		options.logger = newDefaultLogger()
+	}
+
+	// If clients are not provided, create them
+	if options.clients == nil || len(options.clients) == 0 {
+		options.clients = []CloudProviderClient{
+			NewAWSClient(options.logger),
+			NewGCPClient(options.logger),
+			NewAzureClient(options.logger),
+		}
+	}
+
+	// Set up timeout context
 	var cancel func()
-	if timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, timeout)
+	if options.timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, options.timeout)
 	} else {
 		ctx, cancel = context.WithCancel(ctx)
 	}
@@ -139,22 +183,19 @@ func DetectProvider(ctx context.Context, timeout time.Duration) (CloudProviderCl
 
 	c := make(chan CloudProviderClient, 1) // Buffer to avoid goroutine leak
 	var wg sync.WaitGroup
-	wg.Add(len(Clients))
+	wg.Add(len(options.clients))
 	go func() {
 		wg.Wait()
 		close(c)
 	}()
 
-	allErrors := make([]error, 0, len(Clients)+1)
+	allErrors := make([]error, 0, len(options.clients)+1)
 	var errorsMu sync.Mutex
 
-	for _, client := range Clients {
-		go func() {
+	for _, client := range options.clients {
+		go func(client CloudProviderClient) {
 			defer wg.Done()
 			err := client.Detect(ctx)
-			if debugging {
-				fmt.Println("DetectProvider ", client.GetType(), "got", err)
-			}
 			if err != nil {
 				errorsMu.Lock()
 				defer errorsMu.Unlock()
@@ -166,7 +207,7 @@ func DetectProvider(ctx context.Context, timeout time.Duration) (CloudProviderCl
 			default:
 				// Another provider was already detected (unlikely)
 			}
-		}()
+		}(client)
 	}
 
 	select {
@@ -187,8 +228,9 @@ type Verifiers map[CloudProviderType]CloudProviderVerifier
 
 // CreateVerifiers creates a verifier for each cloud provider
 func CreateVerifiers(ctx context.Context, config VerifierConfig) (Verifiers, error) {
-	if config.Logger == nil {
-		config.Logger = NewDefaultLogger()
+	// Set default logger if debugging is enabled and no logger is provided
+	if config.Logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
+		config.Logger = newDefaultLogger()
 	}
 
 	if len(config.AllowedAudiences) == 0 {
@@ -196,14 +238,14 @@ func CreateVerifiers(ctx context.Context, config VerifierConfig) (Verifiers, err
 	}
 
 	// Create verifiers for each cloud provider
-	awsVerifier := NewAWSVerifier(config.Logger, int(config.LogLevel))
+	awsVerifier := NewAWSVerifier(config.Logger)
 
-	gcpVerifier, err := NewGCPVerifier(ctx, config.AllowedAudiences, config.Logger, int(config.LogLevel))
+	gcpVerifier, err := NewGCPVerifier(ctx, config.AllowedAudiences, config.Logger)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
 	}
 
-	azureVerifier := NewAzureVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, int(config.LogLevel))
+	azureVerifier := NewAzureVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger)
 
 	verifiers := map[CloudProviderType]CloudProviderVerifier{
 		ProviderAWS:   awsVerifier,

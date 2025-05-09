@@ -29,6 +29,7 @@ type GCPClient struct {
 	serviceAccountEmail string
 	identity            *CloudIdentity
 	detected            bool
+	logger              Logger     // Added logger field
 	mu                  sync.Mutex // Added for concurrency safety
 }
 
@@ -36,7 +37,11 @@ type GCPClient struct {
 var gcpClient = &GCPClient{}
 
 // NewGCPClient returns the GCP client singleton
-func NewGCPClient() CloudProviderClient {
+func NewGCPClient(logger Logger) CloudProviderClient {
+	gcpClient.mu.Lock()
+	defer gcpClient.mu.Unlock()
+
+	gcpClient.logger = logger
 	return gcpClient
 }
 
@@ -53,10 +58,17 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	// Check GCP environment variable (fast check first)
 	if os.Getenv("GCE_METADATA_HOST") != "" {
 		c.detected = true
+		if c.logger != nil {
+			c.logger.Logf("GCP Detection - Found GCE_METADATA_HOST environment variable")
+		}
 		return nil
 	}
 
 	// Try to access the GCP metadata service
+	if c.logger != nil {
+		c.logger.Logf("GCP Detection - Trying metadata service")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		gcpMetadataURL+"instance/id", nil)
 	if err != nil {
@@ -67,16 +79,25 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Detection - Metadata service unavailable: %v", err)
+		}
 		return fmt.Errorf("not running on GCP: metadata service unavailable: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		if c.logger != nil {
+			c.logger.Logf("GCP Detection - Metadata service returned status %d", resp.StatusCode)
+		}
 		return fmt.Errorf("not running on GCP: metadata service returned status %d", resp.StatusCode)
 	}
 
 	resp.Body.Close()
 	c.detected = true
+	if c.logger != nil {
+		c.logger.Logf("GCP Detection - Successfully detected GCP environment")
+	}
 	return nil
 }
 
@@ -321,7 +342,6 @@ func (c *GCPClient) AssumeRole(roleIdentifier string) CloudProviderClient {
 type GCPVerifier struct {
 	validator        *idtoken.Validator
 	allowedAudiences []string
-	logLevel         int
 	logger           Logger
 	mu               sync.RWMutex // Added for concurrency safety
 }
@@ -330,7 +350,7 @@ type GCPVerifier struct {
 var gcpVerifier = &GCPVerifier{}
 
 // NewGCPVerifier creates or configures the GCP verifier
-func NewGCPVerifier(ctx context.Context, allowedAudiences []string, logger Logger, logLevel int) (CloudProviderVerifier, error) {
+func NewGCPVerifier(ctx context.Context, allowedAudiences []string, logger Logger) (CloudProviderVerifier, error) {
 	gcpVerifier.mu.Lock()
 	defer gcpVerifier.mu.Unlock()
 
@@ -345,29 +365,9 @@ func NewGCPVerifier(ctx context.Context, allowedAudiences []string, logger Logge
 
 	// Update configuration
 	gcpVerifier.allowedAudiences = allowedAudiences
-	if logger != nil {
-		gcpVerifier.logger = logger
-		gcpVerifier.logLevel = logLevel
-	}
+	gcpVerifier.logger = logger
 
 	return gcpVerifier, nil
-}
-
-// HasHeaders returns true if the request has GCP authentication headers
-func (v *GCPVerifier) HasHeaders(r *http.Request) bool {
-	authHeader := r.Header.Get("Authorization")
-	if v.logger != nil && v.logLevel > 0 {
-		v.logger.Logf("DEBUG: GCP HasHeaders checking authorization header: %s",
-			truncateString(authHeader, 20))
-	}
-
-	result := strings.HasPrefix(authHeader, "Bearer ") && !hasAzureMarkers(r)
-
-	if v.logger != nil && v.logLevel > 0 {
-		v.logger.Logf("DEBUG: GCP HasHeaders result: %v", result)
-	}
-
-	return result
 }
 
 // truncateString safely truncates a string to the specified length with ellipsis
@@ -378,6 +378,23 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
+// HasHeaders returns true if the request has GCP authentication headers
+func (v *GCPVerifier) HasHeaders(r *http.Request) bool {
+	authHeader := r.Header.Get("Authorization")
+	if v.logger != nil {
+		v.logger.Logf("DEBUG: GCP HasHeaders checking authorization header: %s",
+			truncateString(authHeader, 20))
+	}
+
+	result := strings.HasPrefix(authHeader, "Bearer ") && !hasAzureMarkers(r)
+
+	if v.logger != nil {
+		v.logger.Logf("DEBUG: GCP HasHeaders result: %v", result)
+	}
+
+	return result
+}
+
 // VerifyRequest validates GCP credentials and returns the identity
 func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error) {
 	v.mu.RLock()
@@ -386,7 +403,7 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 	logger := v.logger
 	v.mu.RUnlock()
 
-	// Always log this regardless of level
+	// Always log this if logger is provided
 	if logger != nil {
 		logger.Logf("DEBUG: GCP VerifyRequest starting verification")
 		logger.Logf("DEBUG: GCP request method: %s, path: %s", r.Method, r.URL.Path)

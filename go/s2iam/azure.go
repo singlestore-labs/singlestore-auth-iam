@@ -67,6 +67,7 @@ type AzureClient struct {
 	managedIdentityID string
 	identity          *CloudIdentity
 	detected          bool
+	logger            Logger     // Added logger field
 	mu                sync.Mutex // Added for concurrency safety
 }
 
@@ -74,7 +75,11 @@ type AzureClient struct {
 var azureClient = &AzureClient{}
 
 // NewAzureClient returns the Azure client singleton
-func NewAzureClient() CloudProviderClient {
+func NewAzureClient(logger Logger) CloudProviderClient {
+	azureClient.mu.Lock()
+	defer azureClient.mu.Unlock()
+
+	azureClient.logger = logger
 	return azureClient
 }
 
@@ -91,10 +96,17 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	// Check Azure environment variable (fast check first)
 	if os.Getenv("AZURE_ENV") != "" {
 		c.detected = true
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Found AZURE_ENV environment variable")
+		}
 		return nil
 	}
 
 	// Try to access the Azure metadata service
+	if c.logger != nil {
+		c.logger.Logf("Azure Detection - Trying metadata service")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"http://169.254.169.254/metadata/instance?api-version=2021-02-01", nil)
 	if err != nil {
@@ -105,16 +117,25 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Metadata service unavailable: %v", err)
+		}
 		return fmt.Errorf("not running on Azure: metadata service unavailable: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Metadata service returned status %d", resp.StatusCode)
+		}
 		return fmt.Errorf("not running on Azure: metadata service returned status %d", resp.StatusCode)
 	}
 
 	resp.Body.Close()
 	c.detected = true
+	if c.logger != nil {
+		c.logger.Logf("Azure Detection - Successfully detected Azure environment")
+	}
 	return nil
 }
 
@@ -478,7 +499,8 @@ func (m *jwksManager) getKey(ctx context.Context, kid string) (*rsa.PublicKey, e
 func parseToken(tokenString string) (*struct {
 	Header map[string]interface{}
 	Claims map[string]interface{}
-}, error) {
+}, error,
+) {
 	parts := strings.Split(tokenString, ".")
 	if len(parts) != 3 {
 		return nil, errors.New("invalid token format")
@@ -689,7 +711,6 @@ type AzureVerifier struct {
 	jwksManager      *jwksManager
 	allowedAudiences []string
 	tenant           string
-	logLevel         int
 	logger           Logger
 	mu               sync.RWMutex // Added for concurrency safety
 }
@@ -698,7 +719,7 @@ type AzureVerifier struct {
 var azureVerifier = &AzureVerifier{}
 
 // NewAzureVerifier creates or configures the Azure verifier
-func NewAzureVerifier(allowedAudiences []string, tenant string, logger Logger, logLevel int) CloudProviderVerifier {
+func NewAzureVerifier(allowedAudiences []string, tenant string, logger Logger) CloudProviderVerifier {
 	azureVerifier.mu.Lock()
 	defer azureVerifier.mu.Unlock()
 
@@ -714,10 +735,7 @@ func NewAzureVerifier(allowedAudiences []string, tenant string, logger Logger, l
 
 	// Update configuration
 	azureVerifier.allowedAudiences = allowedAudiences
-	if logger != nil {
-		azureVerifier.logger = logger
-		azureVerifier.logLevel = logLevel
-	}
+	azureVerifier.logger = logger
 
 	return azureVerifier
 }
@@ -762,14 +780,13 @@ func hasAzureMarkers(r *http.Request) bool {
 func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error) {
 	v.mu.RLock()
 	logger := v.logger
-	logLevel := v.logLevel
 	allowedAudiences := v.allowedAudiences
 	jwksManager := v.jwksManager
 	v.mu.RUnlock()
 
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Invalid Azure authentication header format")
 		}
 		return nil, errors.New("invalid Azure authentication header format")
@@ -778,7 +795,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	// Extract the token from the Authorization header
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == "" {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Empty Azure token")
 		}
 		return nil, errors.New("empty Azure token")
@@ -787,7 +804,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	// Parse without verifying to extract claims first
 	token, err := parseToken(tokenString)
 	if err != nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to parse Azure token: %v", err)
 		}
 		return nil, fmt.Errorf("failed to parse Azure token: %w", err)
@@ -795,7 +812,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 
 	// Extract claims
 	if token.Claims == nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to parse Azure token claims")
 		}
 		return nil, errors.New("failed to parse Azure token claims")
@@ -806,7 +823,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	if iss, ok := token.Claims["iss"].(string); ok {
 		issuer = iss
 	} else {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Issuer claim missing from token")
 		}
 		return nil, errors.New("issuer claim missing from token")
@@ -814,13 +831,13 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 
 	// Check that it's an Azure token
 	if !strings.Contains(issuer, "microsoftonline.com") && !strings.Contains(issuer, "windows.net") {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Token not issued by Azure AD")
 		}
 		return nil, errors.New("token not issued by Azure AD")
 	}
 
-	if logger != nil && logLevel > 1 {
+	if logger != nil {
 		logger.Logf("Verifying Azure token from issuer: %s", issuer)
 	}
 
@@ -829,7 +846,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	if token.Header["kid"] != nil {
 		kid = token.Header["kid"].(string)
 	} else {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("KID header missing from token")
 		}
 		return nil, errors.New("kid header missing from token")
@@ -838,7 +855,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	// Get the appropriate key from JWKS
 	key, err := jwksManager.getKey(ctx, kid)
 	if err != nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to get Azure signing key: %v", err)
 		}
 		return nil, fmt.Errorf("failed to get Azure signing key: %w", err)
@@ -846,7 +863,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 
 	// Validate the token using the key
 	if !validateToken(tokenString, key) {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Azure token is invalid")
 		}
 		return nil, errors.New("Azure token is invalid")
@@ -864,7 +881,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	}
 
 	if !audienceValid {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Azure token has invalid audience: %s", audience)
 		}
 		return nil, errors.New("Azure token has invalid audience")
@@ -873,7 +890,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 	// Extract the principal ID
 	principalID, err := extractPrincipalID(token.Claims)
 	if err != nil {
-		if logger != nil && logLevel > 0 {
+		if logger != nil {
 			logger.Logf("Failed to extract principal ID: %v", err)
 		}
 		return nil, fmt.Errorf("failed to extract principal ID: %w", err)
@@ -911,7 +928,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Cl
 		}
 	}
 
-	if logger != nil && logLevel > 0 {
+	if logger != nil {
 		logger.Logf("Successfully verified Azure identity: %s", principalID)
 	}
 
