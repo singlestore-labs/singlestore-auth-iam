@@ -49,9 +49,10 @@ const (
 
 // Common errors
 var (
-	ErrNoCloudProviderDetected errors.String = "no cloud provider detected"
-	ErrProviderNotDetected     errors.String = "cloud provider not detected, call Detect() first"
-	ErrNoValidAuth             errors.String = "no valid cloud provider authentication found in request"
+	ErrNoCloudProviderDetected    errors.String = "no cloud provider detected"
+	ErrProviderNotDetected        errors.String = "cloud provider not detected, call Detect() first"
+	ErrNoValidAuth                errors.String = "no valid cloud provider authentication found in request"
+	ErrProviderDetectedNoIdentity errors.String = "cloud provider detected but no identity available"
 )
 
 // CloudProviderClient is implemented for each cloud provider.

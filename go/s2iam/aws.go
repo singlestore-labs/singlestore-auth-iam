@@ -266,46 +266,41 @@ func (c *AWSClient) WithRegion(region string) CloudProviderClient {
 // GetIdentityHeaders returns the headers needed to authenticate with the SingleStore auth service
 func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *CloudIdentity, error) {
 	c.mu.Lock()
-	detected := c.detected
-	roleARN := c.roleARN
-	c.mu.Unlock()
+	defer c.mu.Unlock()
 
-	if !detected {
+	if !c.detected {
 		return nil, nil, ErrProviderNotDetected
 	}
 
 	// Initialize STS client if needed
-	c.mu.Lock()
 	if c.stsClient == nil {
 		if c.logger != nil {
 			c.logger.Logf("AWS GetIdentityHeaders - Initializing STS client")
 		}
 
 		if err := c.initialize(ctx); err != nil {
-			c.mu.Unlock()
-			return nil, nil, errors.Errorf("failed to initialize AWS client: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 	}
-	c.mu.Unlock()
 
 	// If roleARN is provided, assume that role first
-	if roleARN != "" {
+	if c.roleARN != "" {
 		if c.logger != nil {
-			c.logger.Logf("AWS GetIdentityHeaders - Assuming role: %s\n", roleARN)
+			c.logger.Logf("AWS GetIdentityHeaders - Assuming role: %s\n", c.roleARN)
 		}
 		// Generate a unique session name
 		sessionName := fmt.Sprintf("SingleStoreAuth-%d", time.Now().Unix())
 
 		// Assume the specified role
 		assumeRoleInput := &sts.AssumeRoleInput{
-			RoleArn:         &roleARN,
+			RoleArn:         &c.roleARN,
 			RoleSessionName: &sessionName,
 			DurationSeconds: aws.Int32(3600), // 1 hour
 		}
 
 		assumeRoleOutput, err := c.stsClient.AssumeRole(ctx, assumeRoleInput)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to assume role %s: %w", roleARN, err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		// Use the temporary credentials from assumed role
@@ -329,13 +324,13 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 			)),
 		)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load AWS config with assumed role: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		tempSTS := sts.NewFromConfig(tempCfg)
 		identity, err := c.getIdentityFromSTS(ctx, tempSTS)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get identity after assuming role: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		return headers, identity, nil
@@ -347,11 +342,10 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	}
 	callerIdentity, err := c.stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get caller identity: %w", err)
+		return nil, nil, ErrProviderDetectedNoIdentity
 	}
 
 	// Check if we're already using session credentials
-	// One way to tell is by checking if the ARN contains ":assumed-role/" or if the session token exists in the environment
 	isUsingSessionCredentials := strings.Contains(*callerIdentity.Arn, ":assumed-role/") ||
 		os.Getenv("AWS_SESSION_TOKEN") != ""
 
@@ -365,7 +359,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Get the current credentials from the SDK
 		creds, err := c.stsClient.Options().Credentials.Retrieve(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to retrieve credentials: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		// Use the current credentials
@@ -382,7 +376,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Create identity from the caller identity we already obtained
 		identity, err := c.parseIdentityFromCallerIdentity(callerIdentity)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse identity: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		return headers, identity, nil
@@ -395,7 +389,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	input := &sts.GetSessionTokenInput{}
 	output, err := c.stsClient.GetSessionToken(ctx, input)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get session token: %w", err)
+		return nil, nil, ErrProviderDetectedNoIdentity
 	}
 
 	headers := map[string]string{
@@ -406,7 +400,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	identity, err := c.getIdentityFromSTS(ctx, c.stsClient)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get identity: %w", err)
+		return nil, nil, ErrProviderDetectedNoIdentity
 	}
 
 	return headers, identity, nil

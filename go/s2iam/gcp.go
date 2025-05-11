@@ -61,6 +61,33 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		if c.logger != nil {
 			c.logger.Logf("GCP Detection - Found GCE_METADATA_HOST environment variable")
 		}
+
+		// Verify we can actually get identity information
+		testCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+
+		// Try to access identity-related metadata
+		req, err := http.NewRequestWithContext(testCtx, http.MethodGet,
+			gcpMetadataURL+"instance/service-accounts/default/", nil)
+		if err != nil {
+			c.detected = false
+			return ErrProviderDetectedNoIdentity
+		}
+
+		req.Header.Set("Metadata-Flavor", "Google")
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			if c.logger != nil {
+				c.logger.Logf("GCP Detection - Metadata service available but no identity access")
+			}
+			return ErrProviderDetectedNoIdentity
+		}
+		resp.Body.Close()
+
 		return nil
 	}
 
@@ -128,7 +155,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// First get our own identity token for authentication
 		selfToken, err := c.getIDToken(ctx, "https://iamcredentials.googleapis.com/")
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get self identity token: %w", err)
+			return nil, nil, ErrProviderDetectedNoIdentity
 		}
 
 		// Use IAM API to impersonate the service account
@@ -187,7 +214,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// Original implementation when no service account impersonation is needed
 	idToken, err := c.getIDToken(ctx, audience)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get GCP ID token: %w", err)
+		return nil, nil, ErrProviderDetectedNoIdentity
 	}
 
 	headers := map[string]string{
