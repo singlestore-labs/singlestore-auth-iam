@@ -66,16 +66,16 @@ type CloudProviderClient interface {
 	// GetType returns the cloud provider type as a string
 	GetType() CloudProviderType
 
-	// GetIdentityHeaders returns the headers needed to authenticate with the SingleStore auth service
-	// additionalParams can be used to pass provider-specific parameters (like audience for GCP).
-	// GetIdentityHeaders assumes that Detect has already been called and returned without error.
-	GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *CloudIdentity, error)
-
 	// AssumeRole configures the provider to use an alternate identity
 	// The roleIdentifier is provider-specific: Role ARN for AWS, service account email for GCP,
 	// or managed identity ID for Azure. AssumeRole does not modify the original CloudProviderClient.
 	// AssumeRole assumes that Detect has already been called and returned without error.
 	AssumeRole(roleIdentifier string) CloudProviderClient
+
+	// GetIdentityHeaders returns the headers needed to authenticate with the SingleStore auth service
+	// additionalParams can be used to pass provider-specific parameters (like audience for GCP).
+	// GetIdentityHeaders assumes that Detect has already been called and returned without error.
+	GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *CloudIdentity, error)
 }
 
 // Common errors returned by the s2iam package

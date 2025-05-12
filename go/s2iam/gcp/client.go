@@ -33,6 +33,17 @@ type GCPClient struct {
 	mu                  sync.Mutex    // Added for concurrency safety
 }
 
+func (c *GCPClient) copy() *GCPClient {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return &GCPClient{
+		serviceAccountEmail: c.serviceAccountEmail,
+		identity:            c.identity,
+		detected:            c.detected,
+		logger:              c.logger,
+	}
+}
+
 // gcpClient is a singleton instance for GCPClient
 var gcpClient = &GCPClient{}
 
@@ -352,15 +363,7 @@ func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*mo
 
 // AssumeRole configures the provider to use a different service account
 func (c *GCPClient) AssumeRole(roleIdentifier string) models.CloudProviderClient {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Create a new client to avoid modifying the original
-	newClient := &GCPClient{
-		identity:            c.identity,
-		detected:            c.detected,
-		serviceAccountEmail: roleIdentifier,
-	}
-
+	newClient := c.copy()
+	newClient.serviceAccountEmail = roleIdentifier
 	return newClient
 }

@@ -25,11 +25,6 @@ const (
 	azureResourceServer = "https://management.azure.com/"
 )
 
-// jwks represents a JSON Web Key Set
-type jwks struct {
-	Keys []map[string]interface{} `json:"keys"`
-}
-
 // AzureClient implements the CloudProviderClient interface for Azure
 type AzureClient struct {
 	managedIdentityID string
@@ -37,6 +32,17 @@ type AzureClient struct {
 	detected          bool
 	logger            models.Logger // Added logger field
 	mu                sync.Mutex    // Added for concurrency safety
+}
+
+func (c *AzureClient) copy() *AzureClient {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return &AzureClient{
+		managedIdentityID: c.managedIdentityID,
+		identity:          c.identity,
+		detected:          c.detected,
+		logger:            c.logger,
+	}
 }
 
 // azureClient is a singleton instance for AzureClient
@@ -419,16 +425,7 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 
 // AssumeRole configures the provider to use a different managed identity
 func (c *AzureClient) AssumeRole(roleIdentifier string) models.CloudProviderClient {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Create a new client to avoid modifying the original
-	newClient := &AzureClient{
-		identity:          c.identity,
-		detected:          c.detected,
-		managedIdentityID: roleIdentifier,
-		logger:            c.logger,
-	}
-
+	newClient := c.copy()
+	newClient.managedIdentityID = roleIdentifier
 	return newClient
 }

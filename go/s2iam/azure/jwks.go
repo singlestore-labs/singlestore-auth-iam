@@ -31,6 +31,11 @@ type oidcConfig struct {
 	TokenURL string `json:"token_endpoint"`
 }
 
+// jwks represents a JSON Web Key Set
+type jwks struct {
+	Keys []map[string]interface{} `json:"keys"`
+}
+
 // jwksManager handles fetching and caching of JWKS (JSON Web Key Sets)
 type jwksManager struct {
 	tenant       string

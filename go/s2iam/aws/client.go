@@ -41,16 +41,11 @@ func (c *AWSClient) copy() *AWSClient {
 	}
 }
 
-// awsClient is a singleton instance of AWSClient
-var awsClient = &AWSClient{}
-
 // NewClient returns the AWS client singleton
 func NewClient(logger models.Logger) models.CloudProviderClient {
-	awsClient.mu.Lock()
-	defer awsClient.mu.Unlock()
-
-	awsClient.logger = logger
-	return awsClient
+	return &AWSClient{
+		logger: logger,
+	}
 }
 
 // ensureRegion determines and sets the AWS region for API calls
