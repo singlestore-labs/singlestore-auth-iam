@@ -127,7 +127,7 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 		t.Log("[server] verifying service account")
 		cloudIdentity, err := v.VerifyRequest(r.Context(), r)
 		if err != nil {
-			t.Logf("[server] verification failed: %s", err)
+			t.Logf("[server] verification failed: %+v", err)
 			http.Error(w, err.Error(), 400)
 			return
 		}

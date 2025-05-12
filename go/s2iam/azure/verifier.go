@@ -131,19 +131,15 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 	}
 
 	// Create a custom key function that returns our cached key
-	keyFunc := func(token *jwt.Token) (interface{}, error) {
-		// Verify the signing method is RSA
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, errors.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
+	keyFunc := func(token *jwt.Token) (any, error) {
 		return key, nil
 	}
 
-	// Parse and validate the token using the jwt package
-	token, err := jwt.Parse(tokenString, keyFunc, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}))
+	// Parse and validate the token using the jwt package, all all known public key, but no private key methods
+	token, err := jwt.Parse(tokenString, keyFunc, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EdDSA"}))
 	if err != nil {
 		if logger != nil {
-			logger.Logf("Failed to parse/validate Azure token: %v", err)
+			logger.Logf("Failed to parse/validate Azure token with %T key: %v", key, err)
 		}
 		return nil, errors.Errorf("failed to parse/validate Azure token: %w", err)
 	}
