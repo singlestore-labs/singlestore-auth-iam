@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/memsql/errors"
 	"google.golang.org/api/idtoken"
 )
 
@@ -99,7 +99,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		gcpMetadataURL+"instance/id", nil)
 	if err != nil {
-		return fmt.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
+		return errors.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
@@ -109,7 +109,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		if c.logger != nil {
 			c.logger.Logf("GCP Detection - Metadata service unavailable: %v", err)
 		}
-		return fmt.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
+		return errors.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -117,7 +117,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		if c.logger != nil {
 			c.logger.Logf("GCP Detection - Metadata service returned status %d", resp.StatusCode)
 		}
-		return fmt.Errorf("not running on GCP: metadata service returned status %d", resp.StatusCode)
+		return errors.Errorf("not running on GCP: metadata service returned status %d", resp.StatusCode)
 	}
 
 	resp.Body.Close()
@@ -167,7 +167,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		requestBody := fmt.Sprintf(`{"audience":"%s"}`, audience)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(requestBody))
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create impersonation request: %w", err)
+			return nil, nil, errors.Errorf("failed to create impersonation request: %w", err)
 		}
 
 		// Use our self token to authenticate the impersonation request
@@ -177,13 +177,13 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to impersonate service account: %w", err)
+			return nil, nil, errors.Errorf("failed to impersonate service account: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
-			return nil, nil, fmt.Errorf("impersonation failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+			return nil, nil, errors.Errorf("impersonation failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 		}
 
 		var tokenResponse struct {
@@ -191,11 +191,11 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-			return nil, nil, fmt.Errorf("failed to parse impersonation response: %w", err)
+			return nil, nil, errors.Errorf("failed to parse impersonation response: %w", err)
 		}
 
 		if tokenResponse.Token == "" {
-			return nil, nil, errors.New("received empty token from impersonation service")
+			return nil, nil, errors.Errorf("received empty token from impersonation service")
 		}
 
 		headers := map[string]string{
@@ -205,7 +205,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Create identity object
 		identity, err := c.getIdentityFromToken(ctx, tokenResponse.Token)
 		if err != nil {
-			return headers, nil, fmt.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
+			return headers, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
 		}
 
 		return headers, identity, nil
@@ -224,7 +224,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// Create identity object
 	identity, err := c.getIdentityFromToken(ctx, idToken)
 	if err != nil {
-		return headers, nil, fmt.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
+		return headers, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
 	}
 
 	return headers, identity, nil
@@ -235,30 +235,30 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 	tokenURL := fmt.Sprintf("%sinstance/service-accounts/default/identity?audience=%s", gcpMetadataURL, audience)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create token request: %w", err)
+		return "", errors.Errorf("failed to create token request: %w", err)
 	}
 	req.Header.Set("Metadata-Flavor", "Google") // Correct header for GCP metadata service
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to contact GCP metadata service: %w", err)
+		return "", errors.Errorf("failed to contact GCP metadata service: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read token response: %w", err)
+		return "", errors.Errorf("failed to read token response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GCP metadata request failed: %s, status: %d, body: %s",
+		return "", errors.Errorf("GCP metadata request failed: %s, status: %d, body: %s",
 			tokenURL, resp.StatusCode, string(bodyBytes))
 	}
 
 	token := string(bodyBytes)
 	if token == "" {
-		return "", errors.New("received empty token from GCP metadata service")
+		return "", errors.Errorf("received empty token from GCP metadata service")
 	}
 
 	return token, nil
@@ -271,12 +271,12 @@ func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*Cl
 	// for efficiency, since the token just came from the metadata service
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create token validator: %w", err)
+		return nil, errors.Errorf("failed to create token validator: %w", err)
 	}
 
 	payload, err := validator.Validate(ctx, token, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse ID token: %w", err)
+		return nil, errors.Errorf("failed to parse ID token: %w", err)
 	}
 
 	// Extract identity information
@@ -385,7 +385,7 @@ func NewGCPVerifier(ctx context.Context, allowedAudiences []string, logger Logge
 	if gcpVerifier.validator == nil {
 		validator, err := idtoken.NewValidator(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create GCP token validator: %w", err)
+			return nil, errors.Errorf("failed to create GCP token validator: %w", err)
 		}
 		gcpVerifier.validator = validator
 	}
@@ -457,7 +457,7 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("DEBUG: Invalid GCP authentication header format - doesn't start with 'Bearer '")
 		}
-		return nil, errors.New("invalid GCP authentication header format")
+		return nil, errors.Errorf("invalid GCP authentication header format")
 	}
 
 	// Extract the token from the Authorization header
@@ -466,7 +466,7 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("DEBUG: Empty GCP token after Bearer prefix")
 		}
-		return nil, errors.New("empty GCP token")
+		return nil, errors.Errorf("empty GCP token")
 	}
 
 	if logger != nil {
@@ -535,7 +535,7 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("DEBUG: All audience validations failed: %v", validationErr)
 		}
-		return nil, fmt.Errorf("invalid GCP token for allowed audiences: %w", validationErr)
+		return nil, errors.Errorf("invalid GCP token for allowed audiences: %w", validationErr)
 	}
 
 	// Log successful token validation
@@ -756,7 +756,7 @@ func (v *GCPVerifier) extractIdentifiers(payload *idtoken.Payload) (projectID, i
 				if projectID == "" {
 					// Last resort: Use subject as identifier but error
 					v.logger.Logf("DEBUG ERROR: Could not extract project ID from subject")
-					return "", "", "", "", errors.New("project identifier not found in GCP token")
+					return "", "", "", "", errors.Errorf("project identifier not found in GCP token")
 				}
 			}
 		} else {
@@ -764,7 +764,7 @@ func (v *GCPVerifier) extractIdentifiers(payload *idtoken.Payload) (projectID, i
 			if v.logger != nil {
 				v.logger.Logf("DEBUG ERROR: No identifying information found in GCP token claims")
 			}
-			return "", "", "", "", errors.New("no identifying information found in GCP token")
+			return "", "", "", "", errors.Errorf("no identifying information found in GCP token")
 		}
 	}
 

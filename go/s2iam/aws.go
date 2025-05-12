@@ -221,7 +221,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		}
 	}
 
-	return errors.New("not running on AWS: failed to detect AWS environment (no environment variables or metadata service)")
+	return errors.Errorf("not running on AWS: failed to detect AWS environment (no environment variables or metadata service)")
 }
 
 // Initialize sets up the AWS SDK client
@@ -439,7 +439,7 @@ func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCalle
 func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Client) (*CloudIdentity, error) {
 	callerIdentity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get caller identity: %w", err)
+		return nil, errors.Errorf("failed to get caller identity: %w", err)
 	}
 
 	// Parse the ARN to extract region and resource type
@@ -515,7 +515,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("Missing required AWS authentication headers")
 		}
-		return nil, errors.New("missing required AWS authentication headers")
+		return nil, errors.Errorf("missing required AWS authentication headers")
 	}
 
 	if logger != nil {
@@ -539,7 +539,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("Failed to load AWS config: %v", err)
 		}
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, errors.Errorf("failed to load AWS config: %w", err)
 	}
 
 	// Use us-east-1 as the default region for STS if no region is set
@@ -565,14 +565,14 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*Clou
 		if logger != nil {
 			logger.Logf("Failed to verify AWS credentials: %v", err)
 		}
-		return nil, fmt.Errorf("failed to verify AWS credentials: %w", err)
+		return nil, errors.Errorf("failed to verify AWS credentials: %w", err)
 	}
 
 	if getCallerIdentityOutput.Arn == nil || getCallerIdentityOutput.Account == nil {
 		if logger != nil {
 			logger.Logf("AWS returned empty ARN or Account")
 		}
-		return nil, errors.New("AWS returned empty ARN or Account")
+		return nil, errors.Errorf("AWS returned empty ARN or Account")
 	}
 
 	// Parse the ARN to extract region and resource type
