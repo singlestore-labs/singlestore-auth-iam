@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
 
 var privateKey, publicKey = func() (*rsa.PrivateKey, *rsa.PublicKey) {
@@ -79,8 +80,8 @@ type fakeServerFlags struct {
 }
 
 func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
-	v, err := s2iam.CreateVerifiers(context.Background(),
-		s2iam.VerifierConfig{
+	v, err := s2verifier.CreateVerifiers(context.Background(),
+		s2verifier.VerifierConfig{
 			Logger: t, // Directly use testing.T as the logger
 			AllowedAudiences: []string{
 				"https://auth.singlestore.com",
@@ -423,7 +424,7 @@ func TestDetectProvider_SpecificClients(t *testing.T) {
 // Test creating verifiers
 func TestCreateVerifiers(t *testing.T) {
 	ctx := context.Background()
-	verifiers, err := s2iam.CreateVerifiers(ctx, s2iam.VerifierConfig{
+	verifiers, err := s2verifier.CreateVerifiers(ctx, s2verifier.VerifierConfig{
 		AllowedAudiences: []string{"https://test.example.com"},
 		AzureTenant:      "common",
 		Logger:           t,
@@ -439,7 +440,7 @@ func TestCreateVerifiers(t *testing.T) {
 // Test verifier with mock AWS headers
 func TestVerifier_AWS(t *testing.T) {
 	// This is a unit test that doesn't require actual AWS credentials
-	verifiers, err := s2iam.CreateVerifiers(context.Background(), s2iam.VerifierConfig{
+	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
 	})
 	require.NoError(t, err)
@@ -465,7 +466,7 @@ func TestVerifier_AWS(t *testing.T) {
 
 // Test verifier with mock GCP headers
 func TestVerifier_GCP(t *testing.T) {
-	verifiers, err := s2iam.CreateVerifiers(context.Background(), s2iam.VerifierConfig{
+	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger:           t,
 		AllowedAudiences: []string{"https://test.example.com"},
 	})
@@ -490,7 +491,7 @@ func TestVerifier_GCP(t *testing.T) {
 
 // Test verifier with mock Azure headers
 func TestVerifier_Azure(t *testing.T) {
-	verifiers, err := s2iam.CreateVerifiers(context.Background(), s2iam.VerifierConfig{
+	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
 	})
 	require.NoError(t, err)
@@ -521,7 +522,7 @@ func TestVerifier_Azure(t *testing.T) {
 
 // Test VerifyRequest with no valid auth
 func TestVerifiers_NoValidAuth(t *testing.T) {
-	verifiers, err := s2iam.CreateVerifiers(context.Background(), s2iam.VerifierConfig{
+	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
 	})
 	require.NoError(t, err)

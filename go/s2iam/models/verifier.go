@@ -3,6 +3,8 @@ package models
 import (
 	"context"
 	"net/http"
+
+	"github.com/memsql/errors"
 )
 
 // VerifierConfig holds configuration for cloud provider verifiers
@@ -31,3 +33,6 @@ type CloudProviderVerifier interface {
 	// headers, without trusting the client.
 	VerifyRequest(context.Context, *http.Request) (*CloudIdentity, error)
 }
+
+// ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
+var ErrNoValidAuth errors.String = "no valid cloud provider authentication found in request"

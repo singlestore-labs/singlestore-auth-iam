@@ -86,9 +86,6 @@ var (
 	// ErrProviderNotDetected is returned when attempting to use a provider that hasn't been detected
 	ErrProviderNotDetected errors.String = "cloud provider not detected, call Detect() first"
 
-	// ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
-	ErrNoValidAuth errors.String = "no valid cloud provider authentication found in request"
-
 	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
 	ErrProviderDetectedNoIdentity errors.String = "cloud provider detected but no identity available"
 )

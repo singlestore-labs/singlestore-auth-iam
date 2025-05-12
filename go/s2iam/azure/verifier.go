@@ -5,45 +5,36 @@ import (
 	"encoding/base64"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/memsql/errors"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
+const (
+	// Azure OIDC well-known configuration
+	defaultAzureTenant = "common"
+)
+
 // AzureVerifier implements the CloudProviderVerifier interface for Azure
 type AzureVerifier struct {
-	jwksManager      *jwksManager
 	allowedAudiences []string
 	tenant           string
 	logger           models.Logger
-	mu               sync.RWMutex // Added for concurrency safety
+	jwksManager      *jwksManager
 }
-
-// azureVerifier is a singleton instance for AzureVerifier
-var azureVerifier = &AzureVerifier{}
 
 // NewVerifier creates or configures the Azure verifier
 func NewVerifier(allowedAudiences []string, tenant string, logger models.Logger) models.CloudProviderVerifier {
-	azureVerifier.mu.Lock()
-	defer azureVerifier.mu.Unlock()
-
 	if tenant == "" {
 		tenant = defaultAzureTenant // Use the common endpoint by default
 	}
-
-	// Initialize JWKS manager if needed
-	if azureVerifier.jwksManager == nil || azureVerifier.tenant != tenant {
-		azureVerifier.jwksManager = newJWKSManager(tenant)
-		azureVerifier.tenant = tenant
+	return &AzureVerifier{
+		allowedAudiences: allowedAudiences,
+		tenant:           tenant,
+		logger:           logger,
+		jwksManager:      getJWKSManager(tenant),
 	}
-
-	// Update configuration
-	azureVerifier.allowedAudiences = allowedAudiences
-	azureVerifier.logger = logger
-
-	return azureVerifier
 }
 
 // HasHeaders returns true if the request has Azure authentication headers
@@ -52,7 +43,8 @@ func (v *AzureVerifier) HasHeaders(r *http.Request) bool {
 	return strings.HasPrefix(authHeader, "Bearer ") && HasAzureMarkers(r)
 }
 
-// HasAzureMarkers checks for Azure-specific traits in the token
+// HasAzureMarkers checks for Azure-specific traits in the token. This is exported
+// for other verifiers to use for elimination.
 func HasAzureMarkers(r *http.Request) bool {
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
@@ -84,11 +76,7 @@ func HasAzureMarkers(r *http.Request) bool {
 
 // VerifyRequest validates Azure credentials and returns the identity
 func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*models.CloudIdentity, error) {
-	v.mu.RLock()
 	logger := v.logger
-	allowedAudiences := v.allowedAudiences
-	jwksManager := v.jwksManager
-	v.mu.RUnlock()
 
 	// Check for context cancellation
 	select {
@@ -134,7 +122,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 	}
 
 	// Get the key for this kid
-	key, err := jwksManager.getKey(ctx, kid)
+	key, err := v.jwksManager.getKey(ctx, kid)
 	if err != nil {
 		if logger != nil {
 			logger.Logf("Failed to get Azure signing key: %v", err)
@@ -186,7 +174,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 	}
 
 	audienceValid := false
-	for _, allowedAudience := range allowedAudiences {
+	for _, allowedAudience := range v.allowedAudiences {
 		if audience == allowedAudience || audience == "https://management.azure.com/" {
 			audienceValid = true
 			break

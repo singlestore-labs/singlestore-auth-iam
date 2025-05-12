@@ -9,14 +9,6 @@
 //	    // handle error
 //	}
 //	headers, identity, err := provider.GetIdentityHeaders(ctx, nil)
-//
-// Server usage:
-//
-//	verifiers, err := s2iam.CreateVerifiers(ctx, s2iam.VerifierConfig{})
-//	if err != nil {
-//	    // handle error
-//	}
-//	identity, err := verifiers.VerifyRequest(ctx, req)
 package s2iam
 
 import (
@@ -31,49 +23,39 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/azure"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gcp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/verifier"
 )
 
-// Re-export types from models package for backward compatibility
+// Re-export from the models package to simplify usage
 type (
-	CloudProviderType     = models.CloudProviderType
-	CloudIdentity         = models.CloudIdentity
-	CloudProviderClient   = models.CloudProviderClient
-	CloudProviderVerifier = models.CloudProviderVerifier
-	VerifierConfig        = models.VerifierConfig
-	Logger                = models.Logger
+	CloudProviderType   = models.CloudProviderType
+	CloudIdentity       = models.CloudIdentity
+	CloudProviderClient = models.CloudProviderClient
+	Logger              = models.Logger
 )
 
-// Re-export provider constants
 const (
 	ProviderAWS   = models.ProviderAWS
 	ProviderGCP   = models.ProviderGCP
 	ProviderAzure = models.ProviderAzure
 )
 
-// Re-export errors
 var (
-	ErrNoCloudProviderDetected    = models.ErrNoCloudProviderDetected
-	ErrProviderNotDetected        = models.ErrProviderNotDetected
-	ErrNoValidAuth                = models.ErrNoValidAuth
+	// ErrNoCloudProviderDetected is returned when no cloud provider can be detected
+	ErrNoCloudProviderDetected = models.ErrNoCloudProviderDetected
+
+	// ErrProviderNotDetected is returned when attempting to use a provider that hasn't been detected
+	ErrProviderNotDetected = models.ErrProviderNotDetected
+
+	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
 	ErrProviderDetectedNoIdentity = models.ErrProviderDetectedNoIdentity
 )
 
-// Re-export JWT types
 type JWTType = models.JWTType
 
 const (
 	DatabaseAccessJWT   = models.DatabaseAccessJWT
 	APIGatewayAccessJWT = models.APIGatewayAccessJWT
 )
-
-// Re-export Verifiers type
-type Verifiers = verifier.Verifiers
-
-// CreateVerifiers creates a verifier for each cloud provider
-func CreateVerifiers(ctx context.Context, config VerifierConfig) (Verifiers, error) {
-	return verifier.CreateVerifiers(ctx, config)
-}
 
 const defaultTimeout = 5 * time.Second
 
@@ -171,7 +153,7 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 	}
 
 	// If clients are not provided, create them
-	if options.clients == nil || len(options.clients) == 0 {
+	if options.clients == nil {
 		options.clients = []CloudProviderClient{
 			aws.NewClient(options.logger),
 			gcp.NewClient(options.logger),

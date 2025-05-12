@@ -1,5 +1,13 @@
 // Package verifier provides aggregate verifier functionality for s2iam
-package verifier
+//
+// Server usage:
+//
+//	verifiers, err := verifier.CreateVerifiers(ctx, s2iam.VerifierConfig{})
+//	if err != nil {
+//	    // handle error
+//	}
+//	identity, err := verifiers.VerifyRequest(ctx, req)
+package s2verifier
 
 import (
 	"context"
@@ -13,6 +21,15 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gcp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
+
+// Re-export from the models package to simplify usage
+type (
+	CloudProviderVerifier = models.CloudProviderVerifier
+	VerifierConfig        = models.VerifierConfig
+)
+
+// ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
+var ErrNoValidAuth = models.ErrNoValidAuth
 
 // defaultLogger provides a basic implementation that forwards to standard output
 type defaultLogger struct{}

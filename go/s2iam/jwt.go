@@ -78,15 +78,12 @@ func WithProvider(provider models.CloudProviderClient) JWTOption {
 func WithGCPAudience(audience string) JWTOption {
 	return jwtOption{
 		jwtApplyFunc: func(o *jwtOptions) {
-			if o.AdditionalParams == nil {
-				o.AdditionalParams = make(map[string]string)
-			}
 			o.AdditionalParams["audience"] = audience
 		},
 	}
 }
 
-// WithAssumeRole sets the role identifier to assume
+// WithAssumeRole sets the role identifier to assume (if there is one)
 func WithAssumeRole(roleIdentifier string) JWTOption {
 	return jwtOption{
 		jwtApplyFunc: func(o *jwtOptions) {
@@ -97,6 +94,10 @@ func WithAssumeRole(roleIdentifier string) JWTOption {
 
 // processJWTOptions processes JWT options and extracts provider options
 func processJWTOptions(jwtOpts jwtOptions, opts ...JWTOption) jwtOptions {
+	if jwtOpts.AdditionalParams == nil {
+		jwtOpts.AdditionalParams = make(map[string]string)
+	}
+
 	if jwtOpts.timeout == 0 {
 		jwtOpts.timeout = defaultTimeout
 	}
@@ -131,11 +132,6 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	provider := jwtOpts.Provider
 	if jwtOpts.AssumeRoleIdentifier != "" {
 		provider = provider.AssumeRole(jwtOpts.AssumeRoleIdentifier)
-	}
-
-	// Get identity headers
-	if jwtOpts.AdditionalParams == nil {
-		jwtOpts.AdditionalParams = make(map[string]string)
 	}
 
 	identityHeaders, identity, err := provider.GetIdentityHeaders(ctx, jwtOpts.AdditionalParams)

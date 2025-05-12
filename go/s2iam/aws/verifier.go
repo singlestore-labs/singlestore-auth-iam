@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -16,19 +15,13 @@ import (
 // AWSVerifier implements the CloudProviderVerifier interface for AWS
 type AWSVerifier struct {
 	logger models.Logger
-	mu     sync.RWMutex
 }
 
-// awsVerifier is a singleton instance for AWSVerifier
-var awsVerifier = &AWSVerifier{}
-
-// NewAWSVerifier creates or configures the AWS verifier
+// NewVerifier and configures the AWS verifier
 func NewVerifier(logger models.Logger) models.CloudProviderVerifier {
-	awsVerifier.mu.Lock()
-	defer awsVerifier.mu.Unlock()
-
-	awsVerifier.logger = logger
-	return awsVerifier
+	return &AWSVerifier{
+		logger: logger,
+	}
 }
 
 // HasHeaders returns true if the request has AWS authentication headers
@@ -40,9 +33,7 @@ func (v *AWSVerifier) HasHeaders(r *http.Request) bool {
 
 // VerifyRequest validates the AWS credentials and returns the identity
 func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*models.CloudIdentity, error) {
-	v.mu.RLock()
 	logger := v.logger
-	v.mu.RUnlock()
 
 	accessKeyID := r.Header.Get("X-AWS-Access-Key-ID")
 	secretAccessKey := r.Header.Get("X-AWS-Secret-Access-Key")
