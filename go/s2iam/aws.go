@@ -190,7 +190,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	// Fall back to direct metadata check
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://169.254.169.254/latest/meta-data/", nil)
 	if err != nil {
-		return errors.Errorf("not running on AWS: %w", err)
+		return errors.Errorf("not running on AWS: failed to detect AWS environment (no environment variables or metadata service): %w", err)
 	}
 
 	client := &http.Client{}
@@ -221,7 +221,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		}
 	}
 
-	return errors.New("not running on AWS: failed to access instance metadata service")
+	return errors.New("not running on AWS: failed to detect AWS environment (no environment variables or metadata service)")
 }
 
 // Initialize sets up the AWS SDK client

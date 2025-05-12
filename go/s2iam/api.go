@@ -1,3 +1,22 @@
+// Package s2iam provides cloud provider identity detection and verification for AWS, GCP, and Azure.
+// It allows applications to detect which cloud provider they're running on, obtain authentication
+// headers for that provider, and verify incoming requests from cloud provider identities.
+//
+// Client usage:
+//
+//	provider, err := s2iam.DetectProvider(ctx)
+//	if err != nil {
+//	    // handle error
+//	}
+//	headers, identity, err := provider.GetIdentityHeaders(ctx, nil)
+//
+// Server usage:
+//
+//	verifiers, err := s2iam.CreateVerifiers(ctx, s2iam.VerifierConfig{})
+//	if err != nil {
+//	    // handle error
+//	}
+//	identity, err := verifiers.VerifyRequest(ctx, req)
 package s2iam
 
 import (
@@ -38,6 +57,7 @@ func getLogger() Logger {
 	return nil
 }
 
+// CloudProviderType represents the type of cloud provider (AWS, GCP, or Azure)
 type CloudProviderType string
 
 // Provider Constants
@@ -47,11 +67,18 @@ const (
 	ProviderAzure CloudProviderType = "azure"
 )
 
-// Common errors
+// Common errors returned by the s2iam package
 var (
-	ErrNoCloudProviderDetected    errors.String = "no cloud provider detected"
-	ErrProviderNotDetected        errors.String = "cloud provider not detected, call Detect() first"
-	ErrNoValidAuth                errors.String = "no valid cloud provider authentication found in request"
+	// ErrNoCloudProviderDetected is returned when no cloud provider can be detected
+	ErrNoCloudProviderDetected errors.String = "no cloud provider detected"
+
+	// ErrProviderNotDetected is returned when attempting to use a provider that hasn't been detected
+	ErrProviderNotDetected errors.String = "cloud provider not detected, call Detect() first"
+
+	// ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
+	ErrNoValidAuth errors.String = "no valid cloud provider authentication found in request"
+
+	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
 	ErrProviderDetectedNoIdentity errors.String = "cloud provider detected but no identity available"
 )
 
@@ -126,7 +153,7 @@ type detectProviderOptions struct {
 	timeout time.Duration
 }
 
-// ProviderOption defines options for provider detection
+// ProviderOption configures options for provider detection
 type ProviderOption interface {
 	applyProviderOption(*detectProviderOptions)
 }
@@ -253,6 +280,8 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 	}
 }
 
+// Verifiers is a map of cloud provider types to their corresponding verifiers
+// It provides a convenient way to store and access verifiers for different cloud providers
 type Verifiers map[CloudProviderType]CloudProviderVerifier
 
 // CreateVerifiers creates a verifier for each cloud provider

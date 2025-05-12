@@ -99,7 +99,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		gcpMetadataURL+"instance/id", nil)
 	if err != nil {
-		return fmt.Errorf("not running on GCP: %w", err)
+		return fmt.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
@@ -109,7 +109,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		if c.logger != nil {
 			c.logger.Logf("GCP Detection - Metadata service unavailable: %v", err)
 		}
-		return fmt.Errorf("not running on GCP: metadata service unavailable: %w", err)
+		return fmt.Errorf("not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {

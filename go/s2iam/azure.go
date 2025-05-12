@@ -39,21 +39,21 @@ const (
 	jwksCacheTTL = 12 * time.Hour
 )
 
-// OIDCConfig represents the OpenID Connect configuration
-type OIDCConfig struct {
+// oidcConfig represents the OpenID Connect configuration
+type oidcConfig struct {
 	Issuer   string `json:"issuer"`
 	JwksURI  string `json:"jwks_uri"`
 	AuthURL  string `json:"authorization_endpoint"`
 	TokenURL string `json:"token_endpoint"`
 }
 
-// JWKS represents a JSON Web Key Set
-type JWKS struct {
-	Keys []JWK `json:"keys"`
+// jwks represents a JSON Web Key Set
+type jwks struct {
+	Keys []jwk `json:"keys"`
 }
 
-// JWK represents a JSON Web Key
-type JWK struct {
+// jwk represents a JSON Web Key
+type jwk struct {
 	Kid string `json:"kid"`
 	Kty string `json:"kty"`
 	N   string `json:"n"`
@@ -148,9 +148,9 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	return nil
 }
 
-// CheckIdentityAvailability verifies that a managed identity is available and can be used
+// checkIdentityAvailability verifies that a managed identity is available and can be used
 // This should be called after Detect() confirms we're on Azure
-func (c *AzureClient) CheckIdentityAvailability(ctx context.Context) error {
+func (c *AzureClient) checkIdentityAvailability(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -466,7 +466,7 @@ func (c *AzureClient) AssumeRole(roleIdentifier string) CloudProviderClient {
 }
 
 // fetchOIDCConfig fetches the OpenID Connect configuration
-func fetchOIDCConfig(ctx context.Context, endpoint string) (*OIDCConfig, error) {
+func fetchOIDCConfig(ctx context.Context, endpoint string) (*oidcConfig, error) {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
@@ -492,7 +492,7 @@ func fetchOIDCConfig(ctx context.Context, endpoint string) (*OIDCConfig, error) 
 		return nil, fmt.Errorf("failed to fetch OIDC config, status: %d", resp.StatusCode)
 	}
 
-	var config OIDCConfig
+	var config oidcConfig
 	if err := json.NewDecoder(resp.Body).Decode(&config); err != nil {
 		return nil, fmt.Errorf("failed to parse OIDC config: %w", err)
 	}
@@ -501,7 +501,7 @@ func fetchOIDCConfig(ctx context.Context, endpoint string) (*OIDCConfig, error) 
 }
 
 // fetchJWKS fetches the JSON Web Key Set
-func fetchJWKS(ctx context.Context, jwksURI string) (*JWKS, error) {
+func fetchJWKS(ctx context.Context, jwksURI string) (*jwks, error) {
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
@@ -527,16 +527,16 @@ func fetchJWKS(ctx context.Context, jwksURI string) (*JWKS, error) {
 		return nil, fmt.Errorf("failed to fetch JWKS, status: %d", resp.StatusCode)
 	}
 
-	var jwks JWKS
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	var jwksResult jwks
+	if err := json.NewDecoder(resp.Body).Decode(&jwksResult); err != nil {
 		return nil, fmt.Errorf("failed to parse JWKS: %w", err)
 	}
 
-	return &jwks, nil
+	return &jwksResult, nil
 }
 
 // jwkToRSAPublicKey converts a JWK to an RSA public key
-func jwkToRSAPublicKey(jwk JWK) (*rsa.PublicKey, error) {
+func jwkToRSAPublicKey(jwk jwk) (*rsa.PublicKey, error) {
 	// Decode modulus
 	nBytes, err := base64.RawURLEncoding.DecodeString(jwk.N)
 	if err != nil {
