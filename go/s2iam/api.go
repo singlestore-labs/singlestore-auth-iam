@@ -22,20 +22,60 @@ package s2iam
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/azure"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gcp"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/verifier"
 )
 
-const defaultTimeout = 5 * time.Second
+// Re-export types from models package for backward compatibility
+type (
+	CloudProviderType     = models.CloudProviderType
+	CloudIdentity         = models.CloudIdentity
+	CloudProviderClient   = models.CloudProviderClient
+	CloudProviderVerifier = models.CloudProviderVerifier
+	VerifierConfig        = models.VerifierConfig
+	Logger                = models.Logger
+)
 
-// Logger is a simple logging interface
-type Logger interface {
-	Logf(format string, args ...interface{})
+// Re-export provider constants
+const (
+	ProviderAWS   = models.ProviderAWS
+	ProviderGCP   = models.ProviderGCP
+	ProviderAzure = models.ProviderAzure
+)
+
+// Re-export errors
+var (
+	ErrNoCloudProviderDetected    = models.ErrNoCloudProviderDetected
+	ErrProviderNotDetected        = models.ErrProviderNotDetected
+	ErrNoValidAuth                = models.ErrNoValidAuth
+	ErrProviderDetectedNoIdentity = models.ErrProviderDetectedNoIdentity
+)
+
+// Re-export JWT types
+type JWTType = models.JWTType
+
+const (
+	DatabaseAccessJWT   = models.DatabaseAccessJWT
+	APIGatewayAccessJWT = models.APIGatewayAccessJWT
+)
+
+// Re-export Verifiers type
+type Verifiers = verifier.Verifiers
+
+// CreateVerifiers creates a verifier for each cloud provider
+func CreateVerifiers(ctx context.Context, config VerifierConfig) (Verifiers, error) {
+	return verifier.CreateVerifiers(ctx, config)
 }
+
+const defaultTimeout = 5 * time.Second
 
 // defaultLogger provides a basic implementation that forwards to standard output
 type defaultLogger struct{}
@@ -55,95 +95,6 @@ func getLogger() Logger {
 		return newDefaultLogger()
 	}
 	return nil
-}
-
-// CloudProviderType represents the type of cloud provider (AWS, GCP, or Azure)
-type CloudProviderType string
-
-// Provider Constants
-const (
-	ProviderAWS   CloudProviderType = "aws"
-	ProviderGCP   CloudProviderType = "gcp"
-	ProviderAzure CloudProviderType = "azure"
-)
-
-// Common errors returned by the s2iam package
-var (
-	// ErrNoCloudProviderDetected is returned when no cloud provider can be detected
-	ErrNoCloudProviderDetected errors.String = "no cloud provider detected"
-
-	// ErrProviderNotDetected is returned when attempting to use a provider that hasn't been detected
-	ErrProviderNotDetected errors.String = "cloud provider not detected, call Detect() first"
-
-	// ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
-	ErrNoValidAuth errors.String = "no valid cloud provider authentication found in request"
-
-	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
-	ErrProviderDetectedNoIdentity errors.String = "cloud provider detected but no identity available"
-)
-
-// CloudProviderClient is implemented for each cloud provider.
-type CloudProviderClient interface {
-	// Detect tests if we are executing within this cloud provider. No
-	// assumption of how is made -- we could also be inside K8s. For
-	// AWS, we could be on Lambda or EC2.
-	Detect(ctx context.Context) error
-
-	// GetType returns the cloud provider type as a string
-	GetType() CloudProviderType
-
-	// GetIdentityHeaders returns the headers needed to authenticate with the SingleStore auth service
-	// additionalParams can be used to pass provider-specific parameters (like audience for GCP).
-	// GetIdentityHeaders assumes that Detect has already been called and returned without error.
-	GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *CloudIdentity, error)
-
-	// AssumeRole configures the provider to use an alternate identity
-	// The roleIdentifier is provider-specific: Role ARN for AWS, service account email for GCP,
-	// or managed identity ID for Azure. AssumeRole does not modify the original CloudProviderClient.
-	// AssumeRole assumes that Detect has already been called and returned without error.
-	AssumeRole(roleIdentifier string) CloudProviderClient
-}
-
-// CloudIdentity represents the verified identity information
-type CloudIdentity struct {
-	Provider CloudProviderType
-	// The identifier will be:
-	// - AWS: ARN of the IAM role/user
-	// - GCP: Project number + instance ID + service account email
-	// - Azure: Principal ID (object ID of the managed identity)
-	Identifier string
-	// Additional fields that might be useful for authorization decisions
-	AccountID        string            // AWS account ID or GCP project ID
-	Region           string            // Cloud provider region (when available)
-	ResourceType     string            // Type of resource (VM, function, etc.)
-	AdditionalClaims map[string]string // Any additional relevant claims from tokens
-}
-
-// CloudProviderVerifier is implemented for each cloud provider.
-// It is used server-side to verify requests made from clients using
-// the headers returned by CloudProviderClient. The server-side code could be running on any
-// cloud provider and needs to work with requests coming from other cloud providers.
-type CloudProviderVerifier interface {
-	// HasHeaders returns true if the incoming HTTP request has headers as created by GetIdentityHeaders
-	// for the corresponding cloud provider.
-	// HasHeaders is meant for use on a server and should work regardless of which cloud provider the
-	// server is running on.
-	HasHeaders(*http.Request) bool
-
-	// VerifyRequest can assume that HasHeaders has returned true. It fully validates the incoming
-	// headers, without trusting the client.
-	VerifyRequest(context.Context, *http.Request) (*CloudIdentity, error)
-}
-
-// VerifierConfig holds configuration for cloud provider verifiers
-type VerifierConfig struct {
-	// AllowedAudiences is a list of allowed token audiences for GCP and Azure
-	AllowedAudiences []string
-	// AzureTenant is the Azure tenant ID to use for token validation
-	// If empty, "common" will be used
-	AzureTenant string
-	// Logger provides a logging interface (if nil, no logging occurs)
-	Logger Logger
 }
 
 // detectProviderOptions holds options for provider detection
@@ -222,9 +173,9 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 	// If clients are not provided, create them
 	if options.clients == nil || len(options.clients) == 0 {
 		options.clients = []CloudProviderClient{
-			NewAWSClient(options.logger),
-			NewGCPClient(options.logger),
-			NewAzureClient(options.logger),
+			aws.NewClient(options.logger),
+			gcp.NewClient(options.logger),
+			azure.NewClient(options.logger),
 		}
 	}
 
@@ -280,52 +231,9 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 	}
 }
 
-// Verifiers is a map of cloud provider types to their corresponding verifiers
-// It provides a convenient way to store and access verifiers for different cloud providers
-type Verifiers map[CloudProviderType]CloudProviderVerifier
-
-// CreateVerifiers creates a verifier for each cloud provider
-func CreateVerifiers(ctx context.Context, config VerifierConfig) (Verifiers, error) {
-	// Set default logger if debugging is enabled and no logger is provided
-	if config.Logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
-		config.Logger = newDefaultLogger()
-	}
-
-	if len(config.AllowedAudiences) == 0 {
-		config.AllowedAudiences = []string{"https://auth.singlestore.com"}
-	}
-
-	// Create verifiers for each cloud provider
-	awsVerifier := NewAWSVerifier(config.Logger)
-
-	gcpVerifier, err := NewGCPVerifier(ctx, config.AllowedAudiences, config.Logger)
-	if err != nil {
-		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
-	}
-
-	azureVerifier := NewAzureVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger)
-
-	verifiers := map[CloudProviderType]CloudProviderVerifier{
-		ProviderAWS:   awsVerifier,
-		ProviderGCP:   gcpVerifier,
-		ProviderAzure: azureVerifier,
-	}
-
-	return verifiers, nil
-}
-
-// VerifyRequest verifies a request from any cloud provider
-func (verifiers Verifiers) VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error) {
-	// Try each verifier
-	for providerType, verifier := range verifiers {
-		if verifier.HasHeaders(r) {
-			identity, err := verifier.VerifyRequest(ctx, r)
-			if err != nil {
-				return nil, errors.Errorf("%s verification failed: %w", providerType, err)
-			}
-			return identity, nil
-		}
-	}
-
-	return nil, errors.WithStack(ErrNoValidAuth)
-}
+// Export provider constructors
+var (
+	NewAWSClient   = aws.NewClient
+	NewGCPClient   = gcp.NewClient
+	NewAzureClient = azure.NewClient
+)

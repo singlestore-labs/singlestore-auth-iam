@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
 const (
@@ -18,17 +19,6 @@ const (
 
 	// gcpDefaultAudience is the default audience for GCP identity token requests
 	gcpDefaultAudience = "https://auth.singlestore.com"
-)
-
-// JWTType represents the type of JWT requested from the authentication service
-type JWTType string
-
-const (
-	// DatabaseAccessJWT is used to request a JWT for accessing the database
-	DatabaseAccessJWT JWTType = "database"
-
-	// APIGatewayAccessJWT is used to request a JWT for accessing the API gateway
-	APIGatewayAccessJWT JWTType = "api"
 )
 
 // JWTOption extends ProviderOption for JWT-specific settings
@@ -61,7 +51,7 @@ type jwtOptions struct {
 	JWTType              JWTType
 	WorkspaceGroupID     string
 	ServerURL            string
-	Provider             CloudProviderClient
+	Provider             models.CloudProviderClient
 	AdditionalParams     map[string]string
 	AssumeRoleIdentifier string
 }
@@ -76,7 +66,7 @@ func WithServerURL(serverURL string) JWTOption {
 }
 
 // WithProvider sets a specific cloud provider client to use
-func WithProvider(provider CloudProviderClient) JWTOption {
+func WithProvider(provider models.CloudProviderClient) JWTOption {
 	return jwtOption{
 		jwtApplyFunc: func(o *jwtOptions) {
 			o.Provider = provider

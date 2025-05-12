@@ -1,4 +1,4 @@
-package s2iam
+package aws
 
 import (
 	"context"
@@ -14,16 +14,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
 // AWSClient implements the CloudProviderClient interface for AWS
 type AWSClient struct {
 	stsClient *sts.Client
 	roleARN   string
-	identity  *CloudIdentity
+	identity  *models.CloudIdentity
 	detected  bool
-	region    string // AWS region to use for API calls
-	logger    Logger // Added logger field
+	region    string        // AWS region to use for API calls
+	logger    models.Logger // Added logger field
 	mu        sync.Mutex
 }
 
@@ -43,8 +44,8 @@ func (c *AWSClient) copy() *AWSClient {
 // awsClient is a singleton instance of AWSClient
 var awsClient = &AWSClient{}
 
-// NewAWSClient returns the AWS client singleton
-func NewAWSClient(logger Logger) CloudProviderClient {
+// NewClient returns the AWS client singleton
+func NewClient(logger models.Logger) models.CloudProviderClient {
 	awsClient.mu.Lock()
 	defer awsClient.mu.Unlock()
 
@@ -252,24 +253,24 @@ func (c *AWSClient) initialize(ctx context.Context) error {
 }
 
 // GetType returns the cloud provider type
-func (c *AWSClient) GetType() CloudProviderType {
-	return ProviderAWS
+func (c *AWSClient) GetType() models.CloudProviderType {
+	return models.ProviderAWS
 }
 
 // WithRegion returns a new client configured to use the specified AWS region
-func (c *AWSClient) WithRegion(region string) CloudProviderClient {
+func (c *AWSClient) WithRegion(region string) models.CloudProviderClient {
 	newClient := c.copy()
 	newClient.region = region
 	return newClient
 }
 
 // GetIdentityHeaders returns the headers needed to authenticate with the SingleStore auth service
-func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *CloudIdentity, error) {
+func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map[string]string) (map[string]string, *models.CloudIdentity, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if !c.detected {
-		return nil, nil, ErrProviderNotDetected
+		return nil, nil, errors.WithStack(models.ErrProviderNotDetected)
 	}
 
 	// Initialize STS client if needed
@@ -279,7 +280,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		}
 
 		if err := c.initialize(ctx); err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 	}
 
@@ -300,7 +301,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 		assumeRoleOutput, err := c.stsClient.AssumeRole(ctx, assumeRoleInput)
 		if err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
 		// Use the temporary credentials from assumed role
@@ -324,13 +325,13 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 			)),
 		)
 		if err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
 		tempSTS := sts.NewFromConfig(tempCfg)
 		identity, err := c.getIdentityFromSTS(ctx, tempSTS)
 		if err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
 		return headers, identity, nil
@@ -342,7 +343,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	}
 	callerIdentity, err := c.stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return nil, nil, ErrProviderDetectedNoIdentity
+		return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 	}
 
 	// Check if we're already using session credentials
@@ -359,7 +360,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Get the current credentials from the SDK
 		creds, err := c.stsClient.Options().Credentials.Retrieve(ctx)
 		if err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
 		// Use the current credentials
@@ -376,7 +377,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Create identity from the caller identity we already obtained
 		identity, err := c.parseIdentityFromCallerIdentity(callerIdentity)
 		if err != nil {
-			return nil, nil, ErrProviderDetectedNoIdentity
+			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
 		return headers, identity, nil
@@ -389,7 +390,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	input := &sts.GetSessionTokenInput{}
 	output, err := c.stsClient.GetSessionToken(ctx, input)
 	if err != nil {
-		return nil, nil, ErrProviderDetectedNoIdentity
+		return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 	}
 
 	headers := map[string]string{
@@ -400,14 +401,14 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	identity, err := c.getIdentityFromSTS(ctx, c.stsClient)
 	if err != nil {
-		return nil, nil, ErrProviderDetectedNoIdentity
+		return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 	}
 
 	return headers, identity, nil
 }
 
 // parseIdentityFromCallerIdentity converts a GetCallerIdentityOutput to a CloudIdentity
-func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*CloudIdentity, error) {
+func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*models.CloudIdentity, error) {
 	// Parse the ARN to extract region and resource type
 	arnParts := strings.Split(*callerIdentity.Arn, ":")
 	var region, resourceType string
@@ -423,8 +424,8 @@ func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCalle
 		}
 	}
 
-	return &CloudIdentity{
-		Provider:     ProviderAWS,
+	return &models.CloudIdentity{
+		Provider:     models.ProviderAWS,
 		Identifier:   *callerIdentity.Arn,
 		AccountID:    *callerIdentity.Account,
 		Region:       region,
@@ -436,7 +437,7 @@ func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCalle
 }
 
 // getIdentityFromSTS calls GetCallerIdentity and populates a CloudIdentity object
-func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Client) (*CloudIdentity, error) {
+func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Client) (*models.CloudIdentity, error) {
 	callerIdentity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
 		return nil, errors.Errorf("failed to get caller identity: %w", err)
@@ -457,8 +458,8 @@ func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Clien
 		}
 	}
 
-	return &CloudIdentity{
-		Provider:     ProviderAWS,
+	return &models.CloudIdentity{
+		Provider:     models.ProviderAWS,
 		Identifier:   *callerIdentity.Arn,
 		AccountID:    *callerIdentity.Account,
 		Region:       region,
@@ -470,140 +471,8 @@ func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Clien
 }
 
 // AssumeRole configures the provider to use an alternate identity
-func (c *AWSClient) AssumeRole(roleIdentifier string) CloudProviderClient {
+func (c *AWSClient) AssumeRole(roleIdentifier string) models.CloudProviderClient {
 	newClient := c.copy()
 	newClient.roleARN = roleIdentifier
 	return newClient
-}
-
-// AWSVerifier implements the CloudProviderVerifier interface for AWS
-type AWSVerifier struct {
-	logger Logger
-	mu     sync.RWMutex
-}
-
-// awsVerifier is a singleton instance for AWSVerifier
-var awsVerifier = &AWSVerifier{}
-
-// NewAWSVerifier creates or configures the AWS verifier
-func NewAWSVerifier(logger Logger) CloudProviderVerifier {
-	awsVerifier.mu.Lock()
-	defer awsVerifier.mu.Unlock()
-
-	awsVerifier.logger = logger
-	return awsVerifier
-}
-
-// HasHeaders returns true if the request has AWS authentication headers
-func (v *AWSVerifier) HasHeaders(r *http.Request) bool {
-	return r.Header.Get("X-AWS-Access-Key-ID") != "" &&
-		r.Header.Get("X-AWS-Secret-Access-Key") != "" &&
-		r.Header.Get("X-AWS-Session-Token") != ""
-}
-
-// VerifyRequest validates the AWS credentials and returns the identity
-func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*CloudIdentity, error) {
-	v.mu.RLock()
-	logger := v.logger
-	v.mu.RUnlock()
-
-	accessKeyID := r.Header.Get("X-AWS-Access-Key-ID")
-	secretAccessKey := r.Header.Get("X-AWS-Secret-Access-Key")
-	sessionToken := r.Header.Get("X-AWS-Session-Token")
-
-	if accessKeyID == "" || secretAccessKey == "" || sessionToken == "" {
-		if logger != nil {
-			logger.Logf("Missing required AWS authentication headers")
-		}
-		return nil, errors.Errorf("missing required AWS authentication headers")
-	}
-
-	if logger != nil {
-		logger.Logf("Creating AWS config with provided credentials")
-	}
-
-	// Create a region-independent configuration first
-	// This allows STS global endpoint to be used which doesn't require region
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithCredentialsProvider(aws.CredentialsProviderFunc(
-			func(ctx context.Context) (aws.Credentials, error) {
-				return aws.Credentials{
-					AccessKeyID:     accessKeyID,
-					SecretAccessKey: secretAccessKey,
-					SessionToken:    sessionToken,
-				}, nil
-			},
-		)),
-	)
-	if err != nil {
-		if logger != nil {
-			logger.Logf("Failed to load AWS config: %v", err)
-		}
-		return nil, errors.Errorf("failed to load AWS config: %w", err)
-	}
-
-	// Use us-east-1 as the default region for STS if no region is set
-	// STS is a global service but requires a region in the config
-	if cfg.Region == "" {
-		cfg.Region = "us-east-1"
-		if logger != nil {
-			logger.Logf("No region specified, using us-east-1 for STS")
-		}
-	}
-
-	// Create an STS client with the configuration
-	stsClient := sts.NewFromConfig(cfg)
-
-	if logger != nil {
-		logger.Logf("Calling GetCallerIdentity to verify AWS credentials")
-	}
-
-	// Call GetCallerIdentity to verify the credentials and get the identity
-	// This operation is available in all regions and doesn't require region-specific endpoints
-	getCallerIdentityOutput, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		if logger != nil {
-			logger.Logf("Failed to verify AWS credentials: %v", err)
-		}
-		return nil, errors.Errorf("failed to verify AWS credentials: %w", err)
-	}
-
-	if getCallerIdentityOutput.Arn == nil || getCallerIdentityOutput.Account == nil {
-		if logger != nil {
-			logger.Logf("AWS returned empty ARN or Account")
-		}
-		return nil, errors.Errorf("AWS returned empty ARN or Account")
-	}
-
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*getCallerIdentityOutput.Arn, ":")
-	var region, resourceType string
-
-	// Extract region from ARN if possible
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
-	}
-
-	// Extract resource type from ARN
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
-	}
-
-	if logger != nil {
-		logger.Logf("Successfully verified AWS identity: %s", *getCallerIdentityOutput.Arn)
-	}
-
-	return &CloudIdentity{
-		Provider:     ProviderAWS,
-		Identifier:   *getCallerIdentityOutput.Arn,
-		AccountID:    *getCallerIdentityOutput.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *getCallerIdentityOutput.UserId,
-		},
-	}, nil
 }
