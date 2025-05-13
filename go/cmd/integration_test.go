@@ -55,15 +55,15 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		if runtime.GOOS == "windows" {
 			// Windows-specific process termination using taskkill
 			// This is more reliable than Process.Kill() on Windows
-			exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(serverCmd.Process.Pid)).Run()
+			_ = exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(serverCmd.Process.Pid)).Run()
 		} else {
 			// On Unix systems, send SIGTERM first for graceful shutdown
-			serverCmd.Process.Signal(syscall.SIGTERM)
+			_ = serverCmd.Process.Signal(syscall.SIGTERM)
 
 			// Give it a moment to terminate gracefully
 			done := make(chan struct{})
 			go func() {
-				serverCmd.Wait()
+				_ = serverCmd.Wait()
 				close(done)
 			}()
 
@@ -73,7 +73,7 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 				// Process exited cleanly
 			case <-time.After(2 * time.Second):
 				// Force kill if it doesn't exit
-				serverCmd.Process.Kill()
+				_ = serverCmd.Process.Kill()
 			}
 		}
 	}
@@ -145,7 +145,7 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 	for i := 0; i < maxRetries; i++ {
 		resp, err := httpClient.Get(healthURL)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resp.Body.Close() // Important: always close response body
+			_ = resp.Body.Close()
 			return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
 		}
 		if err != nil {
