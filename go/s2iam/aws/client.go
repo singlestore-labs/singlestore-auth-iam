@@ -75,7 +75,9 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 			client := &http.Client{}
 			resp, err := client.Do(req)
 			if err == nil {
-				defer resp.Body.Close()
+				defer func() {
+					_ = resp.Body.Close()
+				}()
 				if resp.StatusCode == http.StatusOK {
 					body, err := io.ReadAll(resp.Body)
 					if err == nil && len(body) > 0 {
@@ -157,7 +159,9 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		resp, err := client.Do(tokenReq)
 
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() {
+				_ = resp.Body.Close()
+			}()
 			if resp.StatusCode == http.StatusOK {
 				if c.logger != nil {
 					c.logger.Logf("AWS Detection - Metadata service detected")
@@ -192,7 +196,9 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		if resp.StatusCode == http.StatusOK {
 			if c.logger != nil {
 				c.logger.Logf("AWS Detection - Direct metadata service detected")

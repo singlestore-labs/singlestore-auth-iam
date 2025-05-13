@@ -118,7 +118,7 @@ func TestRun_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simple mock that returns a JWT
 		response := map[string]string{"jwt": "test-jwt-token"}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -145,7 +145,7 @@ func TestRun_Success(t *testing.T) {
 
 	err = run(config)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
@@ -169,7 +169,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"jwt": "test-jwt-token"}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -189,7 +189,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 
 	err = run(config)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	// Read captured output
@@ -314,7 +314,7 @@ func TestRealMain(t *testing.T) {
 
 			err := realMain(tt.args, mockExit)
 
-			w.Close()
+			_ = w.Close()
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 
@@ -339,7 +339,7 @@ func TestRealMain(t *testing.T) {
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"jwt": "test-jwt-token"}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -368,7 +368,7 @@ func TestRealMain(t *testing.T) {
 
 			err := realMain(tt.args, mockExit)
 
-			w.Close()
+			_ = w.Close()
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 
@@ -407,7 +407,7 @@ func TestMain_Help(t *testing.T) {
 	assert.Equal(t, flag.ErrHelp, err, "Expected flag.ErrHelp")
 
 	// Restore stdout and stderr
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 

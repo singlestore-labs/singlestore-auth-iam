@@ -16,9 +16,6 @@ import (
 const (
 	// defaultServer is the default authentication server endpoint
 	defaultServer = "https://auth.singlestore.com/auth/iam/:jwtType"
-
-	// gcpDefaultAudience is the default audience for GCP identity token requests
-	gcpDefaultAudience = "https://auth.singlestore.com"
 )
 
 // JWTOptions are used to configure how to get JWTs
@@ -154,7 +151,9 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	if err != nil {
 		return "", errors.Errorf("error calling authentication server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	// Process response
 	bodyBytes, err := io.ReadAll(resp.Body)

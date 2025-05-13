@@ -90,14 +90,14 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			if c.logger != nil {
 				c.logger.Logf("GCP Detection - Metadata service available but no identity access")
 			}
 			return errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		return nil
 	}
@@ -124,14 +124,14 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if c.logger != nil {
 			c.logger.Logf("GCP Detection - Metadata service returned status %d", resp.StatusCode)
 		}
 		return errors.Errorf("not running on GCP: metadata service returned status %d", resp.StatusCode)
 	}
 
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	c.detected = true
 	if c.logger != nil {
 		c.logger.Logf("GCP Detection - Successfully detected GCP environment")
@@ -190,7 +190,9 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		if err != nil {
 			return nil, nil, errors.Errorf("failed to impersonate service account: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
@@ -255,7 +257,9 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 	if err != nil {
 		return "", errors.Errorf("failed to contact GCP metadata service: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {

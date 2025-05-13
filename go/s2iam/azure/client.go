@@ -105,7 +105,9 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		}
 		return errors.Errorf("not running on Azure: metadata service unavailable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		if c.logger != nil {
@@ -118,73 +120,6 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	c.detected = true
 	if c.logger != nil {
 		c.logger.Logf("Azure Detection - Successfully detected Azure environment")
-	}
-	return nil
-}
-
-// checkIdentityAvailability verifies that a managed identity is available and can be used
-// This should be called after Detect() confirms we're on Azure
-func (c *AzureClient) checkIdentityAvailability(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.detected {
-		return errors.WithStack(models.ErrProviderNotDetected)
-	}
-
-	if c.logger != nil {
-		c.logger.Logf("Azure - Checking for managed identity")
-	}
-
-	// Check for context cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		// Continue normally
-	}
-
-	// Try to get an identity token with a simple resource that should be widely accessible
-	url := fmt.Sprintf("%s?api-version=%s&resource=%s",
-		azureMetadataURL, azureAPIVersion, azureResourceServer)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return errors.Errorf("failed to create identity check request: %w", err)
-	}
-
-	req.Header.Set("Metadata", "true")
-
-	// Use an HTTP client without a fixed timeout to respect the context
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return errors.Errorf("failed to check identity availability: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read the response body for error details
-	bodyBytes, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		// Try to parse the error response
-		var errorResponse struct {
-			Error            string `json:"error"`
-			ErrorDescription string `json:"error_description"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &errorResponse); err == nil &&
-			errorResponse.Error == "invalid_request" &&
-			strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
-			return errors.Errorf("no managed identity assigned to this resource - please assign a managed identity in the Azure portal")
-		}
-
-		return errors.Errorf("managed identity check failed: status %d, response: %s",
-			resp.StatusCode, string(bodyBytes))
-	}
-
-	if c.logger != nil {
-		c.logger.Logf("Azure - Managed identity available and working")
 	}
 	return nil
 }
@@ -252,7 +187,9 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	if err != nil {
 		return nil, nil, errors.Errorf("failed to get Azure Managed Identity token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -400,7 +337,7 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 						}
 					}
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}
 	}

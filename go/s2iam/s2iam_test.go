@@ -69,7 +69,6 @@ type fakeServerFlags struct {
 	returnEmptyJWT     bool
 	returnInvalidJSON  bool
 	serverError        bool
-	requireAudience    string
 	requireWorkspaceID bool
 
 	// Track requests for assertions
@@ -120,7 +119,7 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 
 		// Verify the incoming request
 		if flags.failVerification {
-			http.Error(w, "verification failed", 401)
+			http.Error(w, "verification failed", http.StatusUnauthorized)
 			return
 		}
 
@@ -139,7 +138,7 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 
 		// Return various error conditions if requested
 		if flags.returnInvalidJSON {
-			w.Write([]byte("{invalid json"))
+			_, _ = w.Write([]byte("{invalid json"))
 			return
 		}
 
@@ -147,7 +146,7 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 			enc, _ := json.Marshal(map[string]any{
 				"jwt": "",
 			})
-			w.Write(enc)
+			_, _ = w.Write(enc)
 			return
 		}
 
@@ -176,9 +175,8 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 			return
 		}
 
-		w.Write(enc)
+		_, _ = w.Write(enc)
 		t.Log("[server] returning jwt")
-		return
 	}))
 	t.Cleanup(s.Close)
 	return s
@@ -538,8 +536,10 @@ func TestVerifiers_NoValidAuth(t *testing.T) {
 // Test with environment variable for debugging
 func TestWithDebugging(t *testing.T) {
 	// Set debugging env var
-	os.Setenv("S2IAM_DEBUGGING", "true")
-	defer os.Unsetenv("S2IAM_DEBUGGING")
+	_ = os.Setenv("S2IAM_DEBUGGING", "true")
+	defer func() {
+		_ = os.Unsetenv("S2IAM_DEBUGGING")
+	}()
 
 	// This should create a logger automatically
 	client, err := s2iam.DetectProvider(context.Background(),

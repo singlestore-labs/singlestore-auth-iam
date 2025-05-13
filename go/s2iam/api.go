@@ -71,14 +71,6 @@ func newDefaultLogger() Logger {
 	return defaultLogger{}
 }
 
-// getLogger returns a logger based on environment settings
-func getLogger() Logger {
-	if os.Getenv("S2IAM_DEBUGGING") == "true" {
-		return newDefaultLogger()
-	}
-	return nil
-}
-
 // detectProviderOptions holds options for provider detection
 type detectProviderOptions struct {
 	logger  Logger

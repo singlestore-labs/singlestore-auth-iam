@@ -136,7 +136,7 @@ func NewServer(config Config) (*Server, error) {
 
 type logger struct{}
 
-func (_ logger) Logf(format string, args ...any) {
+func (logger) Logf(format string, args ...any) {
 	log.Printf("[verifier] "+format, args...)
 }
 
@@ -282,7 +282,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	// Return empty JWT if configured
 	if s.config.ReturnEmptyJWT {
 		response := map[string]string{"jwt": ""}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
 
@@ -295,7 +295,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]string{"jwt": tokenString}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // createJWT generates a JWT for the given identity
@@ -334,19 +334,19 @@ func (s *Server) handlePublicKey(w http.ResponseWriter, r *http.Request) {
 	pemData := pem.EncodeToMemory(pemBlock)
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write(pemData)
+	_, _ = w.Write(pemData)
 }
 
 // handleRequestLog returns logged requests
 func (s *Server) handleRequestLog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.requestLog)
+	_ = json.NewEncoder(w).Encode(s.requestLog)
 }
 
 // handleHealth returns server health status
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "healthy",
 		"time":   time.Now(),
 		"config": map[string]interface{}{

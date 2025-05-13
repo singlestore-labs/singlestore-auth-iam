@@ -341,10 +341,10 @@ func TestServer_RandomPort(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Restore stdout and get captured output
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 
 	// Parse server info from output
 	port, endpoints, err := parseServerOutput(buf.String())

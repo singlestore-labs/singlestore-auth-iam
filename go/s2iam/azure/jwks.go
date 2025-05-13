@@ -29,11 +29,6 @@ type oidcConfig struct {
 	TokenURL string `json:"token_endpoint"`
 }
 
-// jwks represents a JSON Web Key Set
-type jwks struct {
-	Keys []map[string]interface{} `json:"keys"`
-}
-
 // jwksManager handles fetching and caching of JWKS (JSON Web Key Sets)
 type jwksManager struct {
 	tenant       string
@@ -137,7 +132,9 @@ func fetchOIDCConfig(ctx context.Context, endpoint string) (*oidcConfig, error) 
 	if err != nil {
 		return nil, errors.Errorf("failed to fetch OIDC config: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Errorf("failed to fetch OIDC config, status: %d", resp.StatusCode)
