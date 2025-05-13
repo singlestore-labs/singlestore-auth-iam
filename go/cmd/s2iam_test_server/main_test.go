@@ -1,20 +1,18 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -338,48 +336,33 @@ func TestServer_RandomPort(t *testing.T) {
 	defer cancel()
 
 	// Start server in a goroutine
-	errCh := make(chan error, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
+	serverDone := make(chan error, 1)
 	go func() {
-		// Use a simple HTTP server with the context for clean shutdown
-		server := &http.Server{
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				srv.handleHealth(w, r)
-			}),
-		}
-
-		// Set the listener on the server
-		if srv.listener != nil {
-			errCh <- server.Serve(srv.listener)
-		} else {
-			errCh <- fmt.Errorf("listener not initialized")
-		}
-		wg.Done()
-
-		// Listen for context cancellation to shut down gracefully
-		<-ctx.Done()
-		_ = server.Shutdown(context.Background())
+		serverDone <- srv.Run(ctx)
 	}()
 
-	// Run the actual server
-	go func() {
-		wg.Wait() // avoid data race on srv.listener
-		errCh <- srv.Run()
-	}()
+	// Read the output to get server info
+	// Since the server now waits until it's ready before printing JSON,
+	// we can parse immediately without additional waiting
+	decoder := json.NewDecoder(r)
 
-	// Give the server a moment to start
-	time.Sleep(100 * time.Millisecond)
+	// Read until we get the JSON object
+	var serverInfoWrapper struct {
+		ServerInfo struct {
+			Port      int               `json:"port"`
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"server_info"`
+	}
 
-	// Restore stdout and get captured output
+	err = decoder.Decode(&serverInfoWrapper)
+	require.NoError(t, err, "Should be able to decode server info")
+
+	// Restore stdout
 	_ = w.Close()
 	os.Stdout = oldStdout
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
 
-	// Parse server info from output
-	port, endpoints, err := parseServerOutput(buf.String())
-	require.NoError(t, err, "Should be able to parse server info from output")
+	port := serverInfoWrapper.ServerInfo.Port
+	endpoints := serverInfoWrapper.ServerInfo.Endpoints
 
 	// Verify the port
 	require.Greater(t, port, 0, "Server should be assigned a non-zero port")
@@ -387,25 +370,25 @@ func TestServer_RandomPort(t *testing.T) {
 	// Check that this matches the GetPort method
 	assert.Equal(t, port, srv.GetPort(), "GetPort() should return the same port")
 
-	// Verify server is running by making a request to the health endpoint
+	// The server is guaranteed to be ready when it prints JSON,
+	// so we can immediately make a request
 	healthURL := endpoints["health"]
-
-	// Add a reasonable timeout for the HTTP request
-	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-	resp, err := httpClient.Get(healthURL)
+	resp, err := http.Get(healthURL)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
 
 	// Clean up resources properly
 	cancel() // Cancel the context to trigger server shutdown
 
-	// Close the listener explicitly
-	if srv.listener != nil {
-		_ = srv.listener.Close()
+	// Wait for server to finish with a timeout
+	select {
+	case err := <-serverDone:
+		// Server exited cleanly or with expected error from context cancellation
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("Server exited with unexpected error: %+v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("Timeout waiting for server to shut down")
 	}
-
-	// Wait for a short time to allow shutdown to complete
-	time.Sleep(100 * time.Millisecond)
 }

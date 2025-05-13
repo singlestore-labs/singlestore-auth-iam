@@ -67,7 +67,7 @@ func main() {
 		log.Fatalf("Failed to create server: %v", err)
 	}
 
-	if err := srv.Run(); err != nil {
+	if err := srv.Run(context.Background()); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
@@ -141,7 +141,7 @@ func (logger) Logf(format string, args ...any) {
 }
 
 // Run starts the test server
-func (s *Server) Run() error {
+func (s *Server) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
 
 	// Auth endpoints
@@ -156,9 +156,10 @@ func (s *Server) Run() error {
 	port := s.config.Port
 	addr := fmt.Sprintf(":%d", port)
 
-	// Start listening on all interfaces (needed for Docker/cross-language testing)
+	// Start listening on all interfaces using ListenConfig with context
+	lc := net.ListenConfig{}
 	var err error
-	s.listener, err = net.Listen("tcp", addr)
+	s.listener, err = lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
@@ -168,6 +169,67 @@ func (s *Server) Run() error {
 
 	// Log standard text message
 	log.Printf("Starting S2IAM test server on port %d", actualPort)
+
+	// Create HTTP server
+	httpServer := &http.Server{
+		Handler: mux,
+	}
+
+	// Start the server in a goroutine
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- httpServer.Serve(s.listener)
+	}()
+
+	// Handle context cancellation
+	go func() {
+		<-ctx.Done()
+		log.Printf("Shutting down server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+
+	// Wait for the server to be ready by checking the health endpoint
+	client := &http.Client{Timeout: 5 * time.Second}
+	healthURL := fmt.Sprintf("http://localhost:%d/health", actualPort)
+
+	// Retry loop to ensure server is ready
+	probeCtx, probeCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer probeCancel()
+
+	for {
+		select {
+		case err := <-serverErr:
+			// Server failed to start
+			return fmt.Errorf("server failed to start: %w", err)
+		case <-probeCtx.Done():
+			// Timeout waiting for server to be ready or context cancelled
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("timeout waiting for server to be ready")
+		default:
+			// Try to hit the health endpoint
+			reqCtx, reqCancel := context.WithTimeout(probeCtx, 500*time.Millisecond)
+			req, _ := http.NewRequestWithContext(reqCtx, "GET", healthURL, nil)
+			resp, err := client.Do(req)
+			reqCancel()
+
+			if err == nil && resp.StatusCode == http.StatusOK {
+				resp.Body.Close()
+				// Server is ready, exit the loop
+				goto ServerReady
+			}
+			if resp != nil {
+				resp.Body.Close()
+			}
+
+			// Wait before trying again
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+ServerReady:
 
 	// Output server info in JSON format for easy parsing by tests
 	serverInfo := map[string]interface{}{
@@ -198,13 +260,14 @@ func (s *Server) Run() error {
 	}
 
 	// Also print human-readable endpoints for convenience
-	log.Printf("Server started. Endpoints:")
+	log.Printf("Server ready. Endpoints:")
 	log.Printf("  Auth:       http://localhost:%d/auth/iam/:jwtType", actualPort)
 	log.Printf("  Public Key: http://localhost:%d/info/public-key", actualPort)
 	log.Printf("  Requests:   http://localhost:%d/info/requests", actualPort)
 	log.Printf("  Health:     http://localhost:%d/health", actualPort)
 
-	return http.Serve(s.listener, mux)
+	// Wait for the server to complete (or error)
+	return <-serverErr
 }
 
 // GetPort returns the actual port the server is listening on

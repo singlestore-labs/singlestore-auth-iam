@@ -15,7 +15,7 @@ Start the test server with default settings:
 s2iam_test_server
 ```
 
-The server will start on port 8080 by default and output JSON-formatted server information at startup:
+The server will start on port 8080 by default. Once it's fully ready to accept requests, it outputs JSON-formatted server information:
 ```json
 {
   "server_info": {
@@ -36,6 +36,8 @@ The server will start on port 8080 by default and output JSON-formatted server i
   }
 }
 ```
+
+**Note**: The server automatically performs a health check on itself before printing this JSON output, ensuring that when you parse this information, the server is guaranteed to be ready to accept requests.
 
 ## Endpoints
 
@@ -150,17 +152,16 @@ s2iam_test_server --allowed-audiences=https://auth.singlestore.com,https://myapp
 import requests
 import subprocess
 import json
-import time
 
 # Start the test server with a random port
 server = subprocess.Popen(['s2iam_test_server', '--port=0'], 
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
 
-# Wait for server to start and parse the output
-time.sleep(1)
-output, _ = server.communicate(timeout=1)
-server_info = json.loads(output.decode())['server_info']
+# Read and parse the server output
+# The server waits until it's ready before printing, so no sleep needed
+output_line = server.stdout.readline()
+server_info = json.loads(output_line)['server_info']
 port = server_info['port']
 
 try:
@@ -198,34 +199,33 @@ const axios = require('axios');
 const server = spawn('s2iam_test_server', ['--port=0']);
 
 // Parse server output to get port
-server.stdout.on('data', async (data) => {
+// The server is ready when it prints the JSON output
+server.stdout.once('data', async (data) => {
     const output = data.toString();
-    if (output.includes('server_info')) {
-        const serverInfo = JSON.parse(output).server_info;
-        const port = serverInfo.port;
-        
-        try {
-            // For GCP authentication
-            const response = await axios.post(
-                `http://localhost:${port}/auth/iam/api`,
-                null,
-                {
-                    headers: {
-                        'Metadata-Flavor': 'Google',
-                        'Authorization': 'Bearer gcp-token'
-                    },
-                    params: {
-                        workspaceGroupID: 'test-workspace'
-                    }
+    const serverInfo = JSON.parse(output).server_info;
+    const port = serverInfo.port;
+    
+    try {
+        // For GCP authentication
+        const response = await axios.post(
+            `http://localhost:${port}/auth/iam/api`,
+            null,
+            {
+                headers: {
+                    'Metadata-Flavor': 'Google',
+                    'Authorization': 'Bearer gcp-token'
+                },
+                params: {
+                    workspaceGroupID: 'test-workspace'
                 }
-            );
-            
-            const jwt = response.data.jwt;
-            console.log(`Got JWT: ${jwt}`);
-            
-        } finally {
-            server.kill();
-        }
+            }
+        );
+        
+        const jwt = response.data.jwt;
+        console.log(`Got JWT: ${jwt}`);
+        
+    } finally {
+        server.kill();
     }
 });
 ```
@@ -343,13 +343,15 @@ The generated JWT tokens contain the following claims:
 
 1. **Random Port Selection**: Use `--port=0` to let the server choose a random available port, useful for parallel testing.
 
-2. **Parse Server Output**: The server outputs JSON-formatted information at startup, making it easy to programmatically determine the port and endpoints.
+2. **No Wait Required**: The server performs a self-health check before printing the JSON output, guaranteeing it's ready to accept requests. Tests can parse the JSON and immediately start making requests without any additional wait time.
 
-3. **Verbose Logging**: Use `--verbose` to see detailed request processing information during development.
+3. **Parse Server Output**: The server outputs JSON-formatted information when ready, making it easy to programmatically determine the port and endpoints.
 
-4. **Request Logging**: Use the `/info/requests` endpoint to inspect all requests received by the server, helpful for debugging client implementations.
+4. **Verbose Logging**: Use `--verbose` to see detailed request processing information during development.
 
-5. **JWT Verification**: Retrieve the public key from `/info/public-key` to verify the generated JWTs in your tests.
+5. **Request Logging**: Use the `/info/requests` endpoint to inspect all requests received by the server, helpful for debugging client implementations.
 
-6. **Error Simulation**: Use error flags to test your client's error handling capabilities.
+6. **JWT Verification**: Retrieve the public key from `/info/public-key` to verify the generated JWTs in your tests.
+
+7. **Error Simulation**: Use error flags to test your client's error handling capabilities.
 
