@@ -21,28 +21,16 @@ const (
 	gcpDefaultAudience = "https://auth.singlestore.com"
 )
 
-// JWTOption extends ProviderOption for JWT-specific settings
+// JWTOptions are used to configure how to get JWTs
 type JWTOption interface {
-	ProviderOption // JWTOption is also a valid ProviderOption
 	applyJWTOption(*jwtOptions)
 }
 
 // Implementation struct for JWT options
-type jwtOption struct {
-	detectApplyFunc func(*detectProviderOptions)
-	jwtApplyFunc    func(*jwtOptions)
-}
-
-func (o jwtOption) applyProviderOption(opts *detectProviderOptions) {
-	if o.detectApplyFunc != nil {
-		o.detectApplyFunc(opts)
-	}
-}
+type jwtOption func(*jwtOptions)
 
 func (o jwtOption) applyJWTOption(opts *jwtOptions) {
-	if o.jwtApplyFunc != nil {
-		o.jwtApplyFunc(opts)
-	}
+	o(opts)
 }
 
 // jwtOptions holds the options for the getJWT function
@@ -58,38 +46,30 @@ type jwtOptions struct {
 
 // WithServerURL sets the authentication server URL
 func WithServerURL(serverURL string) JWTOption {
-	return jwtOption{
-		jwtApplyFunc: func(o *jwtOptions) {
-			o.ServerURL = serverURL
-		},
-	}
+	return jwtOption(func(o *jwtOptions) {
+		o.ServerURL = serverURL
+	})
 }
 
 // WithProvider sets a specific cloud provider client to use
 func WithProvider(provider models.CloudProviderClient) JWTOption {
-	return jwtOption{
-		jwtApplyFunc: func(o *jwtOptions) {
-			o.Provider = provider
-		},
-	}
+	return jwtOption(func(o *jwtOptions) {
+		o.Provider = provider
+	})
 }
 
 // WithGCPAudience sets the GCP audience for identity token requests
 func WithGCPAudience(audience string) JWTOption {
-	return jwtOption{
-		jwtApplyFunc: func(o *jwtOptions) {
-			o.AdditionalParams["audience"] = audience
-		},
-	}
+	return jwtOption(func(o *jwtOptions) {
+		o.AdditionalParams["audience"] = audience
+	})
 }
 
 // WithAssumeRole sets the role identifier to assume (if there is one)
 func WithAssumeRole(roleIdentifier string) JWTOption {
-	return jwtOption{
-		jwtApplyFunc: func(o *jwtOptions) {
-			o.AssumeRoleIdentifier = roleIdentifier
-		},
-	}
+	return jwtOption(func(o *jwtOptions) {
+		o.AssumeRoleIdentifier = roleIdentifier
+	})
 }
 
 // processJWTOptions processes JWT options and extracts provider options
@@ -105,7 +85,6 @@ func processJWTOptions(jwtOpts jwtOptions, opts ...JWTOption) jwtOptions {
 	for _, opt := range opts {
 		// Apply to both option types
 		opt.applyJWTOption(&jwtOpts)
-		opt.applyProviderOption(&jwtOpts.detectProviderOptions)
 	}
 
 	return jwtOpts

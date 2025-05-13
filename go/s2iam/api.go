@@ -86,47 +86,43 @@ type detectProviderOptions struct {
 	timeout time.Duration
 }
 
-// ProviderOption configures options for provider detection
+// ProviderOption configures options for provider detection. All ProviderOptions
+// can be used as JWTOptions.
 type ProviderOption interface {
+	JWTOption
 	applyProviderOption(*detectProviderOptions)
 }
 
 // Implementation struct for provider options
-type detectOption struct {
-	applyFunc func(*detectProviderOptions)
-}
+type detectOption func(*detectProviderOptions)
 
 func (o detectOption) applyProviderOption(opts *detectProviderOptions) {
-	if o.applyFunc != nil {
-		o.applyFunc(opts)
-	}
+	o(opts)
+}
+
+func (o detectOption) applyJWTOption(opts *jwtOptions) {
+	o(&opts.detectProviderOptions)
 }
 
 // WithLogger sets a logger for provider detection
 func WithLogger(logger Logger) ProviderOption {
-	return detectOption{
-		applyFunc: func(o *detectProviderOptions) {
-			o.logger = logger
-		},
-	}
+	return detectOption(func(o *detectProviderOptions) {
+		o.logger = logger
+	})
 }
 
 // WithClients sets the list of clients to use for detection
 func WithClients(clients []CloudProviderClient) ProviderOption {
-	return detectOption{
-		applyFunc: func(o *detectProviderOptions) {
-			o.clients = clients
-		},
-	}
+	return detectOption(func(o *detectProviderOptions) {
+		o.clients = clients
+	})
 }
 
 // WithTimeout sets the timeout for provider detection
 func WithTimeout(timeout time.Duration) ProviderOption {
-	return detectOption{
-		applyFunc: func(o *detectProviderOptions) {
-			o.timeout = timeout
-		},
-	}
+	return detectOption(func(o *detectProviderOptions) {
+		o.timeout = timeout
+	})
 }
 
 // DetectProvider tries to detect which cloud provider is being used
