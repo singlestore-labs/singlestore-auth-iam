@@ -60,11 +60,7 @@ func HasAzureMarkers(r *http.Request) bool {
 	}
 
 	// Try to decode the payload
-	padded := parts[1]
-	if len(padded)%4 != 0 {
-		padded += strings.Repeat("=", 4-len(padded)%4)
-	}
-	payload, err := base64.URLEncoding.DecodeString(padded)
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
 		return false
 	}
