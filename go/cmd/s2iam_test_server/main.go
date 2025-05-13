@@ -43,6 +43,7 @@ type Server struct {
 	publicKey  *rsa.PublicKey
 	verifiers  s2verifier.Verifiers
 	requestLog []RequestInfo
+	listener   net.Listener // Add a field to store the listener
 }
 
 // RequestInfo captures details about incoming requests
@@ -151,22 +152,67 @@ func (s *Server) Run() error {
 	mux.HandleFunc("/info/requests", s.handleRequestLog)
 	mux.HandleFunc("/health", s.handleHealth)
 
-	addr := fmt.Sprintf(":%d", s.config.Port)
-	log.Printf("Starting S2IAM test server on %s", addr)
+	// Use the configured port, or 0 to select a random available port
+	port := s.config.Port
+	addr := fmt.Sprintf(":%d", port)
 
 	// Start listening on all interfaces (needed for Docker/cross-language testing)
-	listener, err := net.Listen("tcp", addr)
+	var err error
+	s.listener, err = net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
 
-	log.Printf("Server started. Endpoints:")
-	log.Printf("  Auth:       http://localhost:%d/auth/iam/:jwtType", s.config.Port)
-	log.Printf("  Public Key: http://localhost:%d/info/public-key", s.config.Port)
-	log.Printf("  Requests:   http://localhost:%d/info/requests", s.config.Port)
-	log.Printf("  Health:     http://localhost:%d/health", s.config.Port)
+	// Get the actual port (especially important when using port 0)
+	actualPort := s.listener.Addr().(*net.TCPAddr).Port
 
-	return http.Serve(listener, mux)
+	// Log standard text message
+	log.Printf("Starting S2IAM test server on port %d", actualPort)
+
+	// Output server info in JSON format for easy parsing by tests
+	serverInfo := map[string]interface{}{
+		"server_info": map[string]interface{}{
+			"port": actualPort,
+			"endpoints": map[string]string{
+				"auth":       fmt.Sprintf("http://localhost:%d/auth/iam/:jwtType", actualPort),
+				"public_key": fmt.Sprintf("http://localhost:%d/info/public-key", actualPort),
+				"requests":   fmt.Sprintf("http://localhost:%d/info/requests", actualPort),
+				"health":     fmt.Sprintf("http://localhost:%d/health", actualPort),
+			},
+			"config": map[string]interface{}{
+				"fail_verification": s.config.FailVerification,
+				"return_empty_jwt":  s.config.ReturnEmptyJWT,
+				"return_error":      s.config.ReturnError,
+				"error_code":        s.config.ErrorCode,
+				"token_expiry":      s.config.TokenExpiry.String(),
+			},
+		},
+	}
+
+	// Output as JSON
+	jsonInfo, err := json.MarshalIndent(serverInfo, "", "  ")
+	if err != nil {
+		log.Printf("Warning: Failed to marshal server info to JSON: %v", err)
+	} else {
+		fmt.Println(string(jsonInfo))
+	}
+
+	// Also print human-readable endpoints for convenience
+	log.Printf("Server started. Endpoints:")
+	log.Printf("  Auth:       http://localhost:%d/auth/iam/:jwtType", actualPort)
+	log.Printf("  Public Key: http://localhost:%d/info/public-key", actualPort)
+	log.Printf("  Requests:   http://localhost:%d/info/requests", actualPort)
+	log.Printf("  Health:     http://localhost:%d/health", actualPort)
+
+	return http.Serve(s.listener, mux)
+}
+
+// GetPort returns the actual port the server is listening on
+func (s *Server) GetPort() int {
+	if s.listener == nil {
+		return 0
+	}
+	return s.listener.Addr().(*net.TCPAddr).Port
 }
 
 // handleAuth handles authentication requests

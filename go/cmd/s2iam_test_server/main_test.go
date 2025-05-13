@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -282,4 +285,84 @@ func TestServer_JWTVerification(t *testing.T) {
 	assert.Equal(t, identity.AccountID, claims["accountID"])
 	assert.Equal(t, identity.Region, claims["region"])
 	assert.Equal(t, "database", claims["jwtType"])
+}
+
+// parseServerOutput reads server output to find the JSON info
+func parseServerOutput(output string) (int, map[string]string, error) {
+	// Find the JSON data (starts with '{' and ends with '}')
+	startIdx := strings.Index(output, "{")
+	if startIdx == -1 {
+		return 0, nil, fmt.Errorf("no JSON data found in output")
+	}
+
+	endIdx := strings.LastIndex(output, "}")
+	if endIdx == -1 {
+		return 0, nil, fmt.Errorf("no JSON closing brace found in output")
+	}
+
+	jsonStr := output[startIdx : endIdx+1]
+
+	var serverInfo struct {
+		ServerInfo struct {
+			Port      int               `json:"port"`
+			Endpoints map[string]string `json:"endpoints"`
+		} `json:"server_info"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonStr), &serverInfo); err != nil {
+		return 0, nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, nil
+}
+
+func TestServer_RandomPort(t *testing.T) {
+	// Create server with port 0 for random port
+	config := Config{
+		Port:    0, // Use port 0 for random port
+		KeySize: 2048,
+	}
+
+	srv, err := NewServer(config)
+	require.NoError(t, err)
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Start server in a goroutine
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Run()
+	}()
+
+	// Give the server a moment to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Restore stdout and get captured output
+	w.Close()
+	os.Stdout = oldStdout
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+
+	// Parse server info from output
+	port, endpoints, err := parseServerOutput(buf.String())
+	require.NoError(t, err, "Should be able to parse server info from output")
+
+	// Verify the port
+	require.Greater(t, port, 0, "Server should be assigned a non-zero port")
+
+	// Check that this matches the GetPort method
+	assert.Equal(t, port, srv.GetPort(), "GetPort() should return the same port")
+
+	// Verify server is running by making a request to the health endpoint
+	healthURL := endpoints["health"]
+	resp, err := http.Get(healthURL)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Shut down the server cleanly
+	listener := srv.listener
+	assert.NoError(t, listener.Close())
 }
