@@ -287,35 +287,6 @@ func TestServer_JWTVerification(t *testing.T) {
 	assert.Equal(t, "database", claims["jwtType"])
 }
 
-// parseServerOutput reads server output to find the JSON info
-func parseServerOutput(output string) (int, map[string]string, error) {
-	// Find the JSON data (starts with '{' and ends with '}')
-	startIdx := strings.Index(output, "{")
-	if startIdx == -1 {
-		return 0, nil, fmt.Errorf("no JSON data found in output")
-	}
-
-	endIdx := strings.LastIndex(output, "}")
-	if endIdx == -1 {
-		return 0, nil, fmt.Errorf("no JSON closing brace found in output")
-	}
-
-	jsonStr := output[startIdx : endIdx+1]
-
-	var serverInfo struct {
-		ServerInfo struct {
-			Port      int               `json:"port"`
-			Endpoints map[string]string `json:"endpoints"`
-		} `json:"server_info"`
-	}
-
-	if err := json.Unmarshal([]byte(jsonStr), &serverInfo); err != nil {
-		return 0, nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, nil
-}
-
 func TestServer_RandomPort(t *testing.T) {
 	// Create server with port 0 for random port
 	config := Config{
@@ -376,7 +347,7 @@ func TestServer_RandomPort(t *testing.T) {
 	resp, err := http.Get(healthURL)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Clean up resources properly
 	cancel() // Cancel the context to trigger server shutdown

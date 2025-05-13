@@ -217,12 +217,12 @@ func (s *Server) Run(ctx context.Context) error {
 			reqCancel()
 
 			if err == nil && resp.StatusCode == http.StatusOK {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				// Server is ready, exit the loop
 				goto ServerReady
 			}
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 
 			// Wait before trying again
