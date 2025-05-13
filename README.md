@@ -13,14 +13,13 @@ The `singlestore-auth-iam` library discovers the IAM role from a cloud provider 
 makes a request that allows the SingleStore auth server to verify the IAM role. In return, the SingleStore
 auth server provides a JWT that can be used for:
 
-- Access to the SingleStore database (using the MySQL protocol and libraries)
-- Making API calls via the API gateway
+- Access to a (SingleStore Helios)[https://www.singlestore.com/product-overview/] database
+- Making call to the [Management API](https://docs.singlestore.com/cloud/user-and-workspace-administration/management-api/)
 
 ## Features
 
 - Go library for JWT authentication
 - Support for AWS, GCP, and Azure cloud providers
-- Customizable authentication server URL and GCP audience
 - Command-line tool for fetching and providing the JWT for other commands
 - Role assumption capabilities (assume different roles/service accounts before requesting the JWT)
 
@@ -135,7 +134,7 @@ azureJWT, err := s2iam.GetDatabaseJWT(
 
 ### S2IAM Command Line Tools
 
-The `s2iam` command is a standalone client that obtains JWT tokens from the SingleStore IAM authentication service.
+The `s2iam` command is a standalone client that obtains JWT tokens from the SingleStore authentication service.
 
 #### Basic Usage
 
@@ -211,6 +210,3 @@ The library automatically detects the cloud provider by checking environment var
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgements
-Initial version of this library written by Gemini, rewritten by Claude 3.7 Sonnet
