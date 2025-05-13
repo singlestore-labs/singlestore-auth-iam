@@ -57,7 +57,7 @@ func NewClient(logger models.Logger) models.CloudProviderClient {
 	return azureClient
 }
 
-// Detect tests if we are executing within Azure
+// Detect tests if we are executing within Azure and if a managed identity is available
 func (c *AzureClient) Detect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -116,10 +116,59 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		return errors.Errorf("not running on Azure: metadata service returned status %d", resp.StatusCode)
 	}
 
-	// We've confirmed we're on Azure
+	// We've confirmed we're on Azure, now check if a managed identity is available
+	if c.logger != nil {
+		c.logger.Logf("Azure Detection - Checking for managed identity")
+	}
+
+	// Try to get a token to verify identity is available
+	tokenURL := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
+	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Failed to create token request: %v", err)
+		}
+		return errors.Errorf("failed to create Azure token request: %w", err)
+	}
+	tokenReq.Header.Set("Metadata", "true")
+
+	tokenResp, err := client.Do(tokenReq)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Token request failed: %v", err)
+		}
+		return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: %s", err)
+	}
+	defer func() {
+		_ = tokenResp.Body.Close()
+	}()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(tokenResp.Body)
+		var errorResponse struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+		}
+
+		if json.Unmarshal(bodyBytes, &errorResponse) == nil {
+			if errorResponse.Error == "invalid_request" && strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
+				if c.logger != nil {
+					c.logger.Logf("Azure Detection - No managed identity found")
+				}
+				return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: invalid token response")
+			}
+		}
+
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Token request returned status %d", tokenResp.StatusCode)
+		}
+		return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity check failed: %d", tokenResp.StatusCode)
+	}
+
+	// We've confirmed we're on Azure and have a managed identity
 	c.detected = true
 	if c.logger != nil {
-		c.logger.Logf("Azure Detection - Successfully detected Azure environment")
+		c.logger.Logf("Azure Detection - Successfully detected Azure environment with managed identity")
 	}
 	return nil
 }
