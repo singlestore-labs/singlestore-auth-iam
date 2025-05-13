@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -338,6 +339,8 @@ func TestServer_RandomPort(t *testing.T) {
 
 	// Start server in a goroutine
 	errCh := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		// Use a simple HTTP server with the context for clean shutdown
 		server := &http.Server{
@@ -352,6 +355,7 @@ func TestServer_RandomPort(t *testing.T) {
 		} else {
 			errCh <- fmt.Errorf("listener not initialized")
 		}
+		wg.Done()
 
 		// Listen for context cancellation to shut down gracefully
 		<-ctx.Done()
@@ -360,6 +364,7 @@ func TestServer_RandomPort(t *testing.T) {
 
 	// Run the actual server
 	go func() {
+		wg.Wait() // avoid data race on srv.listener
 		errCh <- srv.Run()
 	}()
 
