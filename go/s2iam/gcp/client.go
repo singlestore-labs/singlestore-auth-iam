@@ -218,7 +218,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		// Create identity object
 		identity, err := c.getIdentityFromToken(ctx, tokenResponse.Token)
 		if err != nil {
-			return headers, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
+			return nil, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
 		}
 
 		return headers, identity, nil
@@ -237,7 +237,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// Create identity object
 	identity, err := c.getIdentityFromToken(ctx, idToken)
 	if err != nil {
-		return headers, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
+		return nil, nil, errors.Errorf("got headers but failed to extract identity: %w", err) // Return headers even if identity extraction fails
 	}
 
 	return headers, identity, nil

@@ -75,8 +75,10 @@ func processJWTOptions(jwtOpts jwtOptions, opts ...JWTOption) jwtOptions {
 		jwtOpts.AdditionalParams = make(map[string]string)
 	}
 
-	if jwtOpts.timeout == 0 {
-		jwtOpts.timeout = defaultTimeout
+	//nolint:staticcheck // QF1008: could remove embedded field "detectProviderOptions" from selector
+	if jwtOpts.detectProviderOptions.timeout == 0 {
+		//nolint:staticcheck // QF1008: could remove embedded field "detectProviderOptions" from selector
+		jwtOpts.detectProviderOptions.timeout = defaultTimeout
 	}
 
 	for _, opt := range opts {
