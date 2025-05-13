@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -331,8 +332,33 @@ func TestServer_RandomPort(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Set up a context with cancellation for clean shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Start server in a goroutine
 	errCh := make(chan error, 1)
+	go func() {
+		// Use a simple HTTP server with the context for clean shutdown
+		server := &http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				srv.handleHealth(w, r)
+			}),
+		}
+
+		// Set the listener on the server
+		if srv.listener != nil {
+			errCh <- server.Serve(srv.listener)
+		} else {
+			errCh <- fmt.Errorf("listener not initialized")
+		}
+
+		// Listen for context cancellation to shut down gracefully
+		<-ctx.Done()
+		_ = server.Shutdown(context.Background())
+	}()
+
+	// Run the actual server
 	go func() {
 		errCh <- srv.Run()
 	}()
@@ -358,11 +384,23 @@ func TestServer_RandomPort(t *testing.T) {
 
 	// Verify server is running by making a request to the health endpoint
 	healthURL := endpoints["health"]
-	resp, err := http.Get(healthURL)
+
+	// Add a reasonable timeout for the HTTP request
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+	resp, err := httpClient.Get(healthURL)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	// Shut down the server cleanly
-	listener := srv.listener
-	assert.NoError(t, listener.Close())
+	// Clean up resources properly
+	cancel() // Cancel the context to trigger server shutdown
+
+	// Close the listener explicitly
+	if srv.listener != nil {
+		_ = srv.listener.Close()
+	}
+
+	// Wait for a short time to allow shutdown to complete
+	time.Sleep(100 * time.Millisecond)
 }

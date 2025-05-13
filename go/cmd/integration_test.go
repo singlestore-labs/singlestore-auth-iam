@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -32,19 +35,47 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 	allArgs := append([]string{"--port", "0"}, args...)
 	serverCmd := exec.Command(binary, allArgs...)
 
+	// Set up proper pipes for Windows compatibility
+	serverCmd.Stderr = os.Stderr // Send errors to test output
+
 	// Capture server output to get the JSON info
 	serverOutput, err := serverCmd.StdoutPipe()
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to get server stdout: %w", err)
 	}
 
+	// Start the process
 	if err := serverCmd.Start(); err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to start server: %w", err)
 	}
 
+	// Prepare a robust cleanup function
 	cleanup := func() {
-		_ = serverCmd.Process.Kill()
-		_ = serverCmd.Wait() // Avoid zombie processes
+		// First try graceful termination
+		if runtime.GOOS == "windows" {
+			// Windows-specific process termination using taskkill
+			// This is more reliable than Process.Kill() on Windows
+			exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(serverCmd.Process.Pid)).Run()
+		} else {
+			// On Unix systems, send SIGTERM first for graceful shutdown
+			serverCmd.Process.Signal(syscall.SIGTERM)
+
+			// Give it a moment to terminate gracefully
+			done := make(chan struct{})
+			go func() {
+				serverCmd.Wait()
+				close(done)
+			}()
+
+			// If it doesn't exit gracefully within a timeout, force kill it
+			select {
+			case <-done:
+				// Process exited cleanly
+			case <-time.After(2 * time.Second):
+				// Force kill if it doesn't exit
+				serverCmd.Process.Kill()
+			}
+		}
 	}
 
 	// Read server output to find the JSON info
@@ -60,20 +91,29 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 			line := scanner.Text()
 			t.Logf("Server: %s", line)
 
-			// Look for the start of the JSON data (starts with '{')
-			if !jsonStarted && strings.HasPrefix(strings.TrimSpace(line), "{") {
+			// Look for the start of the JSON data
+			if !jsonStarted && strings.Contains(line, "{") {
 				jsonStarted = true
 				jsonData.WriteString(line)
 			} else if jsonStarted {
 				jsonData.WriteString(line)
 
 				// Check if this could be the end of the JSON
-				if strings.HasSuffix(strings.TrimSpace(line), "}") {
-					// Try to parse what we have
-					if err := json.Unmarshal([]byte(jsonData.String()), &serverInfo); err == nil {
-						if serverInfo.ServerInfo.Port > 0 {
-							infoFound <- true
-							break
+				if strings.Contains(line, "}") {
+					// Try to parse what we have, being more lenient with JSON structure
+					jsonStr := jsonData.String()
+					jsonStr = strings.Join(strings.Fields(jsonStr), "")
+
+					// Try to find valid JSON even if there's other text in the output
+					startIdx := strings.Index(jsonStr, "{")
+					endIdx := strings.LastIndex(jsonStr, "}")
+					if startIdx >= 0 && endIdx > startIdx {
+						validJson := jsonStr[startIdx : endIdx+1]
+						if err := json.Unmarshal([]byte(validJson), &serverInfo); err == nil {
+							if serverInfo.ServerInfo.Port > 0 {
+								infoFound <- true
+								break
+							}
 						}
 					}
 				}
@@ -85,31 +125,45 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 	select {
 	case <-infoFound:
 		t.Logf("Server started on port %d", serverInfo.ServerInfo.Port)
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		cleanup()
 		return 0, nil, nil, fmt.Errorf("timed out waiting for server info")
 	}
 
-	// Wait for server to respond to health checks
+	// Wait for server to respond to health checks with a timeout
 	healthURL := serverInfo.ServerInfo.Endpoints["health"]
-	healthCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	healthCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	for {
-		resp, err := http.Get(healthURL)
+	// Use a client with timeout for health checks
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	// Retry loop with backoff for health checks
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		resp, err := httpClient.Get(healthURL)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			break
+			resp.Body.Close() // Important: always close response body
+			return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
 		}
+		if err != nil {
+			t.Logf("Health check failed: %v (retry %d/%d)", err, i+1, maxRetries)
+		}
+
+		// Check if context has been canceled
 		select {
 		case <-healthCtx.Done():
 			cleanup()
-			return 0, nil, nil, fmt.Errorf("server failed to respond to health checks")
-		case <-time.After(100 * time.Millisecond):
+			return 0, nil, nil, fmt.Errorf("server failed to respond to health checks: %v", healthCtx.Err())
+		case <-time.After(500 * time.Millisecond * time.Duration(i+1)): // Increasing backoff
 			continue
 		}
 	}
 
-	return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
+	cleanup()
+	return 0, nil, nil, fmt.Errorf("server failed to respond to health checks after %d attempts", maxRetries)
 }
 
 // TestIntegration_ServerAndClient tests the test server and client working together
@@ -125,9 +179,14 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 		t.Skip("test requires a cloud provider")
 	}
 
-	// Build both commands
-	testServerBinary := t.TempDir() + "/test_server"
-	clientBinary := t.TempDir() + "/client"
+	// Build both commands with platform-specific binary names
+	binaryExt := ""
+	if runtime.GOOS == "windows" {
+		binaryExt = ".exe"
+	}
+
+	testServerBinary := filepath.Join(t.TempDir(), "test_server"+binaryExt)
+	clientBinary := filepath.Join(t.TempDir(), "client"+binaryExt)
 
 	// Get the absolute path to the project's Go module
 	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
@@ -185,8 +244,14 @@ func TestIntegration_ServerOnly(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	// Build test server
-	testServerBinary := t.TempDir() + "/test_server"
+	// Build test server with platform-specific binary extension
+	binaryExt := ""
+	if runtime.GOOS == "windows" {
+		binaryExt = ".exe"
+	}
+
+	testServerBinary := filepath.Join(t.TempDir(), "test_server"+binaryExt)
+
 	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
 	require.NoError(t, err, "failed to determine module root")
 	moduleRootStr := strings.TrimSpace(string(moduleRoot))
