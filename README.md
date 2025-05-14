@@ -7,6 +7,10 @@ This repository contains tools for the SingleStore IAM authentication system.
 [![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam)
 [![codecov](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam/branch/main/graph/badge.svg)](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam)
 
+## Current status
+
+This service is not yet available. This library may be updated before the service becomes available.
+
 ## Overview
 
 The `singlestore-auth-iam` library discovers the IAM role from a cloud provider (AWS, GCP, Azure) and

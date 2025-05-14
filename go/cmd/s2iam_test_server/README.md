@@ -193,7 +193,6 @@ finally:
 
 ```javascript
 const { spawn } = require('child_process');
-const axios = require('axios');
 
 // Start the test server
 const server = spawn('s2iam_test_server', ['--port=0']);
@@ -207,21 +206,18 @@ server.stdout.once('data', async (data) => {
     
     try {
         // For GCP authentication
-        const response = await axios.post(
-            `http://localhost:${port}/auth/iam/api`,
-            null,
-            {
-                headers: {
-                    'Metadata-Flavor': 'Google',
-                    'Authorization': 'Bearer gcp-token'
-                },
-                params: {
-                    workspaceGroupID: 'test-workspace'
-                }
-            }
-        );
+        const url = new URL(`http://localhost:${port}/auth/iam/api`);
+        url.searchParams.set('workspaceGroupID', 'test-workspace');
         
-        const jwt = response.data.jwt;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                'Metadata-Flavor': 'Google',
+                'Authorization': 'Bearer gcp-token'
+            }
+        });
+        
+        const jwt = (await response.json()).jwt;
         console.log(`Got JWT: ${jwt}`);
         
     } finally {

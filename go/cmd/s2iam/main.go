@@ -70,6 +70,7 @@ func realMain(args []string, exitFunc func(int)) error {
 
 func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	config := Config{}
+	var help bool
 
 	// Define flags
 	flagSet.StringVar(&config.JWTType, "jwt-type", "database", "JWT type: 'database' or 'api'")
@@ -83,6 +84,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.EnvStatus, "env-status", "", "Environment variable name for status output")
 	flagSet.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
 	flagSet.BoolVar(&config.ForceDetect, "force-detect", false, "Force provider detection even if provider is specified")
+	flagSet.BoolVar(&help, "help", false, "Show command options")
 
 	// Custom usage
 	flagSet.Usage = func() {
@@ -105,6 +107,10 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	err := flagSet.Parse(args[1:])
 	if err != nil {
 		return config, err
+	}
+	if help {
+		flagSet.Usage()
+		os.Exit(0)
 	}
 
 	// Validate flags

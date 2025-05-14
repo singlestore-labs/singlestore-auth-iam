@@ -39,8 +39,7 @@ func NewVerifier(allowedAudiences []string, tenant string, logger models.Logger)
 
 // HasHeaders returns true if the request has Azure authentication headers
 func (v *AzureVerifier) HasHeaders(r *http.Request) bool {
-	authHeader := r.Header.Get("Authorization")
-	return strings.HasPrefix(authHeader, "Bearer ") && HasAzureMarkers(r)
+	return HasAzureMarkers(r)
 }
 
 // HasAzureMarkers checks for Azure-specific traits in the token. This is exported

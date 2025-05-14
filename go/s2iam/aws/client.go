@@ -17,6 +17,12 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
+const (
+	getRegionURL   = "http://169.254.169.254/latest/meta-data/placement/region"
+	getTokenURL    = "http://169.254.169.254/latest/api/token"
+	getMetadataURL = "http://169.254.169.254/latest/meta-data/"
+)
+
 // AWSClient implements the CloudProviderClient interface for AWS
 type AWSClient struct {
 	stsClient *sts.Client
@@ -70,7 +76,7 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 			c.logger.Logf("AWS ensureRegion - Trying metadata service for region")
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			"http://169.254.169.254/latest/meta-data/placement/region", nil)
+			getRegionURL, nil)
 		if err == nil {
 			client := &http.Client{}
 			resp, err := client.Do(req)
@@ -152,7 +158,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	// Try to access the AWS instance metadata service
 	// Try IMDSv2 first (token-based method)
 	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodPut,
-		"http://169.254.169.254/latest/api/token", nil)
+		getTokenURL, nil)
 	if err == nil {
 		tokenReq.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600")
 		client := &http.Client{}
@@ -188,7 +194,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	}
 
 	// Fall back to direct metadata check
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://169.254.169.254/latest/meta-data/", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getMetadataURL, nil)
 	if err != nil {
 		return errors.Errorf("not running on AWS: failed to detect AWS environment (no environment variables or metadata service): %w", err)
 	}
