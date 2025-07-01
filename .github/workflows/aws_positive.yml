@@ -67,13 +67,13 @@ jobs:
         echo "Showing ok lines..."
         grep "^ok" test_output.log
         echo "Checking cmd pattern..."
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd " test_output.log
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd	" test_output.log
         echo "Checking s2iam pattern..."
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam " test_output.log
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam	" test_output.log
         echo "Checking s2iam_test_server pattern..."
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server " test_output.log
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server	" test_output.log
         echo "Checking s2iam package pattern..."
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/s2iam " test_output.log
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/s2iam	" test_output.log
         echo "All tests passed successfully!"
     
     - name: Download coverage file
