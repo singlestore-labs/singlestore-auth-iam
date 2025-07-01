@@ -9,6 +9,7 @@ env:
   TEST_USERNAME: ubuntu
   TEST_HOSTNAME: ec2-18-206-180-126.compute-1.amazonaws.com
   SSH_KEY_SECRET: AWS_POSITIVE_TEST
+  SSH_KEY_NAME: aws-test-key.pem
   UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-aws
 
 jobs:
@@ -22,18 +23,27 @@ jobs:
     - name: Setup SSH key
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/test_key
-        chmod 600 ~/.ssh/test_key
+        
+        # Write the SSH key and handle potential line break issues
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
+        sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
+        chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
+        
+        # Add host to known_hosts
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
+        
+        # Test SSH connection
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
     
     - name: Copy repository to remote system
       run: |
-        rsync -avz -e "ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no" \
+        rsync -avz -e "ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no" \
           ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
     
     - name: Set remote environment variables and run tests
       run: |
-        ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
           # Set environment variables here - to be specified later
           # export VAR1=value1
           # export VAR2=value2
@@ -57,7 +67,7 @@ jobs:
     - name: Download coverage file
       run: |
         # Download coverage file from remote
-        scp -i ~/.ssh/test_key -o StrictHostKeyChecking=no \
+        scp -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
         
     - name: Upload coverage to Codecov
@@ -72,9 +82,9 @@ jobs:
     - name: Clean up remote directory
       if: always()
       run: |
-        ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
 
     - name: Cleanup SSH key
       if: always()
       run: |
-        rm -f ~/.ssh/test_key
+        rm -f ~/.ssh/${{ env.SSH_KEY_NAME }}
