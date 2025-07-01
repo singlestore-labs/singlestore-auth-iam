@@ -47,15 +47,14 @@ jobs:
     - name: Run tests with coverage and verification
       run: |
         ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+	  set -ex
           cd tests/${{ env.UNIQUE_DIR }}/go
           
-          echo "Running tests for verification..."
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
           
-          echo "Running tests with coverage..."
           env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
           
-          echo "Coverage file created: $(ls -la coverage.out)"
+          ls -la coverage.out
         EOF
     
     - name: Verify test results
