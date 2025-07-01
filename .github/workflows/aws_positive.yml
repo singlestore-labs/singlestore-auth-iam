@@ -1,13 +1,4 @@
-- name: Verify test results
-      run: |
-        echo "Checking for TestWithDebugging..."
-        grep --silent -- "--- PASS: TestWithDebugging" test_output.log
-        echo "Checking for PASS..."
-        grep --silent -- "^PASS" test_output.log
-        echo "Showing ok lines..."
-        grep "^ok" test_output.log
-        echo "Checking cmd pattern..."
-        grep --name: Multi-Cloud Tests
+name: AWS Test
 
 on: [pull_request]
 
@@ -25,7 +16,6 @@ jobs:
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
             secret: AWS_POSITIVE_KEY
             env_vars: ""
-          # Add your other test configurations here
     
     env:
       TEST_USERNAME: ubuntu
@@ -66,6 +56,9 @@ jobs:
           # Second run: generate coverage (output to /dev/null)
           echo "Running tests with coverage..."
           env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
+          
+          # Verify coverage file was created
+          echo "Coverage file created: $(ls -la coverage.out)"
         EOF 2>&1 | tee test_output.log
     
     - name: Verify test results
@@ -88,8 +81,18 @@ jobs:
     
     - name: Download coverage file
       run: |
+        # Verify coverage file exists on remote
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} \
+          "ls -la tests/${{ env.UNIQUE_DIR }}/go/coverage.out"
+        
+        # Download coverage file from remote
         scp -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
+          
+        # Verify local coverage file
+        echo "Local coverage file: $(ls -la coverage.out)"
+        echo "Coverage file size: $(wc -c < coverage.out) bytes"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
