@@ -15,6 +15,7 @@ env:
 jobs:
   aws-test:
     runs-on: ubuntu-latest
+    environment: using-dave
     
     steps:
     - name: Checkout repository
@@ -24,8 +25,14 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         
+        # Debug: Check if secret is accessible
+        echo "=== Secret Debug ==="
+        echo "Secret name being accessed: ${{ env.SSH_KEY_SECRET }}"
+        echo "Raw secret length: ${#SECRET_CONTENT}"
+        echo "=== End Secret Debug ==="
+        
         # Write the SSH key and handle potential line break issues
-        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
+        echo "${{ secrets.AWS_POSITIVE_TEST }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
         sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
         chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
         
@@ -43,6 +50,8 @@ jobs:
         # Test SSH connection
         ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
+      env:
+        SECRET_CONTENT: ${{ secrets.AWS_POSITIVE_TEST }}
     
     - name: Copy repository to remote system
       run: |
