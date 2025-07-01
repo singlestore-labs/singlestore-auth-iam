@@ -1,4 +1,13 @@
-name: Multi-Cloud Tests
+- name: Verify test results
+      run: |
+        echo "Checking for TestWithDebugging..."
+        grep --silent -- "--- PASS: TestWithDebugging" test_output.log
+        echo "Checking for PASS..."
+        grep --silent -- "^PASS" test_output.log
+        echo "Showing ok lines..."
+        grep "^ok" test_output.log
+        echo "Checking cmd pattern..."
+        grep --name: Multi-Cloud Tests
 
 on: [pull_request]
 
@@ -45,12 +54,19 @@ jobs:
         rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no" \
           ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
     
-    - name: Run tests with environment variables
+    - name: Run tests with coverage and verification
       run: |
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 
           cd tests/${{ env.UNIQUE_DIR }}/go
-          env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... 
-        EOF
+          
+          # First run: for verification output (no coverage)
+          echo "Running tests for verification..."
+          env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
+          
+          # Second run: generate coverage (output to /dev/null)
+          echo "Running tests with coverage..."
+          env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
+        EOF 2>&1 | tee test_output.log
     
     - name: Verify test results
       run: |
