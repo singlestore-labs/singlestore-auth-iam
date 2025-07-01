@@ -1,4 +1,4 @@
-name: Cloud Tests
+name: Multi-Cloud Tests
 
 on: [pull_request]
 
@@ -12,10 +12,11 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: aw-positive
+          - name: aws
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
             secret: AWS_POSITIVE_KEY
             env_vars: ""
+          # Add your other test configurations here
     
     env:
       TEST_USERNAME: ubuntu
@@ -53,12 +54,19 @@ jobs:
     
     - name: Verify test results
       run: |
+        echo "Checking for TestWithDebugging..."
         grep --silent -- "--- PASS: TestWithDebugging" test_output.log
+        echo "Checking for PASS..."
         grep --silent -- "^PASS" test_output.log
+        echo "Showing ok lines..."
         grep "^ok" test_output.log
+        echo "Checking cmd pattern..."
         grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd " test_output.log
+        echo "Checking s2iam pattern..."
         grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam " test_output.log
+        echo "Checking s2iam_test_server pattern..."
         grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server " test_output.log
+        echo "Checking s2iam package pattern..."
         grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/s2iam " test_output.log
         echo "All tests passed successfully!"
     
