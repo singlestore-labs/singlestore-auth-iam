@@ -8,7 +8,7 @@ permissions:  # added using https://github.com/step-security/secure-workflows
 env:
   TEST_USERNAME: ubuntu
   TEST_HOSTNAME: ec2-18-206-180-126.compute-1.amazonaws.com
-  SSH_KEY_SECRET: AWS_POSITIVE_TEST
+  SSH_KEY_SECRET: AWS_POSITIVE_KEY
   SSH_KEY_NAME: aws-test-key.pem
   UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-aws
 
@@ -32,7 +32,7 @@ jobs:
         echo "=== End Secret Debug ==="
         
         # Write the SSH key and handle potential line break issues
-        echo "${{ secrets.AWS_POSITIVE_TEST }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
+        echo "${{ secrets.AWS_POSITIVE_KEY }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
         sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
         chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
         
@@ -51,7 +51,7 @@ jobs:
         ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
       env:
-        SECRET_CONTENT: ${{ secrets.AWS_POSITIVE_TEST }}
+        SECRET_CONTENT: ${{ secrets.AWS_POSITIVE_KEY }}
     
     - name: Copy repository to remote system
       run: |
