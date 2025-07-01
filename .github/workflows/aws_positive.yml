@@ -1,0 +1,80 @@
+name: AWS positive test
+
+on: [pull_request]
+
+permissions:  # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+env:
+  TEST_USERNAME: ubuntu
+  TEST_HOSTNAME: ec2-18-206-180-126.compute-1.amazonaws.com
+  SSH_KEY_SECRET: AWS_POSITIVE_TEST
+  UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-aws
+
+jobs:
+  aws-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/test_key
+        chmod 600 ~/.ssh/test_key
+        ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
+    
+    - name: Copy repository to remote system
+      run: |
+        rsync -avz -e "ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no" \
+          ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
+    
+    - name: Set remote environment variables and run tests
+      run: |
+        ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+          # Set environment variables here - to be specified later
+          # export VAR1=value1
+          # export VAR2=value2
+          
+          cd tests/${{ env.UNIQUE_DIR }}/go
+          go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... 
+        EOF
+    
+    - name: Verify test results
+      run: |
+        # Check for required test passes
+        grep --silent -- "--- PASS: TestWithDebugging" test_output.log
+        grep --silent -- "^PASS" test_output.log
+        grep "^ok" test_output.log
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd " test_output.log
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam " test_output.log
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server " test_output.log
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/s2iam " test_output.log
+        echo "All tests passed successfully!"
+
+    - name: Download coverage file
+      run: |
+        # Download coverage file from remote
+        scp -i ~/.ssh/test_key -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        name: ${{ github.job }}-coverage
+        flags: ${{ github.job }}
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+    
+    - name: Clean up remote directory
+      if: always()
+      run: |
+        ssh -i ~/.ssh/test_key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
+
+    - name: Cleanup SSH key
+      if: always()
+      run: |
+        rm -f ~/.ssh/test_key
