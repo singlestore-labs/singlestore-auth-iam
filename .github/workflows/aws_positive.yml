@@ -29,6 +29,14 @@ jobs:
         sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
         chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
         
+        # Debug: Show key structure without revealing content
+        echo "=== Key Debug Info ==="
+        echo "Key file size: $(wc -c < ~/.ssh/${{ env.SSH_KEY_NAME }}) bytes"
+        echo "Key file lines: $(wc -l < ~/.ssh/${{ env.SSH_KEY_NAME }})"
+        echo "Key structure (masked):"
+        sed 's/[a-z]/x/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
+        echo "=== End Debug ==="
+        
         # Add host to known_hosts
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
         
