@@ -1,4 +1,4 @@
-name: AWS Test
+name: Cloud Provider Tests
 
 on: [pull_request]
 
@@ -46,20 +46,17 @@ jobs:
     
     - name: Run tests with coverage and verification
       run: |
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 
+        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
           cd tests/${{ env.UNIQUE_DIR }}/go
           
-          # First run: for verification output (no coverage)
           echo "Running tests for verification..."
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
           
-          # Second run: generate coverage (output to /dev/null)
           echo "Running tests with coverage..."
           env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
           
-          # Verify coverage file was created
           echo "Coverage file created: $(ls -la coverage.out)"
-        EOF 2>&1 | tee test_output.log
+        EOF
     
     - name: Verify test results
       run: |
@@ -92,7 +89,6 @@ jobs:
           
         # Verify local coverage file
         echo "Local coverage file: $(ls -la coverage.out)"
-        echo "Coverage file size: $(wc -c < coverage.out) bytes"
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
