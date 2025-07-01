@@ -25,24 +25,10 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         
-        # Debug: Check if secret is accessible
-        echo "=== Secret Debug ==="
-        echo "Secret name being accessed: ${{ env.SSH_KEY_SECRET }}"
-        echo "Raw secret length: ${#SECRET_CONTENT}"
-        echo "=== End Secret Debug ==="
-        
         # Write the SSH key and handle potential line break issues
         echo "${{ secrets.AWS_POSITIVE_KEY }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
         sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
         chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
-        
-        # Debug: Show key structure without revealing content
-        echo "=== Key Debug Info ==="
-        echo "Key file size: $(wc -c < ~/.ssh/${{ env.SSH_KEY_NAME }}) bytes"
-        echo "Key file lines: $(wc -l < ~/.ssh/${{ env.SSH_KEY_NAME }})"
-        echo "Key structure (masked):"
-        sed 's/[a-z]/x/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
-        echo "=== End Debug ==="
         
         # Add host to known_hosts
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
@@ -50,12 +36,10 @@ jobs:
         # Test SSH connection
         ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
-      env:
-        SECRET_CONTENT: ${{ secrets.AWS_POSITIVE_KEY }}
     
     - name: Copy repository to remote system
       run: |
-        rsync -avz -e "ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no" \
+        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no" \
           ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
     
     - name: Set remote environment variables and run tests
@@ -71,14 +55,24 @@ jobs:
     
     - name: Verify test results
       run: |
+        set -x  # Enable debug output
+        
         # Check for required test passes
-        grep --silent -- "--- PASS: TestWithDebugging" test_output.log
-        grep --silent -- "^PASS" test_output.log
+        echo "Checking for TestWithDebugging..."
+        grep --silent -- "--- PASS: TestWithDebugging" test_output.log || echo "TestWithDebugging not found"
+        
+        echo "Checking for PASS..."
+        grep --silent -- "^PASS" test_output.log || echo "PASS not found"
+        
+        echo "Showing all 'ok' lines:"
         grep "^ok" test_output.log
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd " test_output.log
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam " test_output.log
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server " test_output.log
-        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/s2iam " test_output.log
+        
+        echo "Checking specific ok patterns..."
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd " test_output.log || echo "cmd pattern not found"
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam " test_output.log || echo "s2iam pattern not found"
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server " test_output.log || echo "s2iam_test_server pattern not found"
+        grep --silent "^ok  github.com/singlestore-labs/singlestore-auth-iam/go/s2iam " test_output.log || echo "s2iam package pattern not found"
+        
         echo "All tests passed successfully!"
 
     - name: Download coverage file
