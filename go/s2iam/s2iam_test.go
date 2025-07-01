@@ -316,7 +316,7 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
 	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")
 	if roleIdentifier == "" {
-		t.Skipf("%s needs S2IAM_TEST_ASSUME_ROLE to be set")
+		t.Skip("Test needs S2IAM_TEST_ASSUME_ROLE to be set")
 	}
 	flags := &fakeServerFlags{}
 	fakeServer := startFakeServer(t, flags)
