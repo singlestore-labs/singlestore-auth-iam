@@ -314,27 +314,10 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 
 // Test with AssumeRole
 func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
-	client := requireCloudProvider(t)
-
-	// The role identifier format depends on the provider
-	var roleIdentifier string
-	switch client.GetType() {
-	case s2iam.ProviderAWS:
-		// Skip this test on AWS as it requires a valid role ARN
-		t.Skip("test requires valid AWS role ARN")
-		roleIdentifier = "arn:aws:iam::123456789012:role/TestRole"
-	case s2iam.ProviderGCP:
-		// Skip on GCP as it requires valid service account
-		t.Skip("test requires valid GCP service account")
-		roleIdentifier = "test-service-account@project.iam.gserviceaccount.com"
-	case s2iam.ProviderAzure:
-		// Skip on Azure as it requires valid managed identity
-		t.Skip("test requires valid Azure managed identity")
-		roleIdentifier = "00000000-0000-0000-0000-000000000000"
-	default:
-		t.Skip("test requires known provider type")
+	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")
+	if roleIdentifier == "" {
+		t.Skipf("%s needs S2IAM_TEST_ASSUME_ROLE to be set")
 	}
-
 	flags := &fakeServerFlags{}
 	fakeServer := startFakeServer(t, flags)
 
