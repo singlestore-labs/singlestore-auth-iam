@@ -47,7 +47,7 @@ jobs:
     - name: Run tests with coverage and verification
       run: |
         ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
-	  set -ex
+          set -ex
           cd tests/${{ env.UNIQUE_DIR }}/go
           
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
