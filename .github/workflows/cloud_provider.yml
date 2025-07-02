@@ -1,0 +1,124 @@
+name: Cloud Provider Tests
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    environment: cloud-VMs
+
+    strategy:
+      matrix:
+        # Aside from general setup of dot files and such, which
+        # a personal preference, the following should be done. 
+        # Assuming ubuntu.
+        #
+        # sudo apt update
+        # sudo snap install go --classic
+        #
+        # AWS:
+        # sudo snap install aws-cli --classic
+        #
+        # Azure:
+        # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        # az vm identity assign --name $identity --resource-group $resource_group
+        #
+        include:
+          - name: aws-positive
+            hostname: ec2-18-206-180-126.compute-1.amazonaws.com
+            secret: AWS_POSITIVE_KEY
+            env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
+            username: ubuntu
+    
+    env:
+      TEST_USERNAME: ${{ matrix.username }}
+      TEST_HOSTNAME: ${{ matrix.hostname }}
+      SSH_KEY_SECRET: ${{ matrix.secret }}
+      UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.name }}
+      EXTRA_ENV: ${{ matrix.env_vars }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
+        chmod 600 ~/.ssh/key
+        ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
+    
+    - name: Copy repository to remote system
+      run: |
+        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/key -o StrictHostKeyChecking=no" \
+          ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
+    
+    - name: Run tests with coverage and verification
+      run: |
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+          set -ex
+          cd tests/${{ env.UNIQUE_DIR }}/go
+          
+          env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
+          
+          env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
+          
+          ls -la coverage.out
+        EOF
+    
+    - name: Verify test results
+      run: |
+        echo "Checking for TestWithDebugging..."
+        grep --silent -- "--- PASS: TestWithDebugging" test_output.log
+        echo "Checking for PASS..."
+        grep --silent -- "^PASS" test_output.log
+        echo "Showing ok lines..."
+        grep "^ok" test_output.log
+        echo "Checking cmd pattern..."
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd	" test_output.log
+        echo "Checking s2iam pattern..."
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam	" test_output.log
+        echo "Checking s2iam_test_server pattern..."
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server	" test_output.log
+        echo "Checking s2iam package pattern..."
+        grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/s2iam	" test_output.log
+        echo "All tests passed successfully!"
+    
+    - name: Download coverage file
+      run: |
+        # Verify coverage file exists on remote
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} \
+          "ls -la tests/${{ env.UNIQUE_DIR }}/go/coverage.out"
+        
+        # Download coverage file from remote
+        scp -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
+          
+        # Verify local coverage file
+        echo "Local coverage file: $(ls -la coverage.out)"
+        
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5.4.3
+      with:
+        fail_ci_if_error: true
+        name: ${{ matrix.name }}-coverage
+        file: ./coverage.out
+        flags: ${{ matrix.name }}
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Clean up remote directory
+      if: always()
+      run: |
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
+
+    - name: Cleanup SSH key
+      if: always()
+      run: |
+        rm -f ~/.ssh/key

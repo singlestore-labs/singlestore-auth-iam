@@ -32,11 +32,16 @@ var privateKey, publicKey = func() (*rsa.PrivateKey, *rsa.PublicKey) {
 }()
 
 // Helper function to detect cloud provider and skip test if none found
+// If S2IAM_TEST_ASSUME_ROLE is set, fail instead of skip (test environment should be configured)
 func requireCloudProvider(t *testing.T) s2iam.CloudProviderClient {
 	client, err := s2iam.DetectProvider(context.Background(),
 		s2iam.WithLogger(t),
 		s2iam.WithTimeout(time.Second*5))
 	if err != nil {
+		// Check if we're in a test environment that should have cloud provider access
+		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+			require.NoError(t, err, "cloud provider expected")
+		}
 		t.Skipf("test requires a cloud provider: %+v", err)
 	}
 	return client
@@ -314,41 +319,105 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 
 // Test with AssumeRole
 func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
-	client := requireCloudProvider(t)
-
-	// The role identifier format depends on the provider
-	var roleIdentifier string
-	switch client.GetType() {
-	case s2iam.ProviderAWS:
-		// Skip this test on AWS as it requires a valid role ARN
-		t.Skip("test requires valid AWS role ARN")
-		roleIdentifier = "arn:aws:iam::123456789012:role/TestRole"
-	case s2iam.ProviderGCP:
-		// Skip on GCP as it requires valid service account
-		t.Skip("test requires valid GCP service account")
-		roleIdentifier = "test-service-account@project.iam.gserviceaccount.com"
-	case s2iam.ProviderAzure:
-		// Skip on Azure as it requires valid managed identity
-		t.Skip("test requires valid Azure managed identity")
-		roleIdentifier = "00000000-0000-0000-0000-000000000000"
-	default:
-		t.Skip("test requires known provider type")
+	// Check for the required environment variable
+	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")
+	if roleIdentifier == "" {
+		t.Skip("test requires S2IAM_TEST_ASSUME_ROLE environment variable to be set")
 	}
+
+	_ = requireCloudProvider(t)
+
+	// First, get the original identity without role assumption
+	flags := &fakeServerFlags{}
+	fakeServer := startFakeServer(t, flags)
+
+	ctx := context.Background()
+	originalJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+	require.NoError(t, err)
+	originalClaims := validateJWT(t, originalJWT)
+	originalIdentifier := originalClaims["sub"].(string)
+
+	// Reset flags for the role assumption test
+	flags.requestCount = 0
+	flags.lastIdentifier = ""
+
+	// Now test with role assumption
+	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+		s2iam.WithAssumeRole(roleIdentifier))
+
+	// Since S2IAM_TEST_ASSUME_ROLE is set, role assumption MUST succeed
+	// If it fails, that's a test failure - the environment is misconfigured
+	require.NoError(t, err, "AssumeRole must succeed when S2IAM_TEST_ASSUME_ROLE is set. "+
+		"Error: %v. This indicates the test environment is not properly configured for role assumption.", err)
+	require.NotEmpty(t, assumedJWT)
+
+	// Verify the JWT and check that the identity changed (if role assumption succeeded)
+	assumedClaims := validateJWT(t, assumedJWT)
+	assumedIdentifier := assumedClaims["sub"].(string)
+
+	// The identifier should have changed to reflect the assumed role
+	require.NotEqual(t, originalIdentifier, assumedIdentifier,
+		"Identity should change when assuming a role (original: %s, assumed: %s)",
+		originalIdentifier, assumedIdentifier)
+
+	// Extract the role name from the role identifier for comparison
+	// For AWS: arn:aws:iam::account:role/RoleName -> RoleName
+	// For other providers, we'll just use the full identifier
+	var expectedRoleName string
+	if strings.Contains(roleIdentifier, "arn:aws:iam:") && strings.Contains(roleIdentifier, ":role/") {
+		parts := strings.Split(roleIdentifier, ":role/")
+		if len(parts) == 2 {
+			expectedRoleName = parts[1]
+		} else {
+			expectedRoleName = roleIdentifier
+		}
+	} else {
+		expectedRoleName = roleIdentifier
+	}
+
+	// The assumed identifier should contain the role name
+	// For AWS, the assumed role format is: arn:aws:sts::account:assumed-role/RoleName/SessionName
+	assert.Contains(t, assumedIdentifier, expectedRoleName,
+		"Assumed identity should contain the role name (expected: %s, got: %s)",
+		expectedRoleName, assumedIdentifier)
+
+	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
+}
+
+// Test AssumeRole with invalid role (should fail)
+func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
+	client := requireCloudProvider(t)
 
 	flags := &fakeServerFlags{}
 	fakeServer := startFakeServer(t, flags)
 
 	ctx := context.Background()
-	jwt, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
-		s2iam.WithAssumeRole(roleIdentifier))
-	// This may fail if the role doesn't exist, but we're testing the flow
-	if err != nil {
-		t.Logf("AssumeRole test failed (expected if role doesn't exist): %v", err)
-		return
+
+	// Generate a properly shaped but non-existent role based on the detected provider
+	var invalidRole string
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+
+	switch client.GetType() {
+	case s2iam.ProviderAWS:
+		invalidRole = fmt.Sprintf("arn:aws:iam::123456789012:role/NonExistentRole-%s", timestamp)
+	case s2iam.ProviderGCP:
+		invalidRole = fmt.Sprintf("projects/fake-project/serviceAccounts/nonexistent-sa-%s@fake-project.iam.gserviceaccount.com", timestamp)
+	case s2iam.ProviderAzure:
+		invalidRole = fmt.Sprintf("/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/fake-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/nonexistent-identity-%s", timestamp)
+	default:
+		t.Skipf("test does not support provider type: %s", client.GetType())
 	}
 
-	require.NotEmpty(t, jwt)
+	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+		s2iam.WithAssumeRole(invalidRole))
+
+	// This should fail since the role doesn't exist
+	require.Error(t, err, "AssumeRole should fail with invalid role")
+	t.Logf("AssumeRole correctly failed with invalid role (%s format): %s: %v",
+		client.GetType(), invalidRole, err)
 }
 
 // Test provider detection
@@ -357,6 +426,10 @@ func TestDetectProvider(t *testing.T) {
 	client, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// No cloud provider detected - this is expected in some environments
+		// unless S2IAM_TEST_ASSUME_ROLE is set
+		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+			require.NoError(t, err, "cloud provider expected")
+		}
 		assert.Contains(t, err.Error(), "no cloud provider detected")
 		return
 	}
@@ -389,6 +462,9 @@ func TestDetectProvider_SpecificClients(t *testing.T) {
 	detectedClient, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// No provider detected, can't test exclusion
+		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+			require.NoError(t, err, "cloud provider expected")
+		}
 		t.Skip("test requires a cloud provider to exclude")
 	}
 
