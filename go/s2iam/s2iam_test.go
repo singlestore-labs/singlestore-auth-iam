@@ -341,10 +341,14 @@ func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
 	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
 		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 		s2iam.WithAssumeRole(roleIdentifier))
-	require.NoError(t, err, "AssumeRole should succeed with valid role")
+
+	// Since S2IAM_TEST_ASSUME_ROLE is set, role assumption MUST succeed
+	// If it fails, that's a test failure - the environment is misconfigured
+	require.NoError(t, err, "AssumeRole must succeed when S2IAM_TEST_ASSUME_ROLE is set. "+
+		"Error: %v. This indicates the test environment is not properly configured for role assumption.", err)
 	require.NotEmpty(t, assumedJWT)
 
-	// Verify the JWT and check that the identity changed
+	// Verify the JWT and check that the identity changed (if role assumption succeeded)
 	assumedClaims := validateJWT(t, assumedJWT)
 	assumedIdentifier := assumedClaims["sub"].(string)
 
@@ -353,9 +357,26 @@ func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
 		"Identity should change when assuming a role (original: %s, assumed: %s)",
 		originalIdentifier, assumedIdentifier)
 
-	// The assumed identifier should contain or match the role identifier
-	assert.Contains(t, assumedIdentifier, roleIdentifier,
-		"Assumed identity should contain the role identifier")
+	// Extract the role name from the role identifier for comparison
+	// For AWS: arn:aws:iam::account:role/RoleName -> RoleName
+	// For other providers, we'll just use the full identifier
+	var expectedRoleName string
+	if strings.Contains(roleIdentifier, "arn:aws:iam:") && strings.Contains(roleIdentifier, ":role/") {
+		parts := strings.Split(roleIdentifier, ":role/")
+		if len(parts) == 2 {
+			expectedRoleName = parts[1]
+		} else {
+			expectedRoleName = roleIdentifier
+		}
+	} else {
+		expectedRoleName = roleIdentifier
+	}
+
+	// The assumed identifier should contain the role name
+	// For AWS, the assumed role format is: arn:aws:sts::account:assumed-role/RoleName/SessionName
+	assert.Contains(t, assumedIdentifier, expectedRoleName,
+		"Assumed identity should contain the role name (expected: %s, got: %s)",
+		expectedRoleName, assumedIdentifier)
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
 }
