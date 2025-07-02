@@ -103,14 +103,16 @@ jobs:
         echo "Local coverage file: $(ls -la coverage.out)"
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5.4.3
       with:
-        file: ./coverage.out
+        verbose: true
+        fail_ci_if_error: true
         name: ${{ matrix.name }}-coverage
+        file: ./coverage.out
         flags: ${{ matrix.name }}
-        fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
-    
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
     - name: Clean up remote directory
       if: always()
       run: |
