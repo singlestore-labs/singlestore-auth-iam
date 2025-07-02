@@ -17,7 +17,7 @@ The `singlestore-auth-iam` library discovers the IAM role from a cloud provider 
 makes a request that allows the SingleStore auth server to verify the IAM role. In return, the SingleStore
 auth server provides a JWT that can be used for:
 
-- Access to a (SingleStore Helios)[https://www.singlestore.com/product-overview/] database
+- Access to a [SingleStore Helios](https://www.singlestore.com/product-overview/) database
 - Making call to the [Management API](https://docs.singlestore.com/cloud/user-and-workspace-administration/management-api/)
 
 ## Features
