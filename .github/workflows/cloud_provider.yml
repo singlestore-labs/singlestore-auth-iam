@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        # Asside from general setup of dot files and such, which
+        # Aside from general setup of dot files and such, which
         # a personal preference, the following should be done. 
         # Assuming ubuntu.
         #
