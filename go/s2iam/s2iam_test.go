@@ -426,6 +426,10 @@ func TestDetectProvider(t *testing.T) {
 	client, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// No cloud provider detected - this is expected in some environments
+		// unless S2IAM_TEST_ASSUME_ROLE is set
+		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+			require.NoError(t, err, "cloud provider expected")
+		}
 		assert.Contains(t, err.Error(), "no cloud provider detected")
 		return
 	}
