@@ -206,7 +206,8 @@ s2iam --verbose --workspace-group-id=my-workspace
 
 ## Cloud Provider Detection
 
-The library automatically detects the cloud provider by checking environment variables:
+The library automatically detects the cloud provider by checking environment variables and by
+reaching out to cloud metadata services.
 
 - AWS: Checks for `AWS_EXECUTION_ENV`
 - GCP: Checks for `GCE_METADATA_HOST`
