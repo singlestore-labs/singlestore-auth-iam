@@ -24,7 +24,7 @@ jobs:
         #
         # Azure:
         # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        # az vm identity assign --name $identity --resource-group $rource_group
+        # az vm identity assign --name $identity --resource-group $resource_group
         #
         include:
           - name: aws-positive
