@@ -31,9 +31,10 @@ jobs:
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
             secret: AWS_POSITIVE_KEY
             env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
+            username: ubuntu
     
     env:
-      TEST_USERNAME: ubuntu
+      TEST_USERNAME: ${{ matrix.username }}
       TEST_HOSTNAME: ${{ matrix.hostname }}
       SSH_KEY_SECRET: ${{ matrix.secret }}
       UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.name }}
@@ -105,7 +106,6 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
       with:
-        verbose: true
         fail_ci_if_error: true
         name: ${{ matrix.name }}-coverage
         file: ./coverage.out
