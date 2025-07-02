@@ -21,8 +21,6 @@ jobs:
       TEST_USERNAME: ubuntu
       TEST_HOSTNAME: ${{ matrix.hostname }}
       SSH_KEY_SECRET: ${{ matrix.secret }}
-      SSH_KEY_NAME: key
-      #SSH_KEY_NAME: ${{ matrix.name }}-test-key.pem
       UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.name }}
       EXTRA_ENV: ${{ matrix.env_vars }}
     
@@ -33,21 +31,20 @@ jobs:
     - name: Setup SSH key
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/${{ env.SSH_KEY_NAME }}
-        # sed -i 's/\\n/\n/g' ~/.ssh/${{ env.SSH_KEY_NAME }}
-        chmod 600 ~/.ssh/${{ env.SSH_KEY_NAME }}
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
+        chmod 600 ~/.ssh/key
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
     
     - name: Copy repository to remote system
       run: |
-        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no" \
+        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/key -o StrictHostKeyChecking=no" \
           ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
     
     - name: Run tests with coverage and verification
       run: |
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
           set -ex
           cd tests/${{ env.UNIQUE_DIR }}/go
           
@@ -79,12 +76,12 @@ jobs:
     - name: Download coverage file
       run: |
         # Verify coverage file exists on remote
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no \
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} \
           "ls -la tests/${{ env.UNIQUE_DIR }}/go/coverage.out"
         
         # Download coverage file from remote
-        scp -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no \
+        scp -i ~/.ssh/key -o StrictHostKeyChecking=no \
           ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
           
         # Verify local coverage file
@@ -102,9 +99,9 @@ jobs:
     - name: Clean up remote directory
       if: always()
       run: |
-        ssh -i ~/.ssh/${{ env.SSH_KEY_NAME }} -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "rm -rf tests/${{ env.UNIQUE_DIR }}"
 
     - name: Cleanup SSH key
       if: always()
       run: |
-        rm -f ~/.ssh/${{ env.SSH_KEY_NAME }}
+        rm -f ~/.ssh/key
