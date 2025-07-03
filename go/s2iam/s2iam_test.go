@@ -33,14 +33,14 @@ var privateKey, publicKey = func() (*rsa.PrivateKey, *rsa.PublicKey) {
 }()
 
 // Helper function to detect cloud provider and skip test if none found
-// If S2IAM_TEST_ASSUME_ROLE is set, fail instead of skip (test environment should be configured)
+// If S2IAM_TEST_CLOUD_PROVIDER or S2IAM_TEST_ASSUME_ROLE is set, fail instead of skip (test environment should be configured)
 func requireCloudProvider(t *testing.T) s2iam.CloudProviderClient {
 	client, err := s2iam.DetectProvider(context.Background(),
 		s2iam.WithLogger(t),
 		s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// Check if we're in a test environment that should have cloud provider access
-		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+		if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
 			require.NoError(t, err, "cloud provider expected")
 		}
 		t.Skipf("test requires a cloud provider: %+v", err)
@@ -420,7 +420,7 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 
 	// For Azure, we expect the specific "AssumeRole not supported" error
 	if client.GetType() == s2iam.ProviderAzure {
-		assert.True(t, errors.Is(err, ErrAssumeRoleNotSupported),
+		assert.True(t, errors.Is(err, s2iam.ErrAssumeRoleNotSupported),
 			"Azure should return ErrAssumeRoleNotSupported, got: %+v", err)
 	}
 
@@ -434,11 +434,12 @@ func TestDetectProvider(t *testing.T) {
 	client, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// No cloud provider detected - this is expected in some environments
-		// unless S2IAM_TEST_ASSUME_ROLE is set
-		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+		// unless S2IAM_TEST_CLOUD_PROVIDER or S2IAM_TEST_ASSUME_ROLE is set
+		if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
 			require.NoError(t, err, "cloud provider expected")
 		}
-		assert.Contains(t, err.Error(), "no cloud provider detected")
+		assert.Truef(t, errors.Is(err, s2iam.ErrNoCloudProviderDetected),
+			"expected ErrNoCloudProviderDetected, actual error: %+v", err)
 		return
 	}
 
@@ -470,7 +471,7 @@ func TestDetectProvider_SpecificClients(t *testing.T) {
 	detectedClient, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
 		// No provider detected, can't test exclusion
-		if os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+		if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
 			require.NoError(t, err, "cloud provider expected")
 		}
 		t.Skip("test requires a cloud provider to exclude")
