@@ -36,6 +36,11 @@ jobs:
             secret: AWS_POSITIVE_KEY
             env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
             username: ubuntu
+          - name: azure-positive
+            hostname: 52.186.98.155
+            secret: AZURE_POSITIVE_KEY
+            env_vars: ""
+            username: azureuser
     
     env:
       TEST_USERNAME: ${{ matrix.username }}
