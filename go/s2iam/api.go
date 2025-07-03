@@ -199,7 +199,8 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 		errorsMu.Lock()
 		defer errorsMu.Unlock()
 		allErrors = append(allErrors, ctx.Err())
-		return nil, errors.WithStack(errors.Join(allErrors...))
+		joinedErrors := errors.Join(allErrors...)
+		return nil, ErrNoCloudProviderDetected.Errorf("no cloud provider detected: %w", joinedErrors)
 	}
 }
 
