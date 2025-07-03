@@ -64,7 +64,7 @@ jobs:
         chmod 600 ~/.ssh/key
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
         ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "mkdir -p tests && echo 'SSH connection successful'"
     
     - name: Copy repository to remote system
       run: |
