@@ -30,12 +30,21 @@ jobs:
         # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
         # az vm identity assign --name $identity --resource-group $resource_group
         #
+        # Environment Variables:
+        # S2IAM_TEST_ASSUME_ROLE - Set to a role ARN/identifier to test role assumption (AWS/GCP only)
+        # S2IAM_TEST_CLOUD_PROVIDER - Set to indicate cloud tests should run (for providers without role assumption like Azure)
+        #
         include:
           - name: aws-positive
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
             secret: AWS_POSITIVE_KEY
             env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
             username: ubuntu
+          - name: azure-positive
+            hostname: 52.186.98.155
+            secret: AZURE_POSITIVE_KEY
+            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
+            username: azureuser
     
     env:
       TEST_USERNAME: ${{ matrix.username }}
@@ -55,7 +64,7 @@ jobs:
         chmod 600 ~/.ssh/key
         ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
         ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "mkdir -p tests && echo 'SSH connection successful'"
     
     - name: Copy repository to remote system
       run: |

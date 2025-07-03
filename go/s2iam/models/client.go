@@ -88,4 +88,7 @@ var (
 
 	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
 	ErrProviderDetectedNoIdentity errors.String = "cloud provider detected but no identity available"
+
+	// ErrAssumeRoleNotSupported is returned when AssumeRole is called on a provider that doesn't support it
+	ErrAssumeRoleNotSupported errors.String = "assume role not supported by this cloud provider"
 )
