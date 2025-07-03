@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -414,8 +415,15 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 		s2iam.WithAssumeRole(invalidRole))
 
-	// This should fail since the role doesn't exist
+	// This should fail since the role doesn't exist (or AssumeRole isn't supported)
 	require.Error(t, err, "AssumeRole should fail with invalid role")
+
+	// For Azure, we expect the specific "AssumeRole not supported" error
+	if client.GetType() == s2iam.ProviderAzure {
+		assert.True(t, errors.Is(err, ErrAssumeRoleNotSupported),
+			"Azure should return ErrAssumeRoleNotSupported, got: %+v", err)
+	}
+
 	t.Logf("AssumeRole correctly failed with invalid role (%s format): %s: %v",
 		client.GetType(), invalidRole, err)
 }

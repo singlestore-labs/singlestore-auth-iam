@@ -48,6 +48,9 @@ var (
 
 	// ErrProviderDetectedNoIdentity is returned when a provider is detected but no identity is available
 	ErrProviderDetectedNoIdentity = models.ErrProviderDetectedNoIdentity
+
+	// ErrAssumeRoleNotSupported is returned when AssumeRole is called on a provider that doesn't support it
+	ErrAssumeRoleNotSupported = models.ErrAssumeRoleNotSupported
 )
 
 type JWTType = models.JWTType
