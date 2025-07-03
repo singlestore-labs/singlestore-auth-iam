@@ -30,6 +30,10 @@ jobs:
         # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
         # az vm identity assign --name $identity --resource-group $resource_group
         #
+        # Environment Variables:
+        # S2IAM_TEST_ASSUME_ROLE - Set to a role ARN/identifier to test role assumption (AWS/GCP only)
+        # S2IAM_TEST_CLOUD_PROVIDER - Set to indicate cloud tests should run (for providers without role assumption like Azure)
+        #
         include:
           - name: aws-positive
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
@@ -39,7 +43,7 @@ jobs:
           - name: azure-positive
             hostname: 52.186.98.155
             secret: AZURE_POSITIVE_KEY
-            env_vars: ""
+            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
             username: azureuser
     
     env:
