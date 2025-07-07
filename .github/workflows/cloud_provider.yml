@@ -45,6 +45,11 @@ jobs:
             secret: AZURE_POSITIVE_KEY
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
             username: azureuser
+          - name: gcp-positive
+            hostname: 34.86.239.47
+            secret: GCP_POSITIVE_KEY
+            env_vars: "S2IAM_TEST_ASSUME_ROLE=nopermissionsrole@gcp-virginia-hd1.iam.gserviceaccount.com"
+            username: dsharnoff
     
     env:
       TEST_USERNAME: ${{ matrix.username }}
