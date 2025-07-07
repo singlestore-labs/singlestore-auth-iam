@@ -30,6 +30,9 @@ jobs:
         # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
         # az vm identity assign --name $identity --resource-group $resource_group
         #
+        # GCP:
+        # sudo apt install rsync
+        #
         # Environment Variables:
         # S2IAM_TEST_ASSUME_ROLE - Set to a role ARN/identifier to test role assumption (AWS/GCP only)
         # S2IAM_TEST_CLOUD_PROVIDER - Set to indicate cloud tests should run (for providers without role assumption like Azure)
