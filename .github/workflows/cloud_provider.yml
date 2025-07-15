@@ -47,7 +47,7 @@ jobs:
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
           - name: gcp-positive
             username: dsharnoff
-            hostname: 34.86.239.47
+            hostname: 34.145.164.5
             secret: GCP_POSITIVE_KEY
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=gcp"
             # assume role permissions are not yet working
