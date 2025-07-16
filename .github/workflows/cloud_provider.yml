@@ -88,7 +88,7 @@ jobs:
           
           echo "mode: atomic" > coverage.out
           for d in $(go list ./...); do \
-            env ${{ env.EXTRA_ENV }} go test -covermode=atomic -coverprofile=profile.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/... $$d; \
+            env ${{ env.EXTRA_ENV }} go test -covermode=atomic -coverprofile=profile.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/... $d; \
             if [ -f profile.out ]; then \
               grep -v ^mode profile.out >> coverage.out; \
               rm profile.out; \
