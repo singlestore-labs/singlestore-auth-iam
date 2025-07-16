@@ -4,8 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    #branches: [ "**" ]
-    branches: [ "foobar" ]
+    branches: [ "**" ]
 
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
@@ -29,7 +28,9 @@ jobs:
         run: cd go && go test ./... -race -coverprofile=coverage.out -covermode=atomic
 
       - name: Display coverage
-        run: cd go && head coverage.out 
+        run: |
+          grep azure go/coverage.out || echo no azure in coverage
+          head -2 go/coverage.out
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5.4.3

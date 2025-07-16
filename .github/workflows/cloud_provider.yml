@@ -126,7 +126,8 @@ jobs:
     - name: Display coverage
       run: |
         echo "Original coverage file paths:"
-        head coverage.out
+        grep azure coverage.out || echo no azure in coverage
+        head -2 coverage.out
     
         # Transform module paths to repository-relative paths
         #sed -i 's|github\.com/singlestore-labs/singlestore-auth-iam/||g' coverage.out
