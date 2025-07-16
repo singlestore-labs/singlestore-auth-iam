@@ -86,7 +86,14 @@ jobs:
           
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
           
-          env ${{ env.EXTRA_ENV }} go test --failfast -coverprofile=coverage.out -covermode=atomic ./...
+          echo "mode: atomic" > coverage.out
+          for d in $(go list ./...); do \
+            env ${{ env.EXTRA_ENV }} go test -covermode=atomic -coverprofile=profile.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/... $$d; \
+            if [ -f profile.out ]; then \
+              grep -v ^mode profile.out >> coverage.out; \
+              rm profile.out; \
+            fi; \
+          done
           
           ls -la coverage.out
         EOF
