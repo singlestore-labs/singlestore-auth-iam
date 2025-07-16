@@ -126,7 +126,7 @@ jobs:
     - name: Display coverage
       run: |
         echo "Original coverage file paths:"
-        grep azure coverage.out || echo no azure in coverage
+        (grep azure coverage.out | head) || echo no azure in coverage
         head -2 coverage.out
     
         # Transform module paths to repository-relative paths
