@@ -1,6 +1,11 @@
 name: Go Base Coverage
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    #branches: [ "**" ]
+    branches: [ "foobar" ]
 
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
