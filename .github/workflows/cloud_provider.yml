@@ -123,20 +123,20 @@ jobs:
         # Verify local coverage file
         echo "Local coverage file: $(ls -la coverage.out)"
 
-    - name: Fix coverage file paths
+    - name: Display coverage
       run: |
         echo "Original coverage file paths:"
-        head -5 coverage.out
+        head coverage.out
     
         # Transform module paths to repository-relative paths
-        sed -i 's|github\.com/singlestore-labs/singlestore-auth-iam/||g' coverage.out
-    
-        echo "Fixed coverage file paths:"
-        head -5 coverage.out
-    
+        #sed -i 's|github\.com/singlestore-labs/singlestore-auth-iam/||g' coverage.out
+        #
+        #echo "Fixed coverage file paths:"
+        #head -5 coverage.out
+        #
         # Verify Azure files are present
-        echo "Azure-related coverage lines:"
-        grep "go/s2iam/azure" coverage.out | head -3 || echo "No Azure coverage found"
+        #echo "Azure-related coverage lines:"
+        #grep "go/s2iam/azure" coverage.out | head -3 || echo "No Azure coverage found"
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
