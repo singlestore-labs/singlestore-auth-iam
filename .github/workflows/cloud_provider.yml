@@ -86,7 +86,7 @@ jobs:
           
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
           
-          env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
+          env ${{ env.EXTRA_ENV }} go test --failfast -coverprofile=coverage.out -covermode=atomic ./...
           
           ls -la coverage.out
         EOF
