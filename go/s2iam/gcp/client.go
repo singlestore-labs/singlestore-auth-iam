@@ -163,10 +163,30 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	// If serviceAccountEmail is provided, get token through impersonation
 	if serviceAccountEmail != "" {
-		// First get our own identity token for authentication
-		selfToken, err := c.getIDToken(ctx, "https://iamcredentials.googleapis.com/")
+		if c.logger != nil {
+			c.logger.Logf("GCP Impersonation - Starting impersonation for service account: %s", serviceAccountEmail)
+		}
+
+		// IMPORTANT: To authenticate with the IAM Service Account Credentials API,
+		// we need an OAuth 2.0 access token, NOT an identity token.
+		// Identity tokens are meant for authenticating the identity of the caller,
+		// while access tokens are used for API authorization.
+		// The IAM API expects an access token with the cloud-platform scope.
+		selfToken, err := c.getAccessToken(ctx)
 		if err != nil {
+			if c.logger != nil {
+				c.logger.Logf("GCP Impersonation - Failed to get access token: %v", err)
+			}
 			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
+		}
+
+		if c.logger != nil {
+			// Log token length and first few characters for debugging (not the whole token for security)
+			tokenPreview := "empty"
+			if len(selfToken) > 10 {
+				tokenPreview = fmt.Sprintf("%d chars, starts with: %s...", len(selfToken), selfToken[:10])
+			}
+			c.logger.Logf("GCP Impersonation - Got access token for IAM API: %s", tokenPreview)
 		}
 
 		// Use IAM API to impersonate the service account
@@ -174,6 +194,11 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateIdToken",
 			serviceAccountEmail,
 		)
+
+		if c.logger != nil {
+			c.logger.Logf("GCP Impersonation - Calling impersonation URL: %s", impersonationURL)
+			c.logger.Logf("GCP Impersonation - Request audience: %s", audience)
+		}
 
 		requestBody := fmt.Sprintf(`{"audience":"%s"}`, audience)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(requestBody))
@@ -185,9 +210,16 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		req.Header.Set("Authorization", "Bearer "+selfToken)
 		req.Header.Set("Content-Type", "application/json")
 
+		if c.logger != nil {
+			c.logger.Logf("GCP Impersonation - Sending request with Authorization header set")
+		}
+
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
+			if c.logger != nil {
+				c.logger.Logf("GCP Impersonation - HTTP request failed: %v", err)
+			}
 			return nil, nil, errors.Errorf("failed to impersonate service account: %w", err)
 		}
 		defer func() {
@@ -196,7 +228,27 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
+			if c.logger != nil {
+				c.logger.Logf("GCP Impersonation - Request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+				// Also log the request details for debugging
+				c.logger.Logf("GCP Impersonation - Failed request details - URL: %s, Method: %s, Content-Type: %s",
+					impersonationURL, req.Method, req.Header.Get("Content-Type"))
+
+				// Add helpful error messages for common issues
+				if resp.StatusCode == 401 {
+					c.logger.Logf("GCP Impersonation - 401 Unauthorized suggests the access token is invalid or lacks proper scopes")
+				} else if resp.StatusCode == 403 {
+					c.logger.Logf("GCP Impersonation - 403 Forbidden suggests either:")
+					c.logger.Logf("  1. The service account lacks 'Service Account Token Creator' role on the target service account")
+					c.logger.Logf("  2. The GCP instance was not created with the necessary scopes (cloud-platform or iam)")
+					c.logger.Logf("  3. The instance needs to be recreated with: --scopes=https://www.googleapis.com/auth/cloud-platform")
+				}
+			}
 			return nil, nil, errors.Errorf("impersonation failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		if c.logger != nil {
+			c.logger.Logf("GCP Impersonation - Successfully received response")
 		}
 
 		var tokenResponse struct {
@@ -246,6 +298,11 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 // getIDToken retrieves a GCP identity token for the given audience
 func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, error) {
 	tokenURL := fmt.Sprintf("%sinstance/service-accounts/default/identity?audience=%s", gcpMetadataURL, audience)
+
+	if c.logger != nil {
+		c.logger.Logf("GCP Token - Requesting token from metadata service: %s", tokenURL)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
 		return "", errors.Errorf("failed to create token request: %w", err)
@@ -255,6 +312,9 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Token - Metadata service request failed: %v", err)
+		}
 		return "", errors.Errorf("failed to contact GCP metadata service: %w", err)
 	}
 	defer func() {
@@ -263,20 +323,117 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Token - Failed to read response body: %v", err)
+		}
 		return "", errors.Errorf("failed to read token response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if c.logger != nil {
+			c.logger.Logf("GCP Token - Metadata service returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		}
 		return "", errors.Errorf("GCP metadata request failed: %s, status: %d, body: %s",
 			tokenURL, resp.StatusCode, string(bodyBytes))
 	}
 
 	token := string(bodyBytes)
 	if token == "" {
+		if c.logger != nil {
+			c.logger.Logf("GCP Token - Received empty token from metadata service")
+		}
 		return "", errors.Errorf("received empty token from GCP metadata service")
 	}
 
+	if c.logger != nil {
+		tokenPreview := "empty"
+		if len(token) > 10 {
+			tokenPreview = fmt.Sprintf("%d chars, starts with: %s...", len(token), token[:10])
+		}
+		c.logger.Logf("GCP Token - Successfully retrieved token: %s", tokenPreview)
+	}
+
 	return token, nil
+}
+
+// getAccessToken retrieves a GCP access token from the metadata service
+// Access tokens are needed for authenticating to GCP APIs like IAM Credentials
+func (c *GCPClient) getAccessToken(ctx context.Context) (string, error) {
+	// Request an access token with the necessary scopes for IAM operations
+	// The IAM Service Account Credentials API requires the following scope:
+	// https://www.googleapis.com/auth/cloud-platform OR https://www.googleapis.com/auth/iam
+	// Adding both to ensure we have the necessary permissions
+	scopes := "https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/iam"
+	tokenURL := fmt.Sprintf("%sinstance/service-accounts/default/token?scopes=%s", gcpMetadataURL, scopes)
+
+	if c.logger != nil {
+		c.logger.Logf("GCP Access Token - Requesting access token with cloud-platform and iam scopes from metadata service: %s", tokenURL)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+	if err != nil {
+		return "", errors.Errorf("failed to create access token request: %w", err)
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Access Token - Metadata service request failed: %v", err)
+		}
+		return "", errors.Errorf("failed to contact GCP metadata service for access token: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Access Token - Failed to read response body: %v", err)
+		}
+		return "", errors.Errorf("failed to read access token response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		if c.logger != nil {
+			c.logger.Logf("GCP Access Token - Metadata service returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+		return "", errors.Errorf("GCP access token request failed: %s, status: %d, body: %s",
+			tokenURL, resp.StatusCode, string(bodyBytes))
+	}
+
+	// Parse the JSON response to extract the access token
+	var tokenResponse struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+		TokenType   string `json:"token_type"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &tokenResponse); err != nil {
+		if c.logger != nil {
+			c.logger.Logf("GCP Access Token - Failed to parse JSON response: %v", err)
+		}
+		return "", errors.Errorf("failed to parse access token response: %w", err)
+	}
+
+	if tokenResponse.AccessToken == "" {
+		if c.logger != nil {
+			c.logger.Logf("GCP Access Token - Received empty access token from metadata service")
+		}
+		return "", errors.Errorf("received empty access token from GCP metadata service")
+	}
+
+	if c.logger != nil {
+		tokenPreview := "empty"
+		if len(tokenResponse.AccessToken) > 10 {
+			tokenPreview = fmt.Sprintf("%d chars, starts with: %s...", len(tokenResponse.AccessToken), tokenResponse.AccessToken[:10])
+		}
+		c.logger.Logf("GCP Access Token - Successfully retrieved access token: %s (expires in %d seconds)", tokenPreview, tokenResponse.ExpiresIn)
+	}
+
+	return tokenResponse.AccessToken, nil
 }
 
 // getIdentityFromToken parses the token to extract identity information
