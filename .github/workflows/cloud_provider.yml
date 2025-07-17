@@ -86,8 +86,8 @@ jobs:
           
           env ${{ env.EXTRA_ENV }} go test -v --failfast ./... 
           
-          env ${{ env.EXTRA_ENV }} go test -v --failfast -coverprofile=coverage.out -covermode=atomic ./... > /dev/null
-          
+          env ${{ env.EXTRA_ENV }} go test -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/... ./...
+
           ls -la coverage.out
         EOF
     
@@ -122,7 +122,13 @@ jobs:
           
         # Verify local coverage file
         echo "Local coverage file: $(ls -la coverage.out)"
-        
+
+    - name: Display coverage
+      run: |
+        echo "Original coverage file paths:"
+        (grep azure coverage.out | head) || echo no azure in coverage
+        head -2 coverage.out
+    
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
       with:
