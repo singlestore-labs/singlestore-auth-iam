@@ -2,9 +2,9 @@
 
 This repository contains tools for the SingleStore IAM authentication system.
 
-[![GoDoc](https://godoc.org/github.com/singlestore-labs/singlestore-auth-iam?status.svg)](https://pkg.go.dev/github.com/singlestore-labs/singlestore-auth-iam)
+[![GoDoc](https://godoc.org/github.com/singlestore-labs/singlestore-auth-iam/go/s2iam?status.svg)](https://pkg.go.dev/github.com/singlestore-labs/singlestore-auth-iam/go/s2iam)
 ![Go unit tests](https://github.com/singlestore-labs/singlestore-auth-iam/actions/workflows/go.yml/badge.svg)
-[![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam)
+[![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam/go)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam/go)
 [![codecov](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam/branch/main/graph/badge.svg)](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam)
 
 ## Current status
