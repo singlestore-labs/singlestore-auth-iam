@@ -102,6 +102,14 @@ class AWSClient(CloudProviderClient):
         if await self._check_metadata_service():
             self._log("AWS detection successful via metadata service")
             self._detected = True
+            # Still need to set up STS client for getting identity headers
+            try:
+                await self._ensure_region()
+                session = boto3.Session()
+                self._sts_client = session.client("sts", region_name=self._region)
+                self._log("STS client initialized after metadata service detection")
+            except Exception as e:
+                self._log(f"Warning: Could not initialize STS client after metadata detection: {e}")
             return
         
         # Fallback: Try STS client as last resort

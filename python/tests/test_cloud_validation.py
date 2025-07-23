@@ -15,103 +15,28 @@ import pytest
 
 import s2iam
 from s2iam import CloudProviderType, JWTType
+import sys
+import os
+# Add tests directory to path so we can import test utilities
+sys.path.insert(0, os.path.dirname(__file__))
 
+from test_server_utils import GoTestServerManager
 
-class TestServerManager:
-    """Manages the Go test server for validation tests."""
-    
-    def __init__(self, port: int = 8081):
-        self.port = port
-        self.process: Optional[subprocess.Popen] = None
-        self.server_url = f"http://localhost:{port}"
-        self.go_dir = None
-        self._find_go_directory()
-    
-    def _find_go_directory(self):
-        """Find the Go directory relative to the test file."""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Try different relative paths
-        possible_paths = [
-            os.path.join(current_dir, "../../go"),
-            os.path.join(current_dir, "../../../go"),
-            os.path.join(current_dir, "../../../../go"),
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(os.path.join(path, "go.mod")):
-                self.go_dir = os.path.abspath(path)
-                break
-        
-        if not self.go_dir:
-            raise Exception("Could not find Go directory with go.mod")
-    
-    def start(self) -> None:
-        """Start the Go test server."""
-        if self.process and self.process.poll() is None:
-            return  # Already running
-        
-        # Build the test server
-        build_result = subprocess.run(
-            ["go", "build", "-o", "s2iam_test_server", "./cmd/s2iam_test_server"],
-            cwd=self.go_dir,
-            capture_output=True,
-            text=True
-        )
-        
-        if build_result.returncode != 0:
-            raise Exception(f"Failed to build test server: {build_result.stderr}")
-        
-        # Start the server
-        self.process = subprocess.Popen(
-            ["./s2iam_test_server", "-port", str(self.port)],
-            cwd=self.go_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # Wait for server to start
-        max_wait = 10
-        for _ in range(max_wait):
-            try:
-                import aiohttp
-                async def check_health():
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(f"{self.server_url}/health") as response:
-                            return response.status == 200
-                
-                if asyncio.run(check_health()):
-                    break
-            except:
-                pass
-            time.sleep(1)
-        else:
-            self.stop()
-            raise Exception("Test server failed to start within timeout")
-    
-    def stop(self) -> None:
-        """Stop the Go test server."""
-        if self.process:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-            self.process = None
-        
-        # Clean up binary
-        if self.go_dir:
-            binary_path = os.path.join(self.go_dir, "s2iam_test_server")
-            if os.path.exists(binary_path):
-                os.remove(binary_path)
+import asyncio
+import os
+import subprocess
+import time
+from typing import Optional
 
+import pytest
+
+import s2iam
+from s2iam import CloudProviderType, JWTType
 
 @pytest.fixture(scope="session")
 def test_server():
     """Fixture to manage the Go test server for the entire test session."""
-    server = TestServerManager()
+    server = GoTestServerManager(port=8081)  # Use different port than integration tests
     try:
         server.start()
         yield server
