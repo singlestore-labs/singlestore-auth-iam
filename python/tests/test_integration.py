@@ -1,9 +1,25 @@
 """
-Integration tests for s2iam library using the Go test server.
+Integration tests for s2iam library.
 
-These tests are designed to run in actual cloud provider environments
-and use the Go test server for authentication testing.
+These tests require a real cloud environment and the Go test server.
 """
+
+import asyncio
+import os
+import subprocess
+import time
+from typing import Optional
+
+import pytest
+
+import s2iam
+from s2iam import CloudProviderType, JWTType
+import sys
+import os
+# Add tests directory to path so we can import test utilities
+sys.path.insert(0, os.path.dirname(__file__))
+
+from test_server_utils import GoTestServerManager
 
 import asyncio
 import os
@@ -17,62 +33,10 @@ import s2iam
 from s2iam import CloudProviderType, JWTType
 
 
-class TestServerManager:
-    """Manages the Go test server for integration tests."""
-    
-    def __init__(self, port: int = 8080):
-        self.port = port
-        self.process: Optional[subprocess.Popen] = None
-        self.server_url = f"http://localhost:{port}"
-    
-    def start(self) -> None:
-        """Start the Go test server."""
-        # Build and start the test server
-        go_dir = os.path.join(os.path.dirname(__file__), "../../go")
-        
-        # Build the test server
-        build_result = subprocess.run(
-            ["go", "build", "-o", "s2iam_test_server", "./cmd/s2iam_test_server"],
-            cwd=go_dir,
-            capture_output=True,
-            text=True
-        )
-        
-        if build_result.returncode != 0:
-            raise Exception(f"Failed to build test server: {build_result.stderr}")
-        
-        # Start the server
-        self.process = subprocess.Popen(
-            ["./s2iam_test_server", "-port", str(self.port)],
-            cwd=go_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
-        # Wait for server to start
-        time.sleep(2)
-        
-        if self.process.poll() is not None:
-            stdout, stderr = self.process.communicate()
-            raise Exception(f"Test server failed to start: {stderr}")
-    
-    def stop(self) -> None:
-        """Stop the Go test server."""
-        if self.process:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-            self.process = None
-
-
 @pytest.fixture(scope="session")
 def test_server():
     """Fixture to manage the test server lifecycle."""
-    server = TestServerManager()
+    server = GoTestServerManager()
     server.start()
     yield server
     server.stop()
