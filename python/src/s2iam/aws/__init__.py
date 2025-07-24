@@ -77,27 +77,51 @@ class AWSClient(CloudProviderClient):
             return False
     
     async def detect(self) -> None:
-        """Detect if running on AWS.
-        
-        Detection strategy (matches Go implementation for consistency):
-        1. Fast path: Check AWS environment variables first (AWS_EXECUTION_ENV, AWS_REGION, etc.)
-        2. Metadata service: Try IMDSv2/IMDSv1 metadata service detection
-        3. STS fallback: Only try boto3 STS client as last resort
-        
-        This multi-layered approach ensures reliable detection across different AWS environments
-        (EC2, Lambda, ECS, etc.) while being performant and avoiding unnecessary network calls.
-        """
+        """Detect if running on AWS (matches Go implementation)."""
         self._log("Starting AWS detection")
-        
-        # Fast path: Check common AWS environment variables first (like Go implementation)
-        if (os.environ.get("AWS_EXECUTION_ENV") or 
-            os.environ.get("AWS_REGION") or 
-            os.environ.get("AWS_DEFAULT_REGION") or 
-            os.environ.get("AWS_LAMBDA_FUNCTION_NAME")):
-            self._log("Found AWS environment variables")
+
+        # Fast path: Check all relevant AWS environment variables
+        env_vars = [
+            "AWS_EXECUTION_ENV",
+            "AWS_REGION",
+            "AWS_DEFAULT_REGION",
+            "AWS_LAMBDA_FUNCTION_NAME",
+            "ECS_CONTAINER_METADATA_URI",
+            "ECS_CONTAINER_METADATA_URI_V4",
+        ]
+        for var in env_vars:
+            if os.environ.get(var):
+                self._log(f"Found AWS environment variable: {var}")
+                self._detected = True
+                return
+
+        # Metadata service: Try IMDSv2/IMDSv1
+        if await self._check_metadata_service():
+            self._log("AWS metadata service detected")
+            # Ensure region is set
+            await self._ensure_region()
+            # Initialize STS client with detected region
+            try:
+                session = boto3.Session()
+                self._sts_client = session.client("sts", region_name=self._region)
+                self._log("STS client initialized after metadata service detection")
+            except Exception as e:
+                self._log(f"Warning: Could not initialize STS client after metadata detection: {e}")
             self._detected = True
             return
-        
+
+        # STS fallback: Try boto3 STS client
+        try:
+            self._sts_client = boto3.client("sts")
+            identity = self._sts_client.get_caller_identity()
+            if identity and identity.get("Account"):
+                self._log("AWS STS client detected")
+                self._detected = True
+                return
+        except Exception as e:
+            self._log(f"AWS STS client detection failed: {e}")
+
+        raise Exception("Not running on AWS: no environment variable, metadata service, or STS client detected")
         # Try AWS metadata service (IMDSv2)
         if await self._check_metadata_service():
             self._log("AWS detection successful via metadata service")

@@ -36,40 +36,45 @@ class AzureClient(CloudProviderClient):
             self._logger.log(f"Azure: {message}")
     
     async def detect(self) -> None:
-        """Detect if running on Azure."""
+        """Detect if running on Azure (matches Go implementation)."""
         self._log("Starting Azure detection")
-        
-        # Check Azure environment variables
-        if (os.environ.get("AZURE_CLIENT_ID") or 
-            os.environ.get("MSI_ENDPOINT") or 
-            os.environ.get("IDENTITY_ENDPOINT")):
-            self._log("Found Azure environment variables")
-            await self._verify_identity_access()
-            self._detected = True
-            return
-        
+
+        # Fast path: Check all relevant Azure environment variables
+        env_vars = [
+            "AZURE_ENV",
+            "AZURE_CLIENT_ID",
+            "MSI_ENDPOINT",
+            "IDENTITY_ENDPOINT",
+        ]
+        for var in env_vars:
+            if os.environ.get(var):
+                self._log(f"Found Azure environment variable: {var}")
+                await self._verify_identity_access()
+                self._detected = True
+                return
+
         # Try to access Azure metadata service
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 async with session.get(
-                    "http://169.254.169.254/metadata/instance?api-version=2018-02-01",
+                    "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
                     headers={"Metadata": "true"}
                 ) as response:
                     if response.status == 200:
                         instance_data = await response.json()
                         if instance_data.get("compute"):
                             self._log("Successfully accessed Azure metadata service")
+                            await self._verify_identity_access()
                             self._detected = True
                             return
                     else:
                         self._log(f"Azure metadata service returned status {response.status}")
         except Exception as e:
             self._log(f"Failed to access Azure metadata service: {e}")
-        
+
         # Try Azure default credentials as fallback
         try:
             credential = DefaultAzureCredential()
-            # Try to get a token to verify credentials work
             loop = asyncio.get_event_loop()
             token = await loop.run_in_executor(
                 None,
@@ -81,8 +86,8 @@ class AzureClient(CloudProviderClient):
                 return
         except Exception as e:
             self._log(f"No Azure default credentials: {e}")
-        
-        raise Exception("Not running on Azure: no metadata service or default credentials")
+
+        raise Exception("Not running on Azure: no environment variable, metadata service, or default credentials detected")
     
     async def _verify_identity_access(self) -> None:
         """Verify we can access Azure identity services."""

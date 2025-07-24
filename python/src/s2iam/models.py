@@ -6,7 +6,8 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Protocol
+from typing import Dict, Optional, Protocol, Tuple
+from typing import Any, Dict, Optional, Protocol, Type, TypeVar, Union
 
 
 class CloudProviderType(Enum):
@@ -76,7 +77,7 @@ class CloudProviderClient(ABC):
     async def get_identity_headers(
         self, 
         additional_params: Optional[Dict[str, str]] = None
-    ) -> tuple[Dict[str, str], CloudIdentity]:
+    ) -> Tuple[Dict[str, str], CloudIdentity]:
         """
         Get headers needed to authenticate with the SingleStore auth service.
         

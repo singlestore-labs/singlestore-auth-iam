@@ -65,9 +65,14 @@ async def get_jwt(
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
     
-    # Prepare server URL
+    # Prepare server URL, allow override via environment variable
+    import os
+    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
     if server_url is None:
-        server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
+        if env_server_url:
+            server_url = env_server_url
+        else:
+            server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
     
     # Prepare request body
     request_data = {
@@ -146,6 +151,11 @@ async def get_jwt_database(
     Returns:
         JWT token string for database access
     """
+    # Allow override via environment variable if server_url is not provided
+    import os
+    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
+    if server_url is None and env_server_url:
+        server_url = env_server_url
     return await get_jwt(
         jwt_type=JWTType.DATABASE_ACCESS,
         workspace_group_id=workspace_group_id,
@@ -185,6 +195,11 @@ async def get_jwt_api(
     Returns:
         JWT token string for API gateway access
     """
+    # Allow override via environment variable if server_url is not provided
+    import os
+    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
+    if server_url is None and env_server_url:
+        server_url = env_server_url
     return await get_jwt(
         jwt_type=JWTType.API_GATEWAY_ACCESS,
         workspace_group_id=workspace_group_id,
