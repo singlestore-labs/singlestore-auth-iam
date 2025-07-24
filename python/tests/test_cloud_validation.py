@@ -70,44 +70,33 @@ class TestCloudProviderValidation:
     
     @pytest.mark.integration
     async def test_jwt_retrieval_with_test_server(self, test_server):
-        """Test JWT retrieval using the Go test server."""
+        """Test JWT retrieval using only public convenience functions with the Go test server."""
         try:
-            # Detect provider
-            provider = await s2iam.detect_provider(timeout=10.0)
-            provider_type = provider.get_type()
-            
-            # Test database JWT
-            database_jwt = await s2iam.get_jwt(
-                jwt_type=JWTType.DATABASE_ACCESS,
-                server_url=f"{test_server.server_url}/auth/iam/database",
-                provider=provider,
+            # Test database JWT using convenience function
+            # Set environment variable for JWT server URL
+            import os
+            os.environ["S2IAM_JWT_SERVER_URL"] = f"{test_server.server_url}/auth/iam/database"
+            database_jwt = await s2iam.get_jwt_database(
                 workspace_group_id="test-workspace"
             )
-            
             assert database_jwt is not None
             assert isinstance(database_jwt, str)
-            assert len(database_jwt) > 100  # JWT tokens are typically long
-            assert database_jwt.startswith("eyJ")  # JWT tokens start with eyJ
-            
-            # Test API JWT
-            api_jwt = await s2iam.get_jwt(
-                jwt_type=JWTType.API_GATEWAY_ACCESS,
-                server_url=f"{test_server.server_url}/auth/iam/api",
-                provider=provider
-            )
-            
+            assert len(database_jwt) > 100
+            assert database_jwt.startswith("eyJ")
+
+            # Test API JWT using convenience function
+            os.environ["S2IAM_JWT_SERVER_URL"] = f"{test_server.server_url}/auth/iam/api"
+            api_jwt = await s2iam.get_jwt_api()
             assert api_jwt is not None
             assert isinstance(api_jwt, str)
             assert len(api_jwt) > 100
             assert api_jwt.startswith("eyJ")
-            
+
             # Tokens should be different for different types
             assert database_jwt != api_jwt
-            
-            print(f"✓ Provider: {provider_type}")
+
             print(f"✓ Database JWT length: {len(database_jwt)}")
             print(f"✓ API JWT length: {len(api_jwt)}")
-            
         except s2iam.NoCloudProviderDetectedError:
             pytest.skip("No cloud provider detected - not running in cloud environment")
     
@@ -137,9 +126,8 @@ class TestCloudProviderValidation:
             assert api_jwt.startswith("eyJ")
             
             # Test without workspace_group_id
-            api_jwt_no_workspace = await s2iam.get_jwt_api(
-                server_url=f"{test_server.server_url}/auth/iam/api"
-            )
+            os.environ["S2IAM_JWT_SERVER_URL"] = f"{test_server.server_url}/auth/iam/api"
+            api_jwt_no_workspace = await s2iam.get_jwt_api()
             
             assert api_jwt_no_workspace is not None
             assert isinstance(api_jwt_no_workspace, str)
