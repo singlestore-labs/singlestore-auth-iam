@@ -39,20 +39,21 @@ class GCPClient(CloudProviderClient):
         """Detect if running on GCP (matches Go implementation)."""
         self._log("Starting GCP detection")
 
-        # Fast path: Check all relevant GCP environment variables
-        env_vars = [
-            "GCE_METADATA_HOST",
-            "GOOGLE_CLOUD_PROJECT",
-            "GOOGLE_APPLICATION_CREDENTIALS",
-        ]
-        for var in env_vars:
-            if os.environ.get(var):
-                self._log(f"Found GCP environment variable: {var}")
+        # Fast path: Check if GCE_METADATA_HOST environment variable is set
+        if os.environ.get("GCE_METADATA_HOST"):
+            self._log("Found GCE_METADATA_HOST environment variable")
+            # When env var is set, we need to verify identity access (strict check)
+            try:
                 await self._verify_metadata_access()
+                self._log("GCP identity metadata access verified")
                 self._detected = True
                 return
+            except Exception as e:
+                self._log("Metadata service available but no identity access")
+                raise ProviderDetectedNoIdentityError("GCP metadata available but no identity access")
 
-        # Try to access GCP metadata service
+        # Try to access GCP metadata service directly
+        self._log("Trying metadata service")
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 async with session.get(
@@ -60,24 +61,15 @@ class GCPClient(CloudProviderClient):
                     headers={"Metadata-Flavor": "Google"}
                 ) as response:
                     if response.status == 200:
-                        self._log("Successfully accessed GCP metadata service")
-                        await self._verify_metadata_access()
+                        self._log("Successfully detected GCP environment")
                         self._detected = True
                         return
                     else:
                         self._log(f"Metadata service returned status {response.status}")
+                        raise Exception(f"Metadata service returned status {response.status}")
         except Exception as e:
-            self._log(f"Failed to access GCP metadata service: {e}")
-
-        # Try Google Auth default credentials as fallback
-        try:
-            credentials, project = default()
-            if credentials and project:
-                self._log("Found Google default credentials")
-                self._detected = True
-                return
-        except Exception as e:
-            self._log(f"No Google default credentials: {e}")
+            self._log(f"Metadata service unavailable: {e}")
+            raise Exception(f"Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): {e}")
 
         raise Exception("Not running on GCP: no environment variable, metadata service, or default credentials detected")
     

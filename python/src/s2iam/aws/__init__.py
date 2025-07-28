@@ -83,11 +83,9 @@ class AWSClient(CloudProviderClient):
         # Fast path: Check all relevant AWS environment variables
         env_vars = [
             "AWS_EXECUTION_ENV",
-            "AWS_REGION",
+            "AWS_REGION", 
             "AWS_DEFAULT_REGION",
             "AWS_LAMBDA_FUNCTION_NAME",
-            "ECS_CONTAINER_METADATA_URI",
-            "ECS_CONTAINER_METADATA_URI_V4",
         ]
         for var in env_vars:
             if os.environ.get(var):
@@ -95,25 +93,16 @@ class AWSClient(CloudProviderClient):
                 self._detected = True
                 return
 
-        # Metadata service: Try IMDSv2/IMDSv1
+        # Try AWS metadata service 
         if await self._check_metadata_service():
             self._log("AWS metadata service detected")
-            # Ensure region is set
-            await self._ensure_region()
-            # Initialize STS client with detected region
-            try:
-                session = boto3.Session()
-                self._sts_client = session.client("sts", region_name=self._region)
-                self._log("STS client initialized after metadata service detection")
-            except Exception as e:
-                self._log(f"Warning: Could not initialize STS client after metadata detection: {e}")
             self._detected = True
             return
 
-        # STS fallback: Try boto3 STS client
+        # Try STS client as fallback
         try:
-            self._sts_client = boto3.client("sts")
-            identity = self._sts_client.get_caller_identity()
+            sts_client = boto3.client("sts")
+            identity = sts_client.get_caller_identity()
             if identity and identity.get("Account"):
                 self._log("AWS STS client detected")
                 self._detected = True
@@ -122,41 +111,6 @@ class AWSClient(CloudProviderClient):
             self._log(f"AWS STS client detection failed: {e}")
 
         raise Exception("Not running on AWS: no environment variable, metadata service, or STS client detected")
-        # Try AWS metadata service (IMDSv2)
-        if await self._check_metadata_service():
-            self._log("AWS detection successful via metadata service")
-            self._detected = True
-            # Still need to set up STS client for getting identity headers
-            try:
-                await self._ensure_region()
-                session = boto3.Session()
-                self._sts_client = session.client("sts", region_name=self._region)
-                self._log("STS client initialized after metadata service detection")
-            except Exception as e:
-                self._log(f"Warning: Could not initialize STS client after metadata detection: {e}")
-            return
-        
-        # Fallback: Try STS client as last resort
-        try:
-            # Try to determine region first
-            await self._ensure_region()
-            
-            # Create STS client
-            session = boto3.Session()
-            self._sts_client = session.client("sts", region_name=self._region)
-            
-            # Test by getting caller identity
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, self._sts_client.get_caller_identity
-            )
-            
-            self._detected = True
-            self._log(f"AWS detection successful via STS, caller identity: {response.get('Arn', 'unknown')}")
-            
-        except (ClientError, BotoCoreError, NoCredentialsError) as e:
-            self._log(f"AWS detection failed: {e}")
-            raise Exception(f"Not running on AWS or no valid credentials: {e}")
     
     async def _ensure_region(self) -> None:
         """Determine and set the AWS region."""
@@ -221,8 +175,12 @@ class AWSClient(CloudProviderClient):
         if not self._detected:
             raise ProviderNotDetectedError("AWS provider not detected, call detect() first")
         
+        # Initialize STS client if not already done
         if not self._sts_client:
-            raise ProviderDetectedNoIdentityError("No STS client available")
+            await self._ensure_region()
+            session = boto3.Session()
+            self._sts_client = session.client("sts", region_name=self._region)
+            self._log("STS client initialized for identity headers")
         
         try:
             loop = asyncio.get_event_loop()

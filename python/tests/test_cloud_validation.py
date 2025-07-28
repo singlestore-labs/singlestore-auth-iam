@@ -66,6 +66,9 @@ class TestCloudProviderValidation:
             print(f"✓ Identity: {identity.identifier}")
             
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected - not running in cloud environment")
     
     @pytest.mark.integration
@@ -98,6 +101,9 @@ class TestCloudProviderValidation:
             print(f"✓ Database JWT length: {len(database_jwt)}")
             print(f"✓ API JWT length: {len(api_jwt)}")
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected - not running in cloud environment")
     
     @pytest.mark.integration
@@ -136,6 +142,9 @@ class TestCloudProviderValidation:
             print(f"✓ API convenience function: {len(api_jwt)} chars")
             
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected - not running in cloud environment")
 
 
@@ -174,6 +183,9 @@ class TestProviderSpecificValidation:
             print(f"✓ JWT Token: {len(jwt_token)} chars")
             
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
     
     @pytest.mark.integration
@@ -208,6 +220,9 @@ class TestProviderSpecificValidation:
             print(f"✓ JWT Token: {len(jwt_token)} chars")
             
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
     
     @pytest.mark.integration
@@ -242,6 +257,9 @@ class TestProviderSpecificValidation:
             print(f"✓ JWT Token: {len(jwt_token)} chars")
             
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
 
 
@@ -276,4 +294,7 @@ class TestErrorHandlingValidation:
                 )
                 
         except s2iam.NoCloudProviderDetectedError:
+            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_ASSUME_ROLE"):
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")

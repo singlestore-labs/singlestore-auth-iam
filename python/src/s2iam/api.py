@@ -68,16 +68,18 @@ async def detect_provider(
     # Run detection with timeout
     try:
         tasks = [asyncio.create_task(test_provider(client)) for client in clients]
+        
+        # Wait for all tasks to complete or first success
         done, pending = await asyncio.wait_for(
-            asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED),
+            asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED),
             timeout=timeout
         )
         
-        # Cancel pending tasks
+        # Cancel any remaining pending tasks (shouldn't be any with ALL_COMPLETED)
         for task in pending:
             task.cancel()
         
-        # Check results
+        # Check results - return first successful detection
         for task in done:
             result = await task
             if result is not None:

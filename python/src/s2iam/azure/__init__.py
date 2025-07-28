@@ -49,7 +49,6 @@ class AzureClient(CloudProviderClient):
         for var in env_vars:
             if os.environ.get(var):
                 self._log(f"Found Azure environment variable: {var}")
-                await self._verify_identity_access()
                 self._detected = True
                 return
 
@@ -64,7 +63,6 @@ class AzureClient(CloudProviderClient):
                         instance_data = await response.json()
                         if instance_data.get("compute"):
                             self._log("Successfully accessed Azure metadata service")
-                            await self._verify_identity_access()
                             self._detected = True
                             return
                     else:
