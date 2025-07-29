@@ -8,21 +8,21 @@ with SingleStore's IAM service.
 __version__ = "0.1.0"
 
 from .api import detect_provider
-from .jwt import get_jwt, get_jwt_database, get_jwt_api
+from .jwt import get_jwt, get_jwt_api, get_jwt_database
 from .models import (
+    AssumeRoleNotSupportedError,
     CloudIdentity,
     CloudProviderType,
     JWTType,
     NoCloudProviderDetectedError,
-    ProviderNotDetectedError,
     ProviderDetectedNoIdentityError,
-    AssumeRoleNotSupportedError,
+    ProviderNotDetectedError,
 )
 
 __all__ = [
     "detect_provider",
     "get_jwt",
-    "get_jwt_database", 
+    "get_jwt_database",
     "get_jwt_api",
     "CloudIdentity",
     "CloudProviderType",
