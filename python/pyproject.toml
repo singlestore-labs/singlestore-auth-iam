@@ -109,12 +109,7 @@ asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["src/s2iam"]
-omit = [
-    "tests/*",
-    "*/tests/*",
-    "*/__pycache__/*",
-    "*/site-packages/*",
-]
+branch = true
 
 [tool.coverage.report]
 exclude_lines = [
