@@ -107,7 +107,7 @@ filterwarnings = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["src"]
+source = ["s2iam"]
 omit = [
     "tests/*",
     "*/tests/*",

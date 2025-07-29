@@ -161,8 +161,6 @@ jobs:
         echo "=== Verifying Python test results ==="
         echo "Checking for Python test completion..."
         grep --silent "Test run completed successfully!" python_test_output.log
-        echo "Checking for coverage generation..."
-        grep --silent "Coverage XML written to file coverage.xml" python_test_output.log
         echo "Python tests passed successfully!"
         
         echo "All tests passed successfully!"

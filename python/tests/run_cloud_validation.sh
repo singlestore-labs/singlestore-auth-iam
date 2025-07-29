@@ -89,7 +89,7 @@ run_tests() {
     
     # Add coverage if requested
     if [ "$test_mode" = "coverage" ]; then
-        pytest_cmd="$pytest_cmd --cov=src/s2iam --cov-report=term-missing --cov-report=html --cov-report=xml"
+        pytest_cmd="$pytest_cmd --cov=s2iam --cov-report=term-missing --cov-report=html --cov-report=xml"
     fi
     
     # Add specific test markers based on environment
