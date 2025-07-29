@@ -28,6 +28,7 @@ class AWSClient(CloudProviderClient):
         self._identity: Optional[CloudIdentity] = None
         self._role_arn: Optional[str] = None
         self._sts_client: Optional[object] = None
+        self._session: Optional[object] = None
 
     def _log(self, message: str) -> None:
         """Log a message if logger is available."""
@@ -183,8 +184,8 @@ class AWSClient(CloudProviderClient):
         # Initialize STS client if not already done
         if not self._sts_client:
             await self._ensure_region()
-            session = boto3.Session()
-            self._sts_client = session.client("sts", region_name=self._region)
+            self._session = boto3.Session()
+            self._sts_client = self._session.client("sts", region_name=self._region)
             self._log("STS client initialized for identity headers")
 
         try:
@@ -239,7 +240,7 @@ class AWSClient(CloudProviderClient):
                     self._log("Using existing session credentials")
 
                     # Get current credentials from boto3 session
-                    creds = session.get_credentials()
+                    creds = self._session.get_credentials()
 
                     headers = {
                         "X-AWS-Access-Key-ID": creds.access_key,
