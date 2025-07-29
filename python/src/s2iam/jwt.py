@@ -130,7 +130,7 @@ async def get_jwt_token(*args, **kwargs) -> str:
 # Convenience functions for specific JWT types
 async def get_jwt_database(
     workspace_group_id: Optional[str] = None,
-    server_url: Optional[str] = None,
+    server_url: str = "https://auth.singlestore.com/auth/iam/database",
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[Dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -143,7 +143,7 @@ async def get_jwt_database(
 
     Args:
         workspace_group_id: Workspace group ID (optional - can be None or empty string)
-        server_url: Authentication server URL
+        server_url: Authentication server URL (defaults to production)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
@@ -154,12 +154,6 @@ async def get_jwt_database(
     Returns:
         JWT token string for database access
     """
-    # Allow override via environment variable if server_url is not provided
-    import os
-
-    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
-    if server_url is None and env_server_url:
-        server_url = env_server_url
     return await get_jwt(
         jwt_type=JWTType.DATABASE_ACCESS,
         workspace_group_id=workspace_group_id,
@@ -175,7 +169,7 @@ async def get_jwt_database(
 
 async def get_jwt_api(
     workspace_group_id: Optional[str] = None,
-    server_url: Optional[str] = None,
+    server_url: str = "https://auth.singlestore.com/auth/iam/api",
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[Dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -188,7 +182,7 @@ async def get_jwt_api(
 
     Args:
         workspace_group_id: Workspace group ID (optional for API access)
-        server_url: Authentication server URL
+        server_url: Authentication server URL (defaults to production)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
@@ -199,12 +193,6 @@ async def get_jwt_api(
     Returns:
         JWT token string for API gateway access
     """
-    # Allow override via environment variable if server_url is not provided
-    import os
-
-    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
-    if server_url is None and env_server_url:
-        server_url = env_server_url
     return await get_jwt(
         jwt_type=JWTType.API_GATEWAY_ACCESS,
         workspace_group_id=workspace_group_id,

@@ -70,12 +70,9 @@ class TestCloudProviderValidation:
         """Test JWT retrieval using only public convenience functions with the Go test server."""
         try:
             # Test database JWT using convenience function
-            # Set environment variable for JWT server URL
-            os.environ["S2IAM_JWT_SERVER_URL"] = (
-                f"{test_server.server_url}/auth/iam/database"
-            )
             database_jwt = await s2iam.get_jwt_database(
-                workspace_group_id="test-workspace"
+                workspace_group_id="test-workspace",
+                server_url=f"{test_server.server_url}/auth/iam/database"
             )
             assert database_jwt is not None
             assert isinstance(database_jwt, str)
@@ -83,10 +80,9 @@ class TestCloudProviderValidation:
             assert database_jwt.startswith("eyJ")
 
             # Test API JWT using convenience function
-            os.environ["S2IAM_JWT_SERVER_URL"] = (
-                f"{test_server.server_url}/auth/iam/api"
+            api_jwt = await s2iam.get_jwt_api(
+                server_url=f"{test_server.server_url}/auth/iam/api"
             )
-            api_jwt = await s2iam.get_jwt_api()
             assert api_jwt is not None
             assert isinstance(api_jwt, str)
             assert len(api_jwt) > 100
@@ -133,10 +129,9 @@ class TestCloudProviderValidation:
             assert api_jwt.startswith("eyJ")
 
             # Test without workspace_group_id
-            os.environ["S2IAM_JWT_SERVER_URL"] = (
-                f"{test_server.server_url}/auth/iam/api"
+            api_jwt_no_workspace = await s2iam.get_jwt_api(
+                server_url=f"{test_server.server_url}/auth/iam/api"
             )
-            api_jwt_no_workspace = await s2iam.get_jwt_api()
 
             assert api_jwt_no_workspace is not None
             assert isinstance(api_jwt_no_workspace, str)
