@@ -71,8 +71,6 @@ class TestCloudProviderValidation:
         try:
             # Test database JWT using convenience function
             # Set environment variable for JWT server URL
-            import os
-
             os.environ["S2IAM_JWT_SERVER_URL"] = (
                 f"{test_server.server_url}/auth/iam/database"
             )
