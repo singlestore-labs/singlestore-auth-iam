@@ -88,7 +88,8 @@ run_tests() {
     local pytest_cmd="pytest -v"
     
     # Add coverage if requested
-    if [ "$test_mode" = "coverage" ]; then
+    if [[ "$coverage_mode" == "coverage" ]]; then
+        print_status "Adding coverage reporting..."
         pytest_cmd="$pytest_cmd --cov=s2iam --cov-report=term-missing --cov-report=html --cov-report=xml"
     fi
     

@@ -63,6 +63,7 @@ include = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/s2iam"]
+sources = ["src"]
 artifacts = [
     "../LICENSE",
 ]
@@ -107,7 +108,7 @@ filterwarnings = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["s2iam"]
+source = ["src/s2iam"]
 omit = [
     "tests/*",
     "*/tests/*",
