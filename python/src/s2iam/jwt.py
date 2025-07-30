@@ -44,7 +44,7 @@ async def get_jwt(
         JWT token string
 
     Raises:
-        NoCloudProviderDetectedError: If no provider can be detected
+        CloudProviderNotFound: If no provider can be detected
         Exception: If JWT request fails
     """
     # Detect provider if not provided
