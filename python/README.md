@@ -62,11 +62,11 @@ The library automatically detects and works in:
 ## Error Handling
 
 ```python
-from s2iam import get_jwt_database, NoCloudProviderDetectedError
+from s2iam import get_jwt_database, CloudProviderNotFound
 
 try:
     jwt_token = await get_jwt_database("workspace-id")
-except NoCloudProviderDetectedError:
+except CloudProviderNotFound:
     print("Not running in a supported cloud environment")
 ```
 
@@ -167,10 +167,10 @@ Enum of JWT types:
 
 The library defines several specific exceptions:
 
-- `NoCloudProviderDetectedError`: No cloud provider could be detected
-- `ProviderNotDetectedError`: Provider not detected, call `detect()` first
-- `ProviderDetectedNoIdentityError`: Provider detected but no identity available
-- `AssumeRoleNotSupportedError`: Assume role not supported by provider
+- `CloudProviderNotFound`: No cloud provider could be detected
+- `ProviderNotDetected`: Provider not detected, call `detect()` first
+- `ProviderIdentityUnavailable`: Provider detected but no identity available
+- `AssumeRoleNotSupported`: Assume role not supported by provider
 
 ## Development
 
