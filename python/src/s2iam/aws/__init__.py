@@ -4,7 +4,7 @@ AWS cloud provider client implementation.
 
 import asyncio
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 import boto3
 
@@ -173,8 +173,8 @@ class AWSClient(CloudProviderClient):
         return new_client
 
     async def get_identity_headers(
-        self, additional_params: Optional[Dict[str, str]] = None
-    ) -> tuple[Dict[str, str], CloudIdentity]:
+        self, additional_params: Optional[dict[str, str]] = None
+    ) -> tuple[dict[str, str], CloudIdentity]:
         """Get AWS identity headers."""
         if not self._detected:
             raise ProviderNotDetected(

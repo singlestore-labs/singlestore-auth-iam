@@ -4,7 +4,7 @@ Main API for the s2iam library.
 
 import asyncio
 import os
-from typing import List, Optional
+from typing import Optional
 
 from .aws import new_client as new_aws_client
 from .azure import new_client as new_azure_client
@@ -27,7 +27,7 @@ class DefaultLogger:
 async def detect_provider(
     timeout: float = 5.0,
     logger: Optional[Logger] = None,
-    clients: Optional[List[CloudProviderClient]] = None,
+    clients: Optional[list[CloudProviderClient]] = None,
 ) -> CloudProviderClient:
     """
     Detect which cloud provider we're running on.

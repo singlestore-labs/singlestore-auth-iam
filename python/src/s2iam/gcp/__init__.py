@@ -3,7 +3,7 @@ Google Cloud Platform provider client implementation.
 """
 
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 import aiohttp
 
@@ -110,8 +110,8 @@ class GCPClient(CloudProviderClient):
         return new_client
 
     async def get_identity_headers(
-        self, additional_params: Optional[Dict[str, str]] = None
-    ) -> tuple[Dict[str, str], CloudIdentity]:
+        self, additional_params: Optional[dict[str, str]] = None
+    ) -> tuple[dict[str, str], CloudIdentity]:
         """Get GCP identity headers."""
         if not self._detected:
             raise ProviderNotDetected(
@@ -211,7 +211,7 @@ class GCPClient(CloudProviderClient):
                         f"Impersonation failed with status {response.status}: {text}"
                     )
 
-    async def _get_project_info(self) -> Dict[str, str]:
+    async def _get_project_info(self) -> dict[str, str]:
         """Get project information from metadata."""
         info = {}
 

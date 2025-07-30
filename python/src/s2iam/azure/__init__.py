@@ -4,7 +4,7 @@ Microsoft Azure cloud provider client implementation.
 
 import asyncio
 import os
-from typing import Dict, Optional
+from typing import Any, Optional
 
 import aiohttp
 from azure.identity import DefaultAzureCredential
@@ -124,8 +124,8 @@ class AzureClient(CloudProviderClient):
         return new_client
 
     async def get_identity_headers(
-        self, additional_params: Optional[Dict[str, str]] = None
-    ) -> tuple[Dict[str, str], CloudIdentity]:
+        self, additional_params: Optional[dict[str, str]] = None
+    ) -> tuple[dict[str, str], CloudIdentity]:
         """Get Azure identity headers."""
         if not self._detected:
             raise ProviderNotDetected(
@@ -182,7 +182,7 @@ class AzureClient(CloudProviderClient):
 
     async def _get_managed_identity_token(
         self, resource: str, client_id: Optional[str] = None
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Get token from Azure managed identity endpoint."""
         url = "http://169.254.169.254/metadata/identity/oauth2/token"
         params = {"api-version": "2018-02-01", "resource": resource}
@@ -202,7 +202,7 @@ class AzureClient(CloudProviderClient):
                         f"Failed to get managed identity token: {response.status} - {text}"
                     )
 
-    async def _get_instance_metadata(self) -> Dict[str, any]:
+    async def _get_instance_metadata(self) -> dict[str, Any]:
         """Get Azure instance metadata."""
         try:
             async with aiohttp.ClientSession() as session:
