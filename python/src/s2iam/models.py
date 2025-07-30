@@ -5,7 +5,7 @@ Models and interfaces for the s2iam library.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Optional, Protocol, Tuple
+from typing import Optional, Protocol
 
 
 class CloudProviderType(Enum):
@@ -32,7 +32,7 @@ class CloudIdentity:
     account_id: str = ""
     region: str = ""
     resource_type: str = ""
-    additional_claims: Dict[str, str] = field(default_factory=dict)
+    additional_claims: dict[str, str] = field(default_factory=dict)
 
 
 class Logger(Protocol):
@@ -76,8 +76,8 @@ class CloudProviderClient(ABC):
 
     @abstractmethod
     async def get_identity_headers(
-        self, additional_params: Optional[Dict[str, str]] = None
-    ) -> Tuple[Dict[str, str], CloudIdentity]:
+        self, additional_params: Optional[dict[str, str]] = None
+    ) -> tuple[dict[str, str], CloudIdentity]:
         """
         Get headers needed to authenticate with the SingleStore auth service.
 

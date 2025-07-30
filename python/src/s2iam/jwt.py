@@ -2,7 +2,7 @@
 JWT token functionality for SingleStore authentication.
 """
 
-from typing import Dict, Optional
+from typing import Optional
 
 import aiohttp
 
@@ -20,7 +20,7 @@ async def get_jwt(
     workspace_group_id: Optional[str] = None,
     server_url: Optional[str] = None,
     provider: Optional[CloudProviderClient] = None,
-    additional_params: Optional[Dict[str, str]] = None,
+    additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
@@ -132,7 +132,7 @@ async def get_jwt_database(
     workspace_group_id: Optional[str] = None,
     server_url: str = "https://auth.singlestore.com/auth/iam/database",
     provider: Optional[CloudProviderClient] = None,
-    additional_params: Optional[Dict[str, str]] = None,
+    additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
@@ -171,7 +171,7 @@ async def get_jwt_api(
     workspace_group_id: Optional[str] = None,
     server_url: str = "https://auth.singlestore.com/auth/iam/api",
     provider: Optional[CloudProviderClient] = None,
-    additional_params: Optional[Dict[str, str]] = None,
+    additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
