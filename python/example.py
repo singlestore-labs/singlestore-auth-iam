@@ -29,7 +29,7 @@ async def main():
         api_jwt = await s2iam.get_jwt_api()
         print(f"✓ Successfully got API JWT token: {api_jwt[:20]}...")
 
-    except s2iam.NoCloudProviderDetectedError:
+    except s2iam.CloudProviderNotFound:
         print("❌ Not running in a supported cloud environment")
         print("   This library requires AWS, GCP, or Azure cloud environment")
 
