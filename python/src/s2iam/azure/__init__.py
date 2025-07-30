@@ -7,7 +7,6 @@ import os
 from typing import Any, Optional
 
 import aiohttp
-from azure.identity import DefaultAzureCredential
 
 from ..models import (
     CloudIdentity,
@@ -75,6 +74,7 @@ class AzureClient(CloudProviderClient):
 
         # Try Azure default credentials as fallback
         try:
+            from azure.identity import DefaultAzureCredential
             credential = DefaultAzureCredential()
             loop = asyncio.get_event_loop()
             token = await loop.run_in_executor(
