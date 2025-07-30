@@ -31,21 +31,13 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to detect current environment
-detect_environment() {
-    print_status "Detecting cloud environment..."
-    
-    if curl -s --max-time 2 -H "Metadata-Flavor: Google" \
-       "http://metadata.google.internal/computeMetadata/v1/" > /dev/null 2>&1; then
-        echo "gcp"
-    elif curl -s --max-time 2 \
-       "http://169.254.169.254/latest/meta-data/" > /dev/null 2>&1; then
-        echo "aws"
-    elif curl -s --max-time 2 -H "Metadata: true" \
-       "http://169.254.169.254/metadata/instance" > /dev/null 2>&1; then
-        echo "azure"
+# Function to check if cloud tests should run
+should_run_cloud_tests() {
+    # Cloud tests should run if test environment variables are set
+    if [ -n "${S2IAM_TEST_CLOUD_PROVIDER:-}" ] || [ -n "${S2IAM_TEST_ASSUME_ROLE:-}" ]; then
+        return 0  # true - run cloud tests
     else
-        echo "local"
+        return 1  # false - skip cloud tests
     fi
 }
 
@@ -74,49 +66,32 @@ setup_environment() {
     print_success "Environment setup complete"
 }
 
-# Function to run tests with appropriate markers
+# Function to run tests
 run_tests() {
-    local environment="$1"
-    local test_mode="$2"
+    local test_mode="$1"
     
     cd "$PYTHON_DIR"
     source .venv/bin/activate
-    
-    print_status "Running tests for environment: $environment"
     
     # Base pytest command
     local pytest_cmd="pytest -v"
     
     # Add coverage if requested
-    if [[ "$coverage_mode" == "coverage" ]]; then
+    if [[ "$test_mode" == "coverage" ]]; then
         print_status "Adding coverage reporting..."
         pytest_cmd="$pytest_cmd --cov=src/s2iam --cov-report=term-missing --cov-report=html --cov-report=xml"
     fi
     
-    # Add specific test markers based on environment
-    case "$environment" in
-        "gcp")
-            pytest_cmd="$pytest_cmd -m 'integration and (not aws and not azure)'"
-            ;;
-        "aws")
-            pytest_cmd="$pytest_cmd -m 'integration and (not gcp and not azure)'"
-            ;;
-        "azure")
-            pytest_cmd="$pytest_cmd -m 'integration and (not gcp and not aws)'"
-            ;;
-        "local")
-            pytest_cmd="$pytest_cmd -m 'not integration'"
-            print_warning "Running in local environment - skipping cloud integration tests"
-            ;;
-        "all")
-            pytest_cmd="$pytest_cmd"
-            ;;
-    esac
-    
-    # Add cloud validation tests
-    pytest_cmd="$pytest_cmd tests/test_cloud_validation.py tests/test_models.py"
+    # Run all tests - the tests themselves will skip appropriately based on environment variables
+    pytest_cmd="$pytest_cmd tests/"
     
     print_status "Running: $pytest_cmd"
+    
+    if should_run_cloud_tests; then
+        print_status "Environment variables indicate cloud tests should run"
+    else
+        print_status "No cloud test environment variables set - cloud tests will be skipped"
+    fi
     
     if eval "$pytest_cmd"; then
         print_success "All tests passed!"
@@ -129,12 +104,16 @@ run_tests() {
 
 # Function to run quick validation
 run_quick_validation() {
-    local environment="$1"
-    
     cd "$PYTHON_DIR"
     source .venv/bin/activate
     
     print_status "Running quick validation tests..."
+    
+    if should_run_cloud_tests; then
+        print_status "Environment variables indicate cloud tests should run"
+    else
+        print_status "No cloud test environment variables set - tests will skip appropriately"
+    fi
     
     # Run only the core validation tests
     if pytest -v -x tests/test_cloud_validation.py::TestCloudProviderValidation::test_provider_detection_and_identity; then
@@ -154,14 +133,18 @@ show_usage() {
     echo "  --setup           Setup test environment only"
     echo "  --quick           Run quick validation tests only"
     echo "  --coverage        Run tests with coverage reporting"
-    echo "  --environment ENV Specify environment (gcp, aws, azure, local, all)"
     echo "  --help            Show this help message"
     echo ""
+    echo "Environment Variables:"
+    echo "  S2IAM_TEST_CLOUD_PROVIDER    Set to 'aws', 'gcp', or 'azure' to run cloud tests"
+    echo "  S2IAM_TEST_ASSUME_ROLE       Set to role ARN/ID to test role assumption"
+    echo "  S2IAM_DEBUGGING              Set to 'true' for verbose test output"
+    echo ""
     echo "Examples:"
-    echo "  $0                    # Auto-detect environment and run appropriate tests"
-    echo "  $0 --quick           # Run quick validation only"
-    echo "  $0 --coverage        # Run with coverage reporting"
-    echo "  $0 --environment gcp # Force GCP environment tests"
+    echo "  $0                                    # Run tests (cloud tests skip if no env vars)"
+    echo "  $0 --quick                           # Run quick validation only"
+    echo "  $0 --coverage                        # Run with coverage reporting"
+    echo "  S2IAM_TEST_CLOUD_PROVIDER=aws $0     # Run tests expecting AWS to work"
 }
 
 # Main execution
@@ -169,7 +152,6 @@ main() {
     local setup_only=false
     local quick_only=false
     local coverage_mode=""
-    local forced_environment=""
     
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -185,10 +167,6 @@ main() {
             --coverage)
                 coverage_mode="coverage"
                 shift
-                ;;
-            --environment)
-                forced_environment="$2"
-                shift 2
                 ;;
             --help)
                 show_usage
@@ -210,20 +188,11 @@ main() {
         exit 0
     fi
     
-    # Detect or use forced environment
-    if [ -n "$forced_environment" ]; then
-        environment="$forced_environment"
-        print_status "Using forced environment: $environment"
-    else
-        environment=$(detect_environment)
-        print_status "Detected environment: $environment"
-    fi
-    
     # Run tests
     if [ "$quick_only" = true ]; then
-        run_quick_validation "$environment"
+        run_quick_validation
     else
-        run_tests "$environment" "$coverage_mode"
+        run_tests "$coverage_mode"
     fi
     
     exit_code=$?
