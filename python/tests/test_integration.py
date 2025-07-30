@@ -5,17 +5,13 @@ These tests require a real cloud environment and the Go test server.
 """
 
 import os
-import sys
 
 import pytest
 
 import s2iam
 from s2iam import CloudProviderType, JWTType
 
-# Add tests directory to path so we can import test utilities
-sys.path.insert(0, os.path.dirname(__file__))
-
-from test_server_utils import GoTestServerManager
+from .test_server_utils import GoTestServerManager
 
 
 @pytest.fixture(scope="session")

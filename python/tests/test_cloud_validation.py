@@ -1,22 +1,15 @@
 """
-Cloud provider validation tests for s2iam library.
-
-These tests automatically detect the current cloud environment and validate
-the library functionality. They can run in CI/CD pipelines and on cloud VMs.
+Cloud validation tests that run against real cloud provider services.
 """
 
 import os
-import sys
 
 import pytest
 
 import s2iam
 from s2iam import CloudProviderType, JWTType
 
-# Add tests directory to path so we can import test utilities
-sys.path.insert(0, os.path.dirname(__file__))
-
-from test_server_utils import GoTestServerManager
+from .test_server_utils import GoTestServerManager
 
 
 @pytest.fixture(scope="session")
