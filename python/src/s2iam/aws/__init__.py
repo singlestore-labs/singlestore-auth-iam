@@ -13,8 +13,8 @@ from ..models import (
     CloudProviderClient,
     CloudProviderType,
     Logger,
-    ProviderDetectedNoIdentityError,
-    ProviderNotDetectedError,
+    ProviderIdentityUnavailable,
+    ProviderNotDetected,
 )
 
 
@@ -177,7 +177,7 @@ class AWSClient(CloudProviderClient):
     ) -> tuple[Dict[str, str], CloudIdentity]:
         """Get AWS identity headers."""
         if not self._detected:
-            raise ProviderNotDetectedError(
+            raise ProviderNotDetected(
                 "AWS provider not detected, call detect() first"
             )
 
@@ -278,7 +278,7 @@ class AWSClient(CloudProviderClient):
 
         except Exception as e:
             self._log(f"Failed to get identity headers: {e}")
-            raise ProviderDetectedNoIdentityError(f"Failed to get AWS identity: {e}")
+            raise ProviderIdentityUnavailable(f"Failed to get AWS identity: {e}")
 
 
 def new_client(logger: Optional[Logger] = None) -> CloudProviderClient:

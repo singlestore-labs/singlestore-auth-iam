@@ -14,8 +14,8 @@ from ..models import (
     CloudProviderClient,
     CloudProviderType,
     Logger,
-    ProviderDetectedNoIdentityError,
-    ProviderNotDetectedError,
+    ProviderIdentityUnavailable,
+    ProviderNotDetected,
 )
 
 
@@ -103,11 +103,11 @@ class AzureClient(CloudProviderClient):
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status != 200:
-                        raise ProviderDetectedNoIdentityError(
+                        raise ProviderIdentityUnavailable(
                             "Azure metadata available but no identity access"
                         )
         except aiohttp.ClientError as e:
-            raise ProviderDetectedNoIdentityError(
+            raise ProviderIdentityUnavailable(
                 f"Cannot access Azure identity metadata: {e}"
             )
 
@@ -128,7 +128,7 @@ class AzureClient(CloudProviderClient):
     ) -> tuple[Dict[str, str], CloudIdentity]:
         """Get Azure identity headers."""
         if not self._detected:
-            raise ProviderNotDetectedError(
+            raise ProviderNotDetected(
                 "Azure provider not detected, call detect() first"
             )
 
@@ -178,7 +178,7 @@ class AzureClient(CloudProviderClient):
 
         except Exception as e:
             self._log(f"Failed to get identity headers: {e}")
-            raise ProviderDetectedNoIdentityError(f"Failed to get Azure identity: {e}")
+            raise ProviderIdentityUnavailable(f"Failed to get Azure identity: {e}")
 
     async def _get_managed_identity_token(
         self, resource: str, client_id: Optional[str] = None

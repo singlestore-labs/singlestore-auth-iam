@@ -55,7 +55,7 @@ class TestCloudProviderValidation:
             print(f"✓ Detected provider: {provider.get_type()}")
             print(f"✓ Identity: {identity.identifier}")
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -93,7 +93,7 @@ class TestCloudProviderValidation:
 
             print(f"✓ Database JWT length: {len(database_jwt)}")
             print(f"✓ API JWT length: {len(api_jwt)}")
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -139,7 +139,7 @@ class TestCloudProviderValidation:
             print(f"✓ Database convenience function: {len(database_jwt)} chars")
             print(f"✓ API convenience function: {len(api_jwt)} chars")
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -184,7 +184,7 @@ class TestProviderSpecificValidation:
             print(f"✓ AWS Region: {identity.region}")
             print(f"✓ JWT Token: {len(jwt_token)} chars")
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -225,7 +225,7 @@ class TestProviderSpecificValidation:
             print(f"✓ GCP Region: {identity.region}")
             print(f"✓ JWT Token: {len(jwt_token)} chars")
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -266,7 +266,7 @@ class TestProviderSpecificValidation:
             print(f"✓ Azure Region: {identity.region}")
             print(f"✓ JWT Token: {len(jwt_token)} chars")
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
@@ -295,7 +295,7 @@ class TestErrorHandlingValidation:
             pytest.skip(
                 "Running in cloud environment - cannot test no-provider scenario"
             )
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # This is expected when not in cloud
             pass
 
@@ -313,7 +313,7 @@ class TestErrorHandlingValidation:
                     timeout=5.0,
                 )
 
-        except s2iam.NoCloudProviderDetectedError:
+        except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"

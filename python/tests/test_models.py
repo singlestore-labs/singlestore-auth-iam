@@ -8,13 +8,13 @@ cloud provider functionality, which is tested in integration tests.
 import pytest
 
 from s2iam.models import (
-    AssumeRoleNotSupportedError,
+    AssumeRoleNotSupported,
     CloudIdentity,
+    CloudProviderNotFound,
     CloudProviderType,
     JWTType,
-    NoCloudProviderDetectedError,
-    ProviderDetectedNoIdentityError,
-    ProviderNotDetectedError,
+    ProviderIdentityUnavailable,
+    ProviderNotDetected,
     S2IAMError,
 )
 
@@ -74,27 +74,27 @@ class TestExceptions:
         assert str(error) == "test error"
         assert isinstance(error, Exception)
 
-    def test_no_cloud_provider_detected_error(self):
-        """Test NoCloudProviderDetectedError."""
-        error = NoCloudProviderDetectedError("no provider")
+    def test_cloud_provider_not_found(self):
+        """Test CloudProviderNotFound."""
+        error = CloudProviderNotFound("no provider")
         assert str(error) == "no provider"
         assert isinstance(error, S2IAMError)
 
-    def test_provider_not_detected_error(self):
-        """Test ProviderNotDetectedError."""
-        error = ProviderNotDetectedError("not detected")
+    def test_provider_not_detected(self):
+        """Test ProviderNotDetected."""
+        error = ProviderNotDetected("not detected")
         assert str(error) == "not detected"
         assert isinstance(error, S2IAMError)
 
-    def test_provider_detected_no_identity_error(self):
-        """Test ProviderDetectedNoIdentityError."""
-        error = ProviderDetectedNoIdentityError("no identity")
+    def test_provider_identity_unavailable(self):
+        """Test ProviderIdentityUnavailable."""
+        error = ProviderIdentityUnavailable("no identity")
         assert str(error) == "no identity"
         assert isinstance(error, S2IAMError)
 
-    def test_assume_role_not_supported_error(self):
-        """Test AssumeRoleNotSupportedError."""
-        error = AssumeRoleNotSupportedError("not supported")
+    def test_assume_role_not_supported(self):
+        """Test AssumeRoleNotSupported."""
+        error = AssumeRoleNotSupported("not supported")
         assert str(error) == "not supported"
         assert isinstance(error, S2IAMError)
 

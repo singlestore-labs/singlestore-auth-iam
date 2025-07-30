@@ -12,8 +12,8 @@ from ..models import (
     CloudProviderClient,
     CloudProviderType,
     Logger,
-    ProviderDetectedNoIdentityError,
-    ProviderNotDetectedError,
+    ProviderIdentityUnavailable,
+    ProviderNotDetected,
 )
 
 
@@ -46,7 +46,7 @@ class GCPClient(CloudProviderClient):
                 return
             except Exception:
                 self._log("Metadata service available but no identity access")
-                raise ProviderDetectedNoIdentityError(
+                raise ProviderIdentityUnavailable(
                     "GCP metadata available but no identity access"
                 )
 
@@ -90,11 +90,11 @@ class GCPClient(CloudProviderClient):
                     headers={"Metadata-Flavor": "Google"},
                 ) as response:
                     if response.status != 200:
-                        raise ProviderDetectedNoIdentityError(
+                        raise ProviderIdentityUnavailable(
                             "GCP metadata available but no identity access"
                         )
         except aiohttp.ClientError as e:
-            raise ProviderDetectedNoIdentityError(
+            raise ProviderIdentityUnavailable(
                 f"Cannot access GCP identity metadata: {e}"
             )
 
@@ -114,7 +114,7 @@ class GCPClient(CloudProviderClient):
     ) -> tuple[Dict[str, str], CloudIdentity]:
         """Get GCP identity headers."""
         if not self._detected:
-            raise ProviderNotDetectedError(
+            raise ProviderNotDetected(
                 "GCP provider not detected, call detect() first"
             )
 
@@ -168,7 +168,7 @@ class GCPClient(CloudProviderClient):
 
         except Exception as e:
             self._log(f"Failed to get identity headers: {e}")
-            raise ProviderDetectedNoIdentityError(f"Failed to get GCP identity: {e}")
+            raise ProviderIdentityUnavailable(f"Failed to get GCP identity: {e}")
 
     async def _get_identity_token(self, audience: str) -> str:
         """Get identity token from metadata service."""

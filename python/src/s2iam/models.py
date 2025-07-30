@@ -88,8 +88,8 @@ class CloudProviderClient(ABC):
             Tuple of (headers, identity)
 
         Raises:
-            ProviderNotDetectedError: If detect() hasn't been called successfully
-            ProviderDetectedNoIdentityError: If no identity is available
+            ProviderNotDetected: If detect() hasn't been called successfully
+            ProviderIdentityUnavailable: If no identity is available
         """
         ...
 
@@ -99,17 +99,17 @@ class S2IAMError(Exception):
     """Base exception for s2iam library."""
 
 
-class NoCloudProviderDetectedError(S2IAMError):
+class CloudProviderNotFound(S2IAMError):
     """Raised when no cloud provider can be detected."""
 
 
-class ProviderNotDetectedError(S2IAMError):
+class ProviderNotDetected(S2IAMError):
     """Raised when attempting to use a provider that hasn't been detected."""
 
 
-class ProviderDetectedNoIdentityError(S2IAMError):
+class ProviderIdentityUnavailable(S2IAMError):
     """Raised when a provider is detected but no identity is available."""
 
 
-class AssumeRoleNotSupportedError(S2IAMError):
+class AssumeRoleNotSupported(S2IAMError):
     """Raised when AssumeRole is called on a provider that doesn't support it."""

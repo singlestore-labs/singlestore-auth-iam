@@ -10,13 +10,13 @@ __version__ = "0.1.0"
 from .api import detect_provider
 from .jwt import get_jwt, get_jwt_api, get_jwt_database
 from .models import (
-    AssumeRoleNotSupportedError,
+    AssumeRoleNotSupported,
     CloudIdentity,
+    CloudProviderNotFound,
     CloudProviderType,
     JWTType,
-    NoCloudProviderDetectedError,
-    ProviderDetectedNoIdentityError,
-    ProviderNotDetectedError,
+    ProviderIdentityUnavailable,
+    ProviderNotDetected,
 )
 
 __all__ = [
@@ -27,8 +27,8 @@ __all__ = [
     "CloudIdentity",
     "CloudProviderType",
     "JWTType",
-    "NoCloudProviderDetectedError",
-    "ProviderNotDetectedError",
-    "ProviderDetectedNoIdentityError",
-    "AssumeRoleNotSupportedError",
+    "CloudProviderNotFound",
+    "ProviderNotDetected",
+    "ProviderIdentityUnavailable",
+    "AssumeRoleNotSupported",
 ]

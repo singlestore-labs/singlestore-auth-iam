@@ -11,8 +11,8 @@ from .azure import new_client as new_azure_client
 from .gcp import new_client as new_gcp_client
 from .models import (
     CloudProviderClient,
+    CloudProviderNotFound,
     Logger,
-    NoCloudProviderDetectedError,
 )
 
 
@@ -41,7 +41,7 @@ async def detect_provider(
         CloudProviderClient for the detected provider
 
     Raises:
-        NoCloudProviderDetectedError: If no provider can be detected
+        CloudProviderNotFound: If no provider can be detected
     """
     # Set up logger if debugging is enabled
     if logger is None and os.environ.get("S2IAM_DEBUGGING") == "true":
@@ -89,9 +89,9 @@ async def detect_provider(
                 return result
 
         # No provider detected
-        raise NoCloudProviderDetectedError("No cloud provider detected")
+        raise CloudProviderNotFound("No cloud provider detected")
 
     except asyncio.TimeoutError:
-        raise NoCloudProviderDetectedError(
+        raise CloudProviderNotFound(
             f"Provider detection timed out after {timeout}s"
         )
