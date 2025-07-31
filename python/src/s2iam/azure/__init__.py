@@ -72,6 +72,17 @@ class AzureClient(CloudProviderClient):
         except Exception as e:
             self._log(f"Failed to access Azure metadata service: {e}")
 
+        # If metadata service is available, verify managed identity access
+        if self._detected:
+            try:
+                await self._test_managed_identity_token()
+                self._log("Verified managed identity access")
+                return
+            except Exception as e:
+                self._log(f"Azure metadata available but managed identity failed: {e}")
+                # Reset detection since managed identity is not available
+                self._detected = False
+
         # Try Azure default credentials as fallback
         try:
             from azure.identity import DefaultAzureCredential
@@ -91,6 +102,47 @@ class AzureClient(CloudProviderClient):
         raise Exception(
             "Not running on Azure: no environment variable, metadata service, or default credentials detected"
         )
+
+    async def _test_managed_identity_token(self) -> None:
+        """Test if managed identity token is available (similar to Go implementation)."""
+        try:
+            # Test token request to management API with very short timeout for fast failure
+            async with aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=1)  # 1 second timeout for fast CI
+            ) as session:
+                async with session.get(
+                    "http://169.254.169.254/metadata/identity/oauth2/token",
+                    params={
+                        "api-version": "2018-02-01",
+                        "resource": "https://management.azure.com/"
+                    },
+                    headers={"Metadata": "true"},
+                ) as response:
+                    if response.status == 200:
+                        # Success - managed identity is available
+                        return
+                    elif response.status == 400:
+                        # Check for "Identity not found" error like Go implementation
+                        try:
+                            error_data = await response.json()
+                            if (error_data.get("error") == "invalid_request" and 
+                                "Identity not found" in error_data.get("error_description", "")):
+                                raise Exception("No managed identity configured on this Azure VM")
+                        except Exception:
+                            # If we can't parse the error, still fail
+                            pass
+                    
+                    # Any other error status
+                    text = await response.text()
+                    raise Exception(f"Managed identity test failed: {response.status} - {text}")
+                    
+        except aiohttp.ClientError as e:
+            # Network errors (timeout, connection refused, etc.)
+            self._log(f"Managed identity network error: {e}")
+            raise Exception(f"Cannot reach managed identity endpoint: {e}")
+        except Exception as e:
+            self._log(f"Managed identity test failed: {e}")
+            raise
 
     async def _verify_identity_access(self) -> None:
         """Verify we can access Azure identity services."""
