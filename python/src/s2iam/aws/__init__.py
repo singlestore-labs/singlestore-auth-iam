@@ -95,17 +95,8 @@ class AWSClient(CloudProviderClient):
         # Try AWS metadata service
         if await self._check_metadata_service():
             self._log("AWS metadata service detected")
-            # Verify we can actually get AWS credentials/identity
-            try:
-                await self._test_identity_access()
-                self._log("AWS identity access verified")
-                self._detected = True
-                return
-            except Exception as e:
-                self._log(f"AWS metadata available but identity access failed: {e}")
-                raise ProviderIdentityUnavailable(
-                    f"AWS detected but no valid credentials available: {e}"
-                )
+            self._detected = True
+            return
 
         # Try STS client as fallback
         try:
@@ -122,34 +113,6 @@ class AWSClient(CloudProviderClient):
         raise Exception(
             "Not running on AWS: no environment variable, metadata service, or STS client detected"
         )
-
-    async def _test_identity_access(self) -> None:
-        """Test if AWS identity/credentials are available (similar to Azure/GCP pattern)."""
-        try:
-            # Import and test boto3 STS client
-            import boto3
-            from botocore.exceptions import ClientError, NoCredentialsError
-
-            # Create STS client with a short timeout
-            sts_client = boto3.client("sts", config=boto3.session.Config(
-                retries={'max_attempts': 1},
-                read_timeout=3,
-                connect_timeout=3
-            ))
-            
-            # Test GetCallerIdentity to verify credentials
-            identity = sts_client.get_caller_identity()
-            if not identity or not identity.get("Account"):
-                raise Exception("Invalid GetCallerIdentity response")
-            
-            self._log("AWS identity test successful")
-            
-        except (ClientError, NoCredentialsError) as e:
-            self._log(f"AWS identity test failed - AWS error: {e}")
-            raise Exception(f"AWS credentials not available: {e}")
-        except Exception as e:
-            self._log(f"AWS identity test failed: {e}")
-            raise Exception(f"Cannot access AWS identity services: {e}")
 
     async def _ensure_region(self) -> None:
         """Determine and set the AWS region."""
@@ -282,6 +245,7 @@ class AWSClient(CloudProviderClient):
                     headers = {
                         "X-AWS-Access-Key-ID": creds.access_key,
                         "X-AWS-Secret-Access-Key": creds.secret_key,
+                        "X-Cloud-Provider": "aws",
                     }
 
                     # Add session token if it exists
@@ -299,6 +263,7 @@ class AWSClient(CloudProviderClient):
                         "X-AWS-Access-Key-ID": session_creds["AccessKeyId"],
                         "X-AWS-Secret-Access-Key": session_creds["SecretAccessKey"],
                         "X-AWS-Session-Token": session_creds["SessionToken"],
+                        "X-Cloud-Provider": "aws",
                     }
 
             # Create identity object

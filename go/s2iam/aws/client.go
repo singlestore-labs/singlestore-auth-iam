@@ -180,12 +180,6 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 					return err
 				}
 
-				// Verify that we can actually get AWS credentials/identity
-				if err := c.testIdentityAccess(ctx); err != nil {
-					c.detected = false // Reset detection on failure
-					return err
-				}
-
 				// Return success - the STS client will be created lazily when needed
 				return nil
 			}
@@ -223,12 +217,6 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 				return err
 			}
 
-			// Verify that we can actually get AWS credentials/identity
-			if err := c.testIdentityAccess(ctx); err != nil {
-				c.detected = false // Reset detection on failure
-				return err
-			}
-
 			// Return success - the STS client will be created lazily when needed
 			return nil
 		}
@@ -242,40 +230,6 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 	}
 
 	return errors.Errorf("not running on AWS: failed to detect AWS environment (no environment variables or metadata service)")
-}
-
-// testIdentityAccess verifies that we can access AWS identity services (similar to Azure/GCP pattern)
-func (c *AWSClient) testIdentityAccess(ctx context.Context) error {
-	if c.logger != nil {
-		c.logger.Logf("AWS Detection - Testing identity access")
-	}
-
-	// Create a short timeout context for the identity test
-	testCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	// Initialize STS client for testing
-	if err := c.initialize(testCtx); err != nil {
-		if c.logger != nil {
-			c.logger.Logf("AWS Detection - Failed to initialize STS client: %v", err)
-		}
-		return models.ErrProviderDetectedNoIdentity.Errorf("AWS detected but cannot initialize STS client: %s", err)
-	}
-
-	// Test STS GetCallerIdentity to verify we have valid credentials
-	_, err := c.stsClient.GetCallerIdentity(testCtx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		if c.logger != nil {
-			c.logger.Logf("AWS Detection - GetCallerIdentity failed: %v", err)
-		}
-		return models.ErrProviderDetectedNoIdentity.Errorf("AWS detected but no valid credentials available: %s", err)
-	}
-
-	if c.logger != nil {
-		c.logger.Logf("AWS Detection - Identity access verified")
-	}
-
-	return nil
 }
 
 // Initialize sets up the AWS SDK client
