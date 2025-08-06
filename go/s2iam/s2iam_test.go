@@ -95,9 +95,9 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 		s2verifier.VerifierConfig{
 			Logger: t, // Directly use testing.T as the logger
 			AllowedAudiences: []string{
-				"https://auth.singlestore.com",
-				"https://auth.singlestore.com/auth/iam/database",
-				"https://auth.singlestore.com/auth/iam/api",
+				"https://authsvc.singlestore.com",
+				"https://authsvc.singlestore.com/auth/iam/database",
+				"https://authsvc.singlestore.com/auth/iam/api",
 				"https://test.example.com", // For testing custom audiences
 			},
 		})
@@ -211,7 +211,7 @@ func TestGetDatabaseJWT(t *testing.T) {
 		// On real GCP, explicitly use the default audience to ensure compatibility
 		jwtToken, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
-			s2iam.WithGCPAudience("https://auth.singlestore.com"))
+			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
 		jwtToken, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
@@ -244,7 +244,7 @@ func TestGetAPIJWT(t *testing.T) {
 		// On real GCP, explicitly use the default audience to ensure compatibility
 		jwtToken, err = s2iam.GetAPIJWT(ctx,
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
-			s2iam.WithGCPAudience("https://auth.singlestore.com"))
+			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
 		jwtToken, err = s2iam.GetAPIJWT(ctx,
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
@@ -354,7 +354,7 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 		ctx := context.Background()
 		jwtToken, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
-			s2iam.WithGCPAudience("https://auth.singlestore.com"))
+			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 		require.NoError(t, err)
 		require.NotEmpty(t, jwtToken)
 		t.Log("Successfully got JWT with GCP audience option on real cloud provider")

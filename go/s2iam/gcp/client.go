@@ -21,7 +21,7 @@ const (
 	gcpMetadataURL = "http://metadata.google.internal/computeMetadata/v1/"
 
 	// Default audience for identity tokens
-	defaultAudience = "https://auth.singlestore.com"
+	defaultAudience = "https://authsvc.singlestore.com"
 )
 
 // GCPClient implements the CloudProviderClient interface for GCP

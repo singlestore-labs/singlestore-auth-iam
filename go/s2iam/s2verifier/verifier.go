@@ -50,7 +50,7 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 	}
 
 	if len(config.AllowedAudiences) == 0 {
-		config.AllowedAudiences = []string{"https://auth.singlestore.com"}
+		config.AllowedAudiences = []string{"https://authsvc.singlestore.com"}
 	}
 
 	// Create verifiers for each cloud provider

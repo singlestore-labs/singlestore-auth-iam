@@ -154,7 +154,7 @@ func TestParseFlags(t *testing.T) {
 
 	assert.Equal(t, 8080, config.Port)
 	assert.Equal(t, 2048, config.KeySize)
-	assert.Equal(t, []string{"https://auth.singlestore.com"}, config.AllowedAudiences)
+	assert.Equal(t, []string{"https://authsvc.singlestore.com"}, config.AllowedAudiences)
 	assert.Equal(t, time.Hour, config.TokenExpiry)
 	assert.Equal(t, "common", config.AzureTenant)
 	assert.False(t, config.ReturnError)

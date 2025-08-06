@@ -89,7 +89,7 @@ func parseFlags() Config {
 	flag.StringVar(&config.RequiredAudience, "required-audience", "", "Required audience value for GCP tokens")
 	flag.StringVar(&config.AzureTenant, "azure-tenant", "common", "Azure tenant ID")
 	flag.DurationVar(&config.TokenExpiry, "token-expiry", time.Hour, "Token expiry duration")
-	flag.StringVar(&allowedAudiencesStr, "allowed-audiences", "https://auth.singlestore.com", "Comma-separated list of allowed audiences")
+	flag.StringVar(&allowedAudiencesStr, "allowed-audiences", "https://authsvc.singlestore.com", "Comma-separated list of allowed audiences")
 	flag.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
 
 	flag.Parse()
