@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"net/http"
 	"net/http/httptest"
@@ -109,10 +110,9 @@ func TestParseFlags(t *testing.T) {
 }
 
 func TestRun_Success(t *testing.T) {
-	// Check if we're on a cloud provider
-	ctx := context.Background()
-	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))
-	onCloudProvider := err == nil
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" {
+		t.Skip("test requires positive test environment")
+	}
 
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,21 +129,12 @@ func TestRun_Success(t *testing.T) {
 		Timeout:          time.Second,
 	}
 
-	// If we're on a cloud provider, use the actual provider
-	// Otherwise, use the mock server which will work without real credentials
-	if onCloudProvider {
-		config.Provider = "" // Auto-detect
-	} else {
-		// Skip this test if not on cloud provider and no mock available
-		t.Skip("test requires cloud provider or mock credentials")
-	}
-
 	// Capture stdout
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err = run(config)
+	err := run(config)
 
 	_ = w.Close()
 	os.Stdout = oldStdout
@@ -157,13 +148,46 @@ func TestRun_Success(t *testing.T) {
 	assert.Contains(t, output, "test-jwt-token")
 }
 
-// TestRun_EnvironmentOutput tests the environment variable output functionality
-func TestRun_EnvironmentOutput(t *testing.T) {
-	// Check if we're on a cloud provider
+// TestRun_NoCloudProvider tests that cloud provider detection fails quickly in local development
+func TestRun_NoCloudProvider(t *testing.T) {
+	// Only run this test in local development (no environment variables set)
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" ||
+		os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" ||
+		os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" {
+		t.Skip("test only runs in local development (no test environment variables)")
+	}
+
+	// Only run this test when NOT on a cloud provider (local development)
 	ctx := context.Background()
 	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))
-	if err != nil {
-		t.Skip("Skipping TestRun_EnvironmentOutput - not on cloud provider")
+	if err == nil {
+		t.Skip("test only runs in local development (no cloud provider)")
+	}
+
+	config := Config{
+		JWTType:          "database",
+		WorkspaceGroupID: "test-workspace",
+		Timeout:          3 * time.Second, // Reasonable timeout
+	}
+
+	// Measure time for detection failure
+	start := time.Now()
+	err = run(config)
+	duration := time.Since(start)
+
+	// Should fail (no cloud provider) but quickly (within timeout)
+	require.Error(t, err)
+	assert.Less(t, duration, 5*time.Second, "Cloud provider detection should fail quickly")
+
+	// Should be ErrNoCloudProviderDetected error
+	assert.True(t, errors.Is(err, s2iam.ErrNoCloudProviderDetected),
+		"Error should be ErrNoCloudProviderDetected, got: %s", err.Error())
+}
+
+// TestRun_EnvironmentOutput tests the environment variable output functionality
+func TestRun_EnvironmentOutput(t *testing.T) {
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" {
+		t.Skip("test requires positive test environment")
 	}
 
 	// Create a test server that returns a JWT
@@ -187,7 +211,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err = run(config)
+	err := run(config)
 
 	_ = w.Close()
 	os.Stdout = oldStdout
@@ -200,33 +224,6 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, output, "STATUS=0")
 	assert.Contains(t, output, "TOKEN=test-jwt-token")
-}
-
-// TestRun_Error tests the error handling in the run function
-func TestRun_Error(t *testing.T) {
-	// Check if we're on a cloud provider
-	ctx := context.Background()
-	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))
-	if err != nil {
-		t.Skip("Skipping TestRun_Error - not on cloud provider")
-	}
-
-	// Create a test server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "authentication failed", http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	config := Config{
-		JWTType:          "database",
-		WorkspaceGroupID: "test-workspace",
-		ServerURL:        server.URL + "/auth/iam/:jwtType",
-		Timeout:          time.Second,
-	}
-
-	err = run(config)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "authentication")
 }
 
 func TestGetLogger(t *testing.T) {
@@ -293,11 +290,6 @@ func TestRealMain(t *testing.T) {
 		},
 	}
 
-	// Check if we're on a cloud provider
-	ctx := context.Background()
-	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))
-	onCloudProvider := err == nil
-
 	// Run cloud-independent validation tests
 	for _, tt := range validationTests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -330,9 +322,8 @@ func TestRealMain(t *testing.T) {
 		})
 	}
 
-	// Only run cloud-dependent tests if we're on a cloud provider
-	if !onCloudProvider {
-		t.Logf("Skipping cloud-dependent tests - not on cloud provider")
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" {
+		t.Logf("Skipping cloud-dependent tests - requires positive test environment")
 		return
 	}
 

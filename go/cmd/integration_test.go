@@ -172,6 +172,11 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
+	// Skip if we're testing no-role scenario - integration tests require working JWT retrieval
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" {
+		t.Skip("skipping integration test on no-role host - requires working JWT retrieval")
+	}
+
 	// First, check if we're on a cloud provider
 	ctx := context.Background()
 	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))

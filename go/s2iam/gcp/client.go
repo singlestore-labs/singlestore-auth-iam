@@ -44,16 +44,11 @@ func (c *GCPClient) copy() *GCPClient {
 	}
 }
 
-// gcpClient is a singleton instance for GCPClient
-var gcpClient = &GCPClient{}
-
-// NewClient returns the GCP client singleton
+// NewClient returns a new GCP client instance
 func NewClient(logger models.Logger) models.CloudProviderClient {
-	gcpClient.mu.Lock()
-	defer gcpClient.mu.Unlock()
-
-	gcpClient.logger = logger
-	return gcpClient
+	return &GCPClient{
+		logger: logger,
+	}
 }
 
 // Detect tests if we are executing within GCP

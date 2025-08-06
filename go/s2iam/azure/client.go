@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/memsql/errors"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
@@ -47,16 +48,11 @@ func (c *AzureClient) copy() *AzureClient {
 	}
 }
 
-// azureClient is a singleton instance for AzureClient
-var azureClient = &AzureClient{}
-
-// NewClient returns the Azure client singleton
+// NewClient returns a new Azure client instance
 func NewClient(logger models.Logger) models.CloudProviderClient {
-	azureClient.mu.Lock()
-	defer azureClient.mu.Unlock()
-
-	azureClient.logger = logger
-	return azureClient
+	return &AzureClient{
+		logger: logger,
+	}
 }
 
 // Detect tests if we are executing within Azure and if a managed identity is available
@@ -123,29 +119,56 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		c.logger.Logf("Azure Detection - Checking for managed identity")
 	}
 
-	// Try to get a token to verify identity is available
+	// Try to get a token to verify identity is available with retry for rate limiting
 	tokenURL := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
-	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
-	if err != nil {
-		if c.logger != nil {
-			c.logger.Logf("Azure Detection - Failed to create token request: %v", err)
-		}
-		return errors.Errorf("failed to create Azure token request: %w", err)
-	}
-	tokenReq.Header.Set("Metadata", "true")
 
-	tokenResp, err := client.Do(tokenReq)
-	if err != nil {
-		if c.logger != nil {
-			c.logger.Logf("Azure Detection - Token request failed: %v", err)
-		}
-		return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: %s", err)
-	}
-	defer func() {
-		_ = tokenResp.Body.Close()
-	}()
+	// Retry loop for rate limiting (HTTP 429)
+	maxRetries := 3
+	baseDelay := 100 * time.Millisecond
 
-	if tokenResp.StatusCode != http.StatusOK {
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+		if err != nil {
+			if c.logger != nil {
+				c.logger.Logf("Azure Detection - Failed to create token request: %v", err)
+			}
+			return errors.Errorf("failed to create Azure token request: %w", err)
+		}
+		tokenReq.Header.Set("Metadata", "true")
+
+		tokenResp, err := client.Do(tokenReq)
+		if err != nil {
+			if c.logger != nil {
+				c.logger.Logf("Azure Detection - Token request failed: %v", err)
+			}
+			return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: %s", err)
+		}
+
+		defer func() {
+			_ = tokenResp.Body.Close()
+		}()
+
+		// Success case
+		if tokenResp.StatusCode == http.StatusOK {
+			break
+		}
+
+		// Rate limiting case - retry with exponential backoff
+		if tokenResp.StatusCode == 429 && attempt < maxRetries {
+			delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff: 100ms, 200ms, 400ms
+			if c.logger != nil {
+				c.logger.Logf("Azure Detection - Rate limited (429), retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries+1)
+			}
+
+			select {
+			case <-time.After(delay):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+
+		// Handle other error cases
 		bodyBytes, _ := io.ReadAll(tokenResp.Body)
 		var errorResponse struct {
 			Error            string `json:"error"`

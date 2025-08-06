@@ -23,28 +23,18 @@ type GCPVerifier struct {
 	mu               sync.RWMutex // Added for concurrency safety
 }
 
-// gcpVerifier is a singleton instance for GCPVerifier
-var gcpVerifier = &GCPVerifier{}
-
-// NewGCPVerifier creates or configures the GCP verifier
+// NewVerifier creates a new GCP verifier instance
 func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.Logger) (models.CloudProviderVerifier, error) {
-	gcpVerifier.mu.Lock()
-	defer gcpVerifier.mu.Unlock()
-
-	// Create a new validator if it doesn't exist or if contexts/configs have changed
-	if gcpVerifier.validator == nil {
-		validator, err := idtoken.NewValidator(ctx)
-		if err != nil {
-			return nil, errors.Errorf("failed to create GCP token validator: %w", err)
-		}
-		gcpVerifier.validator = validator
+	validator, err := idtoken.NewValidator(ctx)
+	if err != nil {
+		return nil, errors.Errorf("failed to create GCP token validator: %w", err)
 	}
 
-	// Update configuration
-	gcpVerifier.allowedAudiences = allowedAudiences
-	gcpVerifier.logger = logger
-
-	return gcpVerifier, nil
+	return &GCPVerifier{
+		validator:        validator,
+		allowedAudiences: allowedAudiences,
+		logger:           logger,
+	}, nil
 }
 
 // truncateString safely truncates a string to the specified length with ellipsis
