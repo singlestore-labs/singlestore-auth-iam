@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
 
@@ -196,7 +198,7 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 }
 
 // Test getting database JWT with valid provider
-func TestGetDatabaseJWT(t *testing.T) {
+func TestGetDatabaseJWT_HappyPath(t *testing.T) {
 	t.Parallel()
 	client := requireCloudRole(t)
 
@@ -207,13 +209,20 @@ func TestGetDatabaseJWT(t *testing.T) {
 	var token string
 	var err error
 
-	// Handle GCP audience compatibility for real cloud provider testing
+	// Get client-side identity for comparison
+	var clientIdentity *models.CloudIdentity
 	if client.GetType() == s2iam.ProviderGCP && (os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "") {
 		// On real GCP, explicitly use the default audience to ensure compatibility
+		_, clientIdentity, err = client.GetIdentityHeaders(ctx, map[string]string{"audience": "https://authsvc.singlestore.com"})
+		require.NoError(t, err, "Failed to get client-side identity")
+
 		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
+		_, clientIdentity, err = client.GetIdentityHeaders(ctx, nil)
+		require.NoError(t, err, "Failed to get client-side identity")
+
 		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
 	}
@@ -223,9 +232,61 @@ func TestGetDatabaseJWT(t *testing.T) {
 	assert.Equal(t, 1, flags.requestCount)
 	assert.Equal(t, "database", flags.lastJWTType)
 
-	// Verify the JWT
+	// Verify that client-side and server-side identities match
+	require.NotNil(t, clientIdentity, "Client identity should not be nil")
+	assert.Equal(t, clientIdentity.Identifier, flags.lastIdentifier,
+		"CRITICAL: Client-side identity (%s) differs from server-side identity (%s). This is a security issue!",
+		clientIdentity.Identifier, flags.lastIdentifier)
+
+	// Verify the JWT - the sub claim should contain the Identifier (human-readable identity)
 	claims := validateJWT(t, token)
-	assert.Equal(t, flags.lastIdentifier, claims["sub"])
+	assert.Equal(t, clientIdentity.Identifier, claims["sub"],
+		"CRITICAL: Client Identifier (%s) differs from JWT sub claim (%s). The JWT sub claim should match the client identifier!",
+		clientIdentity.Identifier, claims["sub"])
+
+	// The Subject is stored in the 'sub' claim of the JWT
+	subject, ok := claims["sub"].(string)
+	if !ok {
+		// Try to handle numeric account IDs (especially for GCP project IDs)
+		if numAccountID, numOk := claims["sub"].(float64); numOk {
+			subject = fmt.Sprintf("%.0f", numAccountID)
+		} else {
+			require.Fail(t, "sub claim should be a string or number, got type: %T", claims["sub"])
+		}
+	}
+	require.NotEmpty(t, subject, "sub claim (subject) should not be empty")
+
+	providerType := client.GetType()
+	switch providerType {
+	case s2iam.ProviderAWS:
+		// AWS AccountID should be in ARN format
+		awsAccountIDPattern := regexp.MustCompile(`^arn:aws:.*:.*:.*`)
+		assert.True(t, awsAccountIDPattern.MatchString(subject),
+			"AWS AccountID should be in ARN format, got: %s", subject)
+	case s2iam.ProviderGCP:
+		// For GCP: Identifier should be email, AccountID should be numeric, JWT sub should be email
+		gcpServiceAccountEmailPattern := regexp.MustCompile(`^[a-zA-Z0-9\-_]+@[a-zA-Z0-9\-_]+\.iam\.gserviceaccount\.com$`)
+		gcpServiceAccountNumericPattern := regexp.MustCompile(`^\d{10,}$`) // Numeric service account ID (at least 10 digits)
+
+		// Identifier should be email format
+		assert.True(t, gcpServiceAccountEmailPattern.MatchString(clientIdentity.Identifier),
+			"GCP Identifier should be service account email format, got: %s", clientIdentity.Identifier)
+
+		// AccountID should be numeric
+		assert.True(t, gcpServiceAccountNumericPattern.MatchString(clientIdentity.AccountID),
+			"GCP AccountID should be numeric service account ID, got: %s", clientIdentity.AccountID)
+
+		// JWT sub claim should match the email identifier (what goes into the JWT)
+		assert.Equal(t, clientIdentity.Identifier, subject,
+			"GCP JWT sub claim should contain the email identifier, got AccountID: %s, expected Identifier: %s", subject, clientIdentity.Identifier)
+	case s2iam.ProviderAzure:
+		// Azure AccountID should be subscription ID (UUID format)
+		azureSubscriptionPattern := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+		assert.True(t, azureSubscriptionPattern.MatchString(subject),
+			"Azure AccountID should be subscription ID (UUID format), got: %s", subject)
+	default:
+		t.Fatalf("Unknown provider type: %v", providerType)
+	}
 }
 
 // Test getting API JWT
@@ -376,7 +437,7 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 }
 
 // Test with AssumeRole
-func TestGetDatabaseJWT_AssumeRole(t *testing.T) {
+func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	// Cannot use t.Parallel() - depends on S2IAM_TEST_ASSUME_ROLE environment variable
 	// Check for the required environment variable
 	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")

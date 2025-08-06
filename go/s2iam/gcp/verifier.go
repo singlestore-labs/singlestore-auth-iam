@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -28,6 +28,10 @@ func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.L
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP token validator: %w", err)
+	}
+
+	if len(allowedAudiences) == 0 {
+		return nil, errors.Errorf("at least one allowed audience must be specified")
 	}
 
 	return &GCPVerifier{
@@ -192,83 +196,80 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		logger.Logf("DEBUG: Token audience: %s", payload.Audience)
 	}
 
-	// Extract the identity information from the token payload
+	// Extract the identity information using the shared function
 	if logger != nil {
-		logger.Logf("DEBUG: Extracting identifiers from token")
+		logger.Logf("DEBUG: Extracting identity from token using shared function")
 	}
 
-	projectID, instanceID, serviceAccount, zone, err := v.extractIdentifiers(payload)
-	if err != nil {
-		if logger != nil {
-			logger.Logf("DEBUG: Failed to extract identifiers from token: %v", err)
-		}
-		return nil, err
+	return extractGCPIdentityFromToken(ctx, payload, logger)
+}
+
+// extractGCPIdentityFromToken extracts identity information from a GCP ID token payload
+// This function is shared between client and verifier to ensure consistent identity extraction
+// Based on actual GCP instance identity token structure. The sub field is always present.
+// Optional fields like google.compute_engine are only present for specific service types.
+func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, logger models.Logger) (*models.CloudIdentity, error) {
+	// Get the numeric service account ID from sub - this is always the AccountID
+	sub, ok := payload.Claims["sub"].(string)
+	if !ok || sub == "" {
+		return nil, errors.Errorf("no subject claim found in GCP token")
 	}
 
-	// Log the extracted identifiers
-	if logger != nil {
-		logger.Logf("DEBUG: Successfully extracted identifiers:")
-		logger.Logf("DEBUG:   projectID: %s", projectID)
-		logger.Logf("DEBUG:   instanceID: %s", instanceID)
-		logger.Logf("DEBUG:   serviceAccount: %s", serviceAccount)
-		logger.Logf("DEBUG:   zone: %s", zone)
-	}
-
-	// Determine the primary identifier for this identity
-	identifier := ""
-
-	// Prefer using subject as identifier if present
-	if sub, ok := payload.Claims["sub"].(string); ok && sub != "" {
-		identifier = sub
-		if logger != nil {
-			logger.Logf("DEBUG: Using subject claim as primary identifier: %s", identifier)
-		}
-	} else if serviceAccount != "" {
-		// Fall back to service account email if no subject
-		identifier = serviceAccount
-		if logger != nil {
-			logger.Logf("DEBUG: Using service account email as primary identifier: %s", identifier)
-		}
-	} else {
-		// Construct a basic identifier using available information
-		identifier = fmt.Sprintf("projects/%s/instances/%s", projectID, instanceID)
-		if logger != nil {
-			logger.Logf("DEBUG: Using constructed identifier: %s", identifier)
-		}
-	}
-
-	resourceType := "instance"
-	if serviceAccount != "" {
-		if strings.Contains(serviceAccount, "cloud-function") {
-			resourceType = "function"
+	// Determine the primary identifier - prefer verified email if available, fallback to sub
+	identifier := sub // Default to numeric ID
+	if email, ok := payload.Claims["email"].(string); ok && email != "" {
+		if emailVerified, ok := payload.Claims["email_verified"].(bool); ok && emailVerified {
+			identifier = email
 			if logger != nil {
-				logger.Logf("DEBUG: Detected resource type: function")
-			}
-		} else if strings.Contains(serviceAccount, "app-engine") {
-			resourceType = "appengine"
-			if logger != nil {
-				logger.Logf("DEBUG: Detected resource type: appengine")
+				logger.Logf("DEBUG: Using verified email claim as identifier: %s", identifier)
 			}
 		} else {
 			if logger != nil {
-				logger.Logf("DEBUG: Using default resource type: instance")
+				logger.Logf("DEBUG: Email present but not verified, using subject: %s", sub)
 			}
+		}
+	} else {
+		if logger != nil {
+			logger.Logf("DEBUG: Using subject claim as identifier: %s", sub)
 		}
 	}
 
+	// Extract region and resource type from google section if available
 	region := ""
-	if zone != "" {
-		// Extract region from zone (e.g., us-central1-a -> us-central1)
-		parts := strings.Split(zone, "-")
-		if len(parts) >= 3 {
-			region = strings.Join(parts[:len(parts)-1], "-")
-			if logger != nil {
-				logger.Logf("DEBUG: Extracted region from zone: %s", region)
+	resourceType := "instance" // Default
+	if google, ok := payload.Claims["google"].(map[string]interface{}); ok {
+		// Extract all keys from google section, sort them, and take the first
+		var keys []string
+		for key := range google {
+			keys = append(keys, key)
+		}
+		if len(keys) > 0 {
+			// Sort keys and take the first one as resource type
+			sort.Strings(keys)
+			resourceType = keys[0]
+
+			// Try to extract region if this is compute_engine
+			if resourceType == "compute_engine" {
+				if computeEngine, ok := google["compute_engine"].(map[string]interface{}); ok {
+					if zone, ok := computeEngine["zone"].(string); ok && zone != "" {
+						// Extract region from zone (e.g., us-east4-c -> us-east4)
+						parts := strings.Split(zone, "-")
+						if len(parts) >= 3 {
+							region = strings.Join(parts[:len(parts)-1], "-")
+						}
+						if logger != nil {
+							logger.Logf("DEBUG: Extracted region from zone: %s -> %s", zone, region)
+						}
+					}
+				}
 			}
+		}
+		if logger != nil {
+			logger.Logf("DEBUG: Detected resource type: %s (from keys: %v)", resourceType, keys)
 		}
 	}
 
-	// Prepare additional claims
+	// Prepare additional claims - include all string claims for debugging/metadata
 	additionalClaims := make(map[string]string)
 	for k, v := range payload.Claims {
 		if str, ok := v.(string); ok {
@@ -276,444 +277,12 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		}
 	}
 
-	if logger != nil {
-		logger.Logf("DEBUG: Successfully verified GCP identity: %s", identifier)
-		logger.Logf("DEBUG: Returning CloudIdentity with Provider=%s, Identifier=%s, AccountID=%s, Region=%s, ResourceType=%s",
-			models.ProviderGCP, identifier, projectID, region, resourceType)
-	}
-
 	return &models.CloudIdentity{
 		Provider:         models.ProviderGCP,
 		Identifier:       identifier,
-		AccountID:        projectID,
-		Region:           region,
-		ResourceType:     resourceType,
+		AccountID:        sub,
+		Region:           region,       // May be empty for non-Compute Engine services
+		ResourceType:     resourceType, // Determined from google section
 		AdditionalClaims: additionalClaims,
 	}, nil
-}
-
-// extractIdentifiers extracts identity information from the token payload
-// Instead of requiring a specific project ID format, we use available claims
-// to create a unique, stable identifier for the authenticated entity
-func (v *GCPVerifier) extractIdentifiers(payload *idtoken.Payload) (projectID, instanceID, serviceAccount, zone string, err error) {
-	// Always log claims, regardless of log level
-	if v.logger != nil {
-		v.logger.Logf("DEBUG: Token payload claims in extractIdentifiers:")
-		for k, val := range payload.Claims {
-			v.logger.Logf("DEBUG:   %s: %v (type: %T)", k, val, val)
-		}
-		v.logger.Logf("DEBUG: Standard JWT fields:")
-		v.logger.Logf("DEBUG:   Issuer: %s", payload.Issuer)
-		v.logger.Logf("DEBUG:   Subject: %s", payload.Subject)
-		v.logger.Logf("DEBUG:   Audience: %s", payload.Audience)
-		v.logger.Logf("DEBUG:   Expiration: %v", payload.Expires)
-		v.logger.Logf("DEBUG:   IssuedAt: %v", payload.IssuedAt)
-	}
-
-	// First try to get a project ID using our existing methods
-	if v.logger != nil {
-		v.logger.Logf("DEBUG: Attempting to extract project ID from token claims")
-	}
-
-	projectID = tryExtractProjectID(payload, v.logger)
-
-	if v.logger != nil {
-		if projectID == "" {
-			v.logger.Logf("DEBUG: No project ID extracted from token claims")
-		} else {
-			v.logger.Logf("DEBUG: Successfully extracted project ID: %s", projectID)
-		}
-	}
-
-	// If no project ID found but we have a subject claim, use it to derive a stable identifier
-	// This allows us to work with tokens that don't contain explicit project IDs
-	if projectID == "" {
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: No project ID found, checking for subject/email for identification")
-		}
-
-		sub, hasSub := payload.Claims["sub"].(string)
-		email, hasEmail := payload.Claims["email"].(string)
-
-		if hasSub {
-			v.logger.Logf("DEBUG: Found subject claim: %s", sub)
-		} else {
-			v.logger.Logf("DEBUG: No subject claim found")
-		}
-
-		if hasEmail {
-			v.logger.Logf("DEBUG: Found email claim: %s", email)
-		} else {
-			v.logger.Logf("DEBUG: No email claim found")
-		}
-
-		// If we have a subject or email, we can proceed
-		if hasSub || hasEmail {
-			if v.logger != nil {
-				v.logger.Logf("DEBUG: Using subject/email for identification")
-			}
-
-			// Create a stable derived identifier based on available claims
-			// For account ID, we'll use the first part of the email if available
-			if hasEmail && strings.Contains(email, "@") {
-				v.logger.Logf("DEBUG: Trying to extract project ID from email: %s", email)
-
-				parts := strings.Split(email, "@")
-				if len(parts) > 1 && strings.Contains(parts[1], ".") {
-					v.logger.Logf("DEBUG: Email parsed into: %s @ %s", parts[0], parts[1])
-
-					// Try to extract project info from email domain
-					if strings.Contains(parts[1], ".iam.gserviceaccount.com") {
-						v.logger.Logf("DEBUG: Email looks like service account email")
-						domainParts := strings.Split(parts[1], ".")
-						v.logger.Logf("DEBUG: Domain parts: %v", domainParts)
-
-						if len(domainParts) > 0 {
-							projectID = domainParts[0]
-							v.logger.Logf("DEBUG: Extracted project ID from service account email: %s", projectID)
-						}
-					} else if strings.HasSuffix(parts[0], "-compute") &&
-						strings.HasPrefix(parts[1], "developer.gserviceaccount.com") {
-						// Format: PROJECT_NUMBER-compute@developer.gserviceaccount.com
-						v.logger.Logf("DEBUG: Email looks like compute service account")
-						projectNum := strings.TrimSuffix(parts[0], "-compute")
-						if projectNum != "" {
-							projectID = projectNum
-							v.logger.Logf("DEBUG: Extracted project ID from compute email: %s", projectID)
-						}
-					} else {
-						v.logger.Logf("DEBUG: Email format doesn't match known service account patterns")
-					}
-				}
-			}
-
-			// If we still don't have a project ID but have a subject,
-			// try to extract from the subject string directly
-			if projectID == "" && hasSub {
-				v.logger.Logf("DEBUG: Trying to extract project ID from subject: %s", sub)
-				projectID = extractProjectFromSub(sub, v.logger)
-
-				if projectID == "" {
-					// Last resort: Use subject as identifier but error
-					v.logger.Logf("DEBUG ERROR: Could not extract project ID from subject")
-					return "", "", "", "", errors.Errorf("project identifier not found in GCP token")
-				}
-			}
-		} else {
-			// No subject or email means we don't have any way to identify the entity
-			if v.logger != nil {
-				v.logger.Logf("DEBUG ERROR: No identifying information found in GCP token claims")
-			}
-			return "", "", "", "", errors.Errorf("no identifying information found in GCP token")
-		}
-	}
-
-	// Extract the instance ID
-	if val, ok := payload.Claims["google/compute_engine/instance_id"].(string); ok {
-		instanceID = val
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Found instance ID: %s", instanceID)
-		}
-	} else {
-		// For non-GCE resources, generate a placeholder
-		instanceID = "non-gce-resource"
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: No instance ID found, using placeholder: %s", instanceID)
-		}
-	}
-
-	// Extract service account email
-	if val, ok := payload.Claims["email"].(string); ok {
-		serviceAccount = val
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Found service account email: %s", serviceAccount)
-		}
-	} else {
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: No service account email found")
-		}
-	}
-
-	// Extract zone if present
-	if val, ok := payload.Claims["google/compute_engine/zone"].(string); ok {
-		zone = val
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Found zone: %s", zone)
-		}
-	} else {
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: No zone information found")
-		}
-	}
-
-	// Use subject as the primary component of our identifier if present
-	sub, hasSub := payload.Claims["sub"].(string)
-	identifier := ""
-
-	if hasSub {
-		// Use the full subject as the identifier base
-		identifier = sub
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Using subject as primary identifier: %s", identifier)
-		}
-	} else if serviceAccount != "" {
-		// Fall back to service account email if no subject
-		identifier = serviceAccount
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Using service account as primary identifier: %s", identifier)
-		}
-	} else {
-		// If neither is available, construct a basic identifier
-		identifier = "projects/" + projectID + "/instances/" + instanceID
-		if v.logger != nil {
-			v.logger.Logf("DEBUG: Constructed identifier: %s", identifier)
-		}
-	}
-
-	if v.logger != nil {
-		v.logger.Logf("DEBUG: Final extracted values:")
-		v.logger.Logf("DEBUG:   identifier: %s", identifier)
-		v.logger.Logf("DEBUG:   projectID: %s", projectID)
-		v.logger.Logf("DEBUG:   instanceID: %s", instanceID)
-		v.logger.Logf("DEBUG:   serviceAccount: %s", serviceAccount)
-		v.logger.Logf("DEBUG:   zone: %s", zone)
-	}
-
-	return projectID, instanceID, serviceAccount, zone, nil
-}
-
-// tryExtractProjectID attempts to extract project ID from various token claims
-func tryExtractProjectID(payload *idtoken.Payload, logger models.Logger) string {
-	// Try multiple approaches to extract project ID from token claims
-	if logger != nil {
-		logger.Logf("DEBUG: tryExtractProjectID starting")
-	}
-
-	// Standard GCP metadata claims
-	if val, ok := payload.Claims["google/compute_engine/project_number"].(string); ok {
-		if logger != nil {
-			logger.Logf("DEBUG: Found project number in google/compute_engine/project_number: %s", val)
-		}
-		return val
-	} else if logger != nil {
-		logger.Logf("DEBUG: No google/compute_engine/project_number claim found")
-	}
-
-	if val, ok := payload.Claims["project_id"].(string); ok {
-		if logger != nil {
-			logger.Logf("DEBUG: Found project_id claim: %s", val)
-		}
-		return val
-	} else if logger != nil {
-		logger.Logf("DEBUG: No project_id claim found")
-	}
-
-	// Check for the 'azp' (authorized party) claim which sometimes contains project info
-	if val, ok := payload.Claims["azp"].(string); ok {
-		if logger != nil {
-			logger.Logf("DEBUG: Found azp claim: %s", val)
-		}
-
-		// For service accounts, azp is often in the format:
-		// [PROJECT_NUMBER]-compute@developer.gserviceaccount.com
-		if parts := strings.Split(val, "-"); len(parts) > 1 && strings.HasSuffix(parts[1], "compute") {
-			if logger != nil {
-				logger.Logf("DEBUG: azp claim looks like compute service account")
-				logger.Logf("DEBUG: azp parts: %v", parts)
-				logger.Logf("DEBUG: Extracted project from azp: %s", parts[0])
-			}
-			return parts[0]
-		} else if logger != nil {
-			logger.Logf("DEBUG: azp claim doesn't match expected pattern")
-		}
-	} else if logger != nil {
-		logger.Logf("DEBUG: No azp claim found")
-	}
-
-	// Try subject claim for project info
-	if val, ok := payload.Claims["sub"].(string); ok {
-		if logger != nil {
-			logger.Logf("DEBUG: Found sub claim: %s", val)
-		}
-
-		projectID := extractProjectFromSub(val, logger)
-		if projectID != "" {
-			if logger != nil {
-				logger.Logf("DEBUG: Extracted project from sub: %s", projectID)
-			}
-			return projectID
-		} else if logger != nil {
-			logger.Logf("DEBUG: Could not extract project from sub")
-		}
-	} else if logger != nil {
-		logger.Logf("DEBUG: No sub claim found")
-	}
-
-	// Try email claim for service accounts
-	if val, ok := payload.Claims["email"].(string); ok && strings.Contains(val, "@") {
-		if logger != nil {
-			logger.Logf("DEBUG: Found email claim: %s", val)
-		}
-
-		parts := strings.Split(val, "@")
-		if len(parts) > 1 && strings.Contains(parts[1], ".") {
-			if logger != nil {
-				logger.Logf("DEBUG: Email parts: %s @ %s", parts[0], parts[1])
-			}
-
-			// Service account emails can be:
-			// [NAME]@[PROJECT_ID].iam.gserviceaccount.com
-			// or
-			// [PROJECT_NUMBER]-compute@developer.gserviceaccount.com
-
-			// Check for the second format first
-			if strings.HasSuffix(parts[0], "-compute") && strings.HasPrefix(parts[1], "developer.gserviceaccount.com") {
-				projectNum := strings.TrimSuffix(parts[0], "-compute")
-				if logger != nil {
-					logger.Logf("DEBUG: Email matches compute service account pattern")
-					logger.Logf("DEBUG: Extracted project from email: %s", projectNum)
-				}
-				return projectNum
-			} else if logger != nil {
-				logger.Logf("DEBUG: Email doesn't match compute service account pattern")
-			}
-
-			// Check for the first format
-			if strings.Contains(parts[1], ".iam.gserviceaccount.com") {
-				projectParts := strings.Split(parts[1], ".")
-				if len(projectParts) > 0 {
-					if logger != nil {
-						logger.Logf("DEBUG: Email matches service account pattern")
-						logger.Logf("DEBUG: Domain parts: %v", projectParts)
-						logger.Logf("DEBUG: Extracted project from email domain: %s", projectParts[0])
-					}
-					return projectParts[0]
-				}
-			} else if logger != nil {
-				logger.Logf("DEBUG: Email doesn't match service account pattern")
-			}
-		}
-	} else if logger != nil {
-		logger.Logf("DEBUG: No email claim found or doesn't contain @")
-	}
-
-	// Try audience claim as a last resort
-	if val, ok := payload.Claims["aud"].(string); ok {
-		if logger != nil {
-			logger.Logf("DEBUG: Found aud claim: %s", val)
-		}
-
-		projectID := extractProjectFromSub(val, logger)
-		if projectID != "" {
-			if logger != nil {
-				logger.Logf("DEBUG: Extracted project from aud: %s", projectID)
-			}
-			return projectID
-		} else if logger != nil {
-			logger.Logf("DEBUG: Could not extract project from aud")
-		}
-	} else if logger != nil {
-		logger.Logf("DEBUG: No aud claim found")
-	}
-
-	if logger != nil {
-		logger.Logf("DEBUG: Failed to extract project ID from any claim")
-	}
-	return ""
-}
-
-// extractProjectFromSub tries to extract project ID from a subject string
-func extractProjectFromSub(sub string, logger models.Logger) string {
-	if logger != nil {
-		logger.Logf("DEBUG: extractProjectFromSub analyzing: %s", sub)
-	}
-
-	// Check for 'projects/' pattern
-	if strings.Contains(sub, "projects/") {
-		if logger != nil {
-			logger.Logf("DEBUG: Subject contains 'projects/'")
-		}
-
-		parts := strings.Split(sub, "/")
-		if logger != nil {
-			logger.Logf("DEBUG: Subject parts: %v", parts)
-		}
-
-		for i, part := range parts {
-			if part == "projects" && i+1 < len(parts) {
-				if logger != nil {
-					logger.Logf("DEBUG: Found 'projects' at index %d, next part is: %s", i, parts[i+1])
-				}
-				return parts[i+1]
-			}
-		}
-
-		if logger != nil {
-			logger.Logf("DEBUG: Could not find 'projects' followed by project ID")
-		}
-	} else if logger != nil {
-		logger.Logf("DEBUG: Subject does not contain 'projects/'")
-	}
-
-	// Check for 'accounts/' pattern
-	accountTypes := []string{"accounts", "service-accounts", "serviceAccounts"}
-	for _, accType := range accountTypes {
-		searchTerm := accType + "/"
-		if strings.Contains(sub, searchTerm) {
-			if logger != nil {
-				logger.Logf("DEBUG: Subject contains '%s'", searchTerm)
-			}
-
-			parts := strings.Split(sub, "/")
-			if logger != nil {
-				logger.Logf("DEBUG: Subject parts: %v", parts)
-			}
-
-			for i, part := range parts {
-				if part == accType && i+1 < len(parts) {
-					if logger != nil {
-						logger.Logf("DEBUG: Found '%s' at index %d, next part is: %s", accType, i, parts[i+1])
-					}
-					return parts[i+1]
-				}
-			}
-
-			if logger != nil {
-				logger.Logf("DEBUG: Could not find '%s' followed by project ID", accType)
-			}
-		} else if logger != nil {
-			logger.Logf("DEBUG: Subject does not contain '%s'", searchTerm)
-		}
-	}
-
-	// Check for numeric-only project IDs
-	// Project numbers in GCP are typically large numbers
-	if logger != nil {
-		logger.Logf("DEBUG: Checking for numeric project IDs")
-	}
-
-	for _, part := range strings.Split(sub, "/") {
-		// If we find a part that looks like a project number (all digits, at least 6 digits)
-		if len(part) >= 6 && isAllDigits(part) {
-			if logger != nil {
-				logger.Logf("DEBUG: Found numeric project ID candidate: %s", part)
-			}
-			return part
-		}
-	}
-
-	if logger != nil {
-		logger.Logf("DEBUG: Could not extract project ID from subject")
-	}
-	return ""
-}
-
-// isAllDigits checks if a string contains only digits
-func isAllDigits(s string) bool {
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return len(s) > 0 // Make sure it's not empty
 }
