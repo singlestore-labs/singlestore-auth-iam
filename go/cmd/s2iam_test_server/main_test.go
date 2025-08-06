@@ -248,7 +248,7 @@ func TestServer_JWTVerification(t *testing.T) {
 	}
 
 	// Create a JWT
-	jwtToken, err := srv.createJWT(identity, "database")
+	token, err := srv.createJWT(identity, "database")
 	require.NoError(t, err, "Should be able to create a JWT")
 
 	// Get the public key
@@ -266,7 +266,7 @@ func TestServer_JWTVerification(t *testing.T) {
 	require.NoError(t, err, "Should be able to parse the public key")
 
 	// Parse and verify the JWT
-	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+	parsedToken, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
 		// Verify the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -275,10 +275,10 @@ func TestServer_JWTVerification(t *testing.T) {
 	})
 
 	require.NoError(t, err, "Should be able to verify the JWT")
-	assert.True(t, token.Valid, "JWT should be valid")
+	assert.True(t, parsedToken.Valid, "JWT should be valid")
 
 	// Verify claims
-	claims, ok := token.Claims.(jwt.MapClaims)
+	claims, ok := parsedToken.Claims.(jwt.MapClaims)
 	require.True(t, ok, "Should be able to extract claims")
 	assert.Equal(t, identity.Identifier, claims["sub"])
 	assert.Equal(t, "aws", claims["provider"])

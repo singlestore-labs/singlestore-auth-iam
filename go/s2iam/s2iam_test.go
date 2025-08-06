@@ -204,27 +204,27 @@ func TestGetDatabaseJWT(t *testing.T) {
 	fakeServer := startFakeServer(t, flags)
 
 	ctx := context.Background()
-	var jwtToken string
+	var token string
 	var err error
 
 	// Handle GCP audience compatibility for real cloud provider testing
 	if client.GetType() == s2iam.ProviderGCP && (os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "") {
 		// On real GCP, explicitly use the default audience to ensure compatibility
-		jwtToken, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
-		jwtToken, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
 	}
 
 	require.NoError(t, err)
-	require.NotEmpty(t, jwtToken)
+	require.NotEmpty(t, token)
 	assert.Equal(t, 1, flags.requestCount)
 	assert.Equal(t, "database", flags.lastJWTType)
 
 	// Verify the JWT
-	claims := validateJWT(t, jwtToken)
+	claims := validateJWT(t, token)
 	assert.Equal(t, flags.lastIdentifier, claims["sub"])
 }
 
@@ -237,27 +237,27 @@ func TestGetAPIJWT(t *testing.T) {
 	fakeServer := startFakeServer(t, flags)
 
 	ctx := context.Background()
-	var jwtToken string
+	var token string
 	var err error
 
 	// Handle GCP audience compatibility for real cloud provider testing
 	if client.GetType() == s2iam.ProviderGCP && (os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "") {
 		// On real GCP, explicitly use the default audience to ensure compatibility
-		jwtToken, err = s2iam.GetAPIJWT(ctx,
+		token, err = s2iam.GetAPIJWT(ctx,
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
-		jwtToken, err = s2iam.GetAPIJWT(ctx,
+		token, err = s2iam.GetAPIJWT(ctx,
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
 	}
 
 	require.NoError(t, err)
-	require.NotEmpty(t, jwtToken)
+	require.NotEmpty(t, token)
 	assert.Equal(t, 1, flags.requestCount)
 	assert.Equal(t, "api", flags.lastJWTType)
 
 	// Verify the JWT
-	claims := validateJWT(t, jwtToken)
+	claims := validateJWT(t, token)
 	assert.Equal(t, flags.lastIdentifier, claims["sub"])
 }
 
@@ -353,11 +353,11 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 		fakeServer := startFakeServer(t, flags)
 
 		ctx := context.Background()
-		jwtToken, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+		token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
 			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 		require.NoError(t, err)
-		require.NotEmpty(t, jwtToken)
+		require.NotEmpty(t, token)
 		t.Log("Successfully got JWT with GCP audience option on real cloud provider")
 		return
 	}
@@ -367,12 +367,12 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 	fakeServer := startFakeServer(t, flags)
 
 	ctx := context.Background()
-	jwtToken, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+	token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
 		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
 		s2iam.WithGCPAudience("https://test.example.com"))
 
 	require.NoError(t, err)
-	require.NotEmpty(t, jwtToken)
+	require.NotEmpty(t, token)
 }
 
 // Test with AssumeRole
@@ -813,14 +813,14 @@ func TestGetDatabaseJWT_ProductionServer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jwtToken, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+	token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
 		s2iam.WithServerURL("https://authsvc.singlestore.com/auth/iam/:jwtType"))
 
 	require.NoError(t, err)
-	require.NotEmpty(t, jwtToken)
+	require.NotEmpty(t, token)
 
 	// Validate the JWT signature using the production server's JWKS
-	err = validateJWTWithProductionJWKS(t, jwtToken)
+	err = validateJWTWithProductionJWKS(t, token)
 	require.NoError(t, err, "JWT signature validation should succeed")
 
 	t.Log("Successfully got and validated JWT from production server")
