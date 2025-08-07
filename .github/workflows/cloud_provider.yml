@@ -23,6 +23,9 @@ jobs:
         # sudo apt update
         # sudo snap install go --classic
         # sudo apt install -y python3 python3-pip python3-venv
+        # sudo apt install -y python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography
+	# sudo apt install -y python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests 
+	# sudo apt install -y python3-azure-identity python3-google-auth-oauthlib
         #
         # AWS EC2 setup:
         # sudo snap install aws-cli --classic
@@ -126,14 +129,24 @@ jobs:
           set -ex
           cd tests/${{ env.UNIQUE_DIR }}/python
           
-          # Install Python 3 if not available
+          # Install Python 3 and dependencies if not available
           if ! command -v python3 &> /dev/null; then
             sudo apt update
             sudo apt install -y python3 python3-pip python3-venv
           fi
           
+          # Install Python dependencies for s2iam library
+          sudo apt install -y python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests python3-azure-identity python3-google-auth-oauthlib || true
+          
           # Run Python tests with coverage using our automated validation framework
-          env ${{ env.EXTRA_ENV }} S2IAM_DEBUGGING=true ./tests/run_cloud_validation.sh --coverage
+          env USE_SYSTEM_PACKAGES=1 ${{ env.EXTRA_ENV }} S2IAM_DEBUGGING=true ./tests/run_cloud_validation.sh --coverage
+          
+          # Verify test completion
+          echo "Checking for test completion marker..."
+          if [ ! -f "coverage.xml" ]; then
+            echo "ERROR: Coverage file not generated - tests may have failed"
+            exit 1
+          fi
           
           # Verify coverage file was generated
           ls -la coverage.xml

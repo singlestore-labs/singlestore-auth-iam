@@ -47,6 +47,22 @@ setup_environment() {
     
     cd "$PYTHON_DIR"
     
+    # Check if we should use system packages (when USE_SYSTEM_PACKAGES=1)
+    if [ "${USE_SYSTEM_PACKAGES:-0}" = "1" ]; then
+        print_status "Using system packages (skipping virtual environment creation)"
+        
+        # Check if required system packages are available
+        if python3 -c "import aiohttp, pytest" 2>/dev/null; then
+            print_success "System packages available - using system Python environment"
+            # Still need to install our package in development mode
+            python3 -m pip install -e . --user --break-system-packages 2>/dev/null || python3 -m pip install -e . --user
+            print_success "Environment setup complete (using system packages)"
+            return 0
+        else
+            print_warning "Required system packages not available, falling back to virtual environment"
+        fi
+    fi
+    
     # Create virtual environment if it doesn't exist
     if [ ! -d ".venv" ]; then
         print_status "Creating virtual environment..."
@@ -71,10 +87,14 @@ run_tests() {
     local test_mode="$1"
     
     cd "$PYTHON_DIR"
-    source .venv/bin/activate
     
-    # Base pytest command
-    local pytest_cmd="pytest -v"
+    # Only activate virtual environment if we're not using system packages
+    if [ "${USE_SYSTEM_PACKAGES:-0}" != "1" ]; then
+        source .venv/bin/activate
+    fi
+    
+    # Base pytest command with fail-fast option
+    local pytest_cmd="pytest -v --maxfail=1"
     
     # Add coverage if requested
     if [[ "$test_mode" == "coverage" ]]; then
@@ -105,7 +125,11 @@ run_tests() {
 # Function to run quick validation
 run_quick_validation() {
     cd "$PYTHON_DIR"
-    source .venv/bin/activate
+    
+    # Only activate virtual environment if not using system packages
+    if [ "${USE_SYSTEM_PACKAGES:-0}" != "1" ]; then
+        source .venv/bin/activate
+    fi
     
     print_status "Running quick validation tests..."
     

@@ -12,7 +12,7 @@ from .models import (
     Logger,
 )
 
-DEFAULT_SERVER_URL = "https://auth.singlestore.com/auth/iam/{jwt_type}"
+DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
 
 
 async def get_jwt(
@@ -130,7 +130,7 @@ async def get_jwt_token(*args, **kwargs) -> str:
 # Convenience functions for specific JWT types
 async def get_jwt_database(
     workspace_group_id: Optional[str] = None,
-    server_url: str = "https://auth.singlestore.com/auth/iam/database",
+    server_url: str = "https://authsvc.singlestore.com/auth/iam/database",
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -169,7 +169,7 @@ async def get_jwt_database(
 
 async def get_jwt_api(
     workspace_group_id: Optional[str] = None,
-    server_url: str = "https://auth.singlestore.com/auth/iam/api",
+    server_url: str = "https://authsvc.singlestore.com/auth/iam/api",
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,

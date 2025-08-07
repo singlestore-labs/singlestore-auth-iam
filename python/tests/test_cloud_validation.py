@@ -10,6 +10,7 @@ import s2iam
 from s2iam import CloudProviderType, JWTType
 
 from .test_server_utils import GoTestServerManager
+from .testhelp import expect_cloud_provider_detected, require_cloud_role
 
 
 @pytest.fixture(scope="session")
@@ -29,38 +30,40 @@ class TestCloudProviderValidation:
     @pytest.mark.integration
     async def test_provider_detection_and_identity(self):
         """Test that we can detect the current cloud provider and get identity."""
-        try:
-            provider = await s2iam.detect_provider(timeout=10.0)
-            assert provider is not None
-            assert provider.get_type() in [
-                CloudProviderType.AWS,
-                CloudProviderType.GCP,
-                CloudProviderType.AZURE,
-            ]
+        # Use helper function that matches Go testhelp.ExpectCloudProviderDetected
+        provider = await expect_cloud_provider_detected(timeout=10.0)
+        
+        assert provider is not None
+        assert provider.get_type() in [
+            CloudProviderType.AWS,
+            CloudProviderType.GCP,
+            CloudProviderType.AZURE,
+        ]
 
-            # Test identity headers
+        print(f"✓ Detected provider: {provider.get_type()}")
+
+        # Test identity headers - but handle no-role environments
+        import os
+        if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE"):
+            # In no-role environments, getting identity headers should fail
+            with pytest.raises(s2iam.ProviderIdentityUnavailable):
+                headers, identity = await provider.get_identity_headers()
+            print(f"✓ Identity headers correctly failed in no-role environment")
+        else:
+            # In normal environments, identity headers should work
             headers, identity = await provider.get_identity_headers()
             assert headers is not None
             assert identity is not None
             assert identity.provider == provider.get_type()
             assert identity.identifier is not None
-
-            print(f"✓ Detected provider: {provider.get_type()}")
             print(f"✓ Identity: {identity.identifier}")
-
-        except s2iam.CloudProviderNotFound:
-            # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
-                "S2IAM_TEST_ASSUME_ROLE"
-            ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
-            pytest.skip("No cloud provider detected - not running in cloud environment")
 
     @pytest.mark.integration
     async def test_jwt_retrieval_with_test_server(self, test_server):
         """Test JWT retrieval using only public convenience functions with the Go test server."""
+        # Use require_cloud_role which skips in no-role environments (matches Go requireCloudRole)
+        provider = await require_cloud_role(timeout=10.0)
+        
         try:
             # Test database JWT using convenience function
             database_jwt = await s2iam.get_jwt_database(
@@ -88,7 +91,7 @@ class TestCloudProviderValidation:
             print(f"✓ API JWT length: {len(api_jwt)}")
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
@@ -99,6 +102,11 @@ class TestCloudProviderValidation:
     @pytest.mark.integration
     async def test_convenience_functions_with_test_server(self, test_server):
         """Test the convenience functions with the test server."""
+        from tests.testhelp import require_cloud_role
+        
+        # This test requires cloud role - skip if in no-role environment
+        await require_cloud_role()
+        
         try:
             # Test database convenience function
             database_jwt = await s2iam.get_jwt_database(
@@ -134,7 +142,7 @@ class TestCloudProviderValidation:
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
@@ -150,8 +158,11 @@ class TestProviderSpecificValidation:
     @pytest.mark.aws
     async def test_aws_specific_functionality(self, test_server):
         """Test AWS-specific functionality if running on AWS."""
+        from tests.testhelp import require_cloud_role
+        
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            # This test requires cloud role - skip if in no-role environment
+            provider = await require_cloud_role(timeout=10.0)
 
             if provider.get_type() != CloudProviderType.AWS:
                 pytest.skip("Not running on AWS")
@@ -179,7 +190,7 @@ class TestProviderSpecificValidation:
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
@@ -191,8 +202,11 @@ class TestProviderSpecificValidation:
     @pytest.mark.gcp
     async def test_gcp_specific_functionality(self, test_server):
         """Test GCP-specific functionality if running on GCP."""
+        from tests.testhelp import require_cloud_role
+        
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            # This test requires cloud role - skip if in no-role environment
+            provider = await require_cloud_role(timeout=10.0)
 
             if provider.get_type() != CloudProviderType.GCP:
                 pytest.skip("Not running on GCP")
@@ -220,7 +234,7 @@ class TestProviderSpecificValidation:
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
@@ -232,8 +246,11 @@ class TestProviderSpecificValidation:
     @pytest.mark.azure
     async def test_azure_specific_functionality(self, test_server):
         """Test Azure-specific functionality if running on Azure."""
+        from tests.testhelp import require_cloud_role
+        
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            # This test requires cloud role - skip if in no-role environment
+            provider = await require_cloud_role(timeout=10.0)
 
             if provider.get_type() != CloudProviderType.AZURE:
                 pytest.skip("Not running on Azure")
@@ -261,7 +278,7 @@ class TestProviderSpecificValidation:
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
@@ -308,7 +325,7 @@ class TestErrorHandlingValidation:
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
-            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get(
+            if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER") or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") or os.environ.get(
                 "S2IAM_TEST_ASSUME_ROLE"
             ):
                 pytest.fail(
