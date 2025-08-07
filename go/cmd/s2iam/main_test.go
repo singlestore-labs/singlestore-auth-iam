@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,6 +111,7 @@ func TestParseFlags(t *testing.T) {
 }
 
 func TestRun_Success(t *testing.T) {
+	_ = testhelp.RequireCloudRole(t)
 	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" {
 		t.Skip("test requires positive test environment")
 	}
@@ -186,9 +188,7 @@ func TestRun_NoCloudProvider(t *testing.T) {
 
 // TestRun_EnvironmentOutput tests the environment variable output functionality
 func TestRun_EnvironmentOutput(t *testing.T) {
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" {
-		t.Skip("test requires positive test environment")
-	}
+	_ = testhelp.RequireCloudRole(t)
 
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

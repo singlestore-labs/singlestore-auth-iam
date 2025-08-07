@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
@@ -38,23 +39,13 @@ var privateKey, publicKey = func() (*rsa.PrivateKey, *rsa.PublicKey) {
 // Helper function to detect cloud provider and skip test if none found
 // If S2IAM_TEST_CLOUD_PROVIDER, S2IAM_TEST_ASSUME_ROLE, or S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE is set, fail instead of skip (test environment should be configured)
 func expectCloudProviderDetected(t *testing.T) s2iam.CloudProviderClient {
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") == "" && os.Getenv("S2IAM_TEST_ASSUME_ROLE") == "" && os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") == "" {
-		t.Skip("cloud provider required")
-	}
-	client, err := s2iam.DetectProvider(context.Background(),
-		s2iam.WithLogger(t),
-		s2iam.WithTimeout(time.Second*5))
-	require.NoError(t, err, "cloud provider expected")
-	return client
+	return testhelp.ExpectCloudProviderDetected(t)
 }
 
 // Helper function to require cloud provider with working role/identity (not just detection)
 // This is for tests that need to actually use the cloud identity, not just detect the provider
 func requireCloudRole(t *testing.T) s2iam.CloudProviderClient {
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" {
-		t.Skip("cloud role required")
-	}
-	return expectCloudProviderDetected(t)
+	return testhelp.RequireCloudRole(t)
 }
 
 func validateJWT(t *testing.T, tokenString string) jwt.MapClaims {
@@ -199,9 +190,12 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 
 // Test getting database JWT with valid provider
 func TestGetDatabaseJWT_HappyPath(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	client := requireCloudRole(t)
+	testHappyPath(t, client)
+}
 
+func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 	flags := &fakeServerFlags{requireWorkspaceID: true}
 	fakeServer := startFakeServer(t, flags)
 
@@ -291,7 +285,7 @@ func TestGetDatabaseJWT_HappyPath(t *testing.T) {
 
 // Test getting API JWT
 func TestGetAPIJWT(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	client := requireCloudRole(t)
 
 	flags := &fakeServerFlags{}
@@ -324,7 +318,7 @@ func TestGetAPIJWT(t *testing.T) {
 
 // Test with missing workspace ID
 func TestGetDatabaseJWT_MissingWorkspaceID(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	_, err := s2iam.GetDatabaseJWT(context.Background(), "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "workspaceGroupID is required")
@@ -332,7 +326,7 @@ func TestGetDatabaseJWT_MissingWorkspaceID(t *testing.T) {
 
 // Test server returning empty JWT
 func TestGetDatabaseJWT_EmptyJWT(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	_ = requireCloudRole(t)
 
 	flags := &fakeServerFlags{returnEmptyJWT: true}
@@ -348,7 +342,7 @@ func TestGetDatabaseJWT_EmptyJWT(t *testing.T) {
 
 // Test server returning invalid JSON
 func TestGetDatabaseJWT_InvalidJSON(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	_ = requireCloudRole(t)
 
 	flags := &fakeServerFlags{returnInvalidJSON: true}
@@ -364,7 +358,7 @@ func TestGetDatabaseJWT_InvalidJSON(t *testing.T) {
 
 // Test server error
 func TestGetDatabaseJWT_ServerError(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	_ = requireCloudRole(t)
 
 	flags := &fakeServerFlags{serverError: true}
@@ -380,7 +374,7 @@ func TestGetDatabaseJWT_ServerError(t *testing.T) {
 
 // Test verification failure
 func TestGetDatabaseJWT_VerificationFailure(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	_ = requireCloudRole(t)
 
 	flags := &fakeServerFlags{failVerification: true}
@@ -396,7 +390,7 @@ func TestGetDatabaseJWT_VerificationFailure(t *testing.T) {
 
 // Test with GCP audience parameter
 func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	client := requireCloudRole(t)
 
 	// Skip if not on GCP
@@ -508,7 +502,7 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 
 // Test AssumeRole with invalid role (should fail)
 func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	client := requireCloudRole(t)
 
 	flags := &fakeServerFlags{}
@@ -550,7 +544,7 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 
 // Test provider detection
 func TestDetectProvider(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	ctx := context.Background()
 	client, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Second*5))
 	if err != nil {
@@ -560,8 +554,9 @@ func TestDetectProvider(t *testing.T) {
 		if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
 			require.NoError(t, err, "cloud provider expected")
 		}
-		assert.Truef(t, errors.Is(err, s2iam.ErrNoCloudProviderDetected),
-			"expected ErrNoCloudProviderDetected, actual error: %+v", err)
+		// Accept either ErrNoCloudProviderDetected or ErrProviderDetectedNoIdentity on no-role hosts
+		assert.Truef(t, errors.Is(err, s2iam.ErrNoCloudProviderDetected) || errors.Is(err, s2iam.ErrProviderDetectedNoIdentity),
+			"expected ErrNoCloudProviderDetected or ErrProviderDetectedNoIdentity, actual error: %+v", err)
 		return
 	}
 
@@ -573,7 +568,7 @@ func TestDetectProvider(t *testing.T) {
 
 // Test provider detection with timeout
 func TestDetectProvider_Timeout(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	ctx := context.Background()
 	client, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(time.Millisecond))
 
@@ -588,7 +583,7 @@ func TestDetectProvider_Timeout(t *testing.T) {
 
 // Test provider detection with specific clients
 func TestDetectProvider_SpecificClients(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 
 	// Skip this test on no-role hosts since detection may fail
 	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" {
@@ -629,7 +624,7 @@ func TestDetectProvider_SpecificClients(t *testing.T) {
 
 // Test creating verifiers
 func TestCreateVerifiers(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	ctx := context.Background()
 	verifiers, err := s2verifier.CreateVerifiers(ctx, s2verifier.VerifierConfig{
 		AllowedAudiences: []string{"https://test.example.com"},
@@ -646,7 +641,7 @@ func TestCreateVerifiers(t *testing.T) {
 
 // Test verifier with mock AWS headers
 func TestVerifier_AWS(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	// This is a unit test that doesn't require actual AWS credentials
 	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
@@ -674,7 +669,7 @@ func TestVerifier_AWS(t *testing.T) {
 
 // Test verifier with mock GCP headers
 func TestVerifier_GCP(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger:           t,
 		AllowedAudiences: []string{"https://test.example.com"},
@@ -700,7 +695,7 @@ func TestVerifier_GCP(t *testing.T) {
 
 // Test verifier with mock Azure headers
 func TestVerifier_Azure(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
 	})
@@ -732,7 +727,7 @@ func TestVerifier_Azure(t *testing.T) {
 
 // Test VerifyRequest with no valid auth
 func TestVerifiers_NoValidAuth(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	verifiers, err := s2verifier.CreateVerifiers(context.Background(), s2verifier.VerifierConfig{
 		Logger: t,
 	})
@@ -841,7 +836,7 @@ func TestContextCancellation(t *testing.T) {
 
 // Test provider with bad metadata endpoint (should timeout quickly)
 func TestProvider_BadMetadataEndpoint(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	// This tests the timeout handling when metadata endpoints are unreachable
 	ctx := context.Background()
 
@@ -859,7 +854,7 @@ func TestProvider_BadMetadataEndpoint(t *testing.T) {
 
 // Test getting database JWT from production server
 func TestGetDatabaseJWT_ProductionServer(t *testing.T) {
-	t.Parallel()
+	testhelp.MaybeParallel(t)
 	client := requireCloudRole(t)
 
 	// TODO: Production server has audience mismatch for GCP

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -168,21 +168,7 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 
 // TestIntegration_ServerAndClient tests the test server and client working together
 func TestIntegration_ServerAndClient(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Skip if we're testing no-role scenario - integration tests require working JWT retrieval
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" {
-		t.Skip("skipping integration test on no-role host - requires working JWT retrieval")
-	}
-
-	// First, check if we're on a cloud provider
-	ctx := context.Background()
-	_, err := s2iam.DetectProvider(ctx, s2iam.WithTimeout(2*time.Second))
-	if err != nil {
-		t.Skip("test requires a cloud provider")
-	}
+	_ = testhelp.RequireCloudRole(t)
 
 	// Build both commands with platform-specific binary names
 	binaryExt := ""
@@ -245,10 +231,6 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 
 // TestIntegration_ServerOnly tests just the server functionality
 func TestIntegration_ServerOnly(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
 	// Build test server with platform-specific binary extension
 	binaryExt := ""
 	if runtime.GOOS == "windows" {
