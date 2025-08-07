@@ -49,10 +49,6 @@ func TestFastPathDetection(t *testing.T) {
 			envVarsToSet["AWS_REGION"] = region
 		} else if region := os.Getenv("AWS_DEFAULT_REGION"); region != "" {
 			envVarsToSet["AWS_REGION"] = region
-		} else {
-			// If no region in env, we can't easily derive it without metadata calls
-			// So we'll set a generic AWS indicator
-			envVarsToSet["AWS_EXECUTION_ENV"] = "AWS_EC2"
 		}
 
 	case s2iam.ProviderGCP:
