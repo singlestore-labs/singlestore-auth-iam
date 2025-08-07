@@ -241,7 +241,7 @@ func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 	// The Subject is stored in the 'sub' claim of the JWT
 	subject, ok := claims["sub"].(string)
 	if !ok {
-		// Try to handle numeric account IDs (especially for GCP project IDs)
+		// Try to handle numeric account IDs in the 'sub' claim
 		if numAccountID, numOk := claims["sub"].(float64); numOk {
 			subject = fmt.Sprintf("%.0f", numAccountID)
 		} else {
