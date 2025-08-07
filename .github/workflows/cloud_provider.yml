@@ -40,11 +40,21 @@ jobs:
             hostname: ec2-18-206-180-126.compute-1.amazonaws.com
             secret: AWS_POSITIVE_KEY
             env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
+          - name: aws-negative
+            username: ubuntu
+            hostname: ec2-35-173-183-101.compute-1.amazonaws.com
+            secret: AWS_POSITIVE_KEY
+            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=aws"
           - name: azure-positive
             username: azureuser
             hostname: 52.186.98.155
             secret: AZURE_POSITIVE_KEY
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
+          - name: azure-negateive
+            username: azureuser
+            hostname: 74.235.105.73
+            secret: AZURE_NEGATIVE_KEY
+            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=azure"
           - name: gcp-positive
             username: dsharnoff
             hostname: 34.145.164.5
@@ -52,6 +62,11 @@ jobs:
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=gcp"
             # assume role permissions are not yet working
             # env_vars: "S2IAM_TEST_ASSUME_ROLE=nopermissionsrole@gcp-virginia-hd1.iam.gserviceaccount.com"
+          - name: gcp-negative
+            username: dsharnoff
+            hostname: 34.21.55.72
+            secret: GCP_POSITIVE_KEY
+            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=gcp"
     
     env:
       TEST_USERNAME: ${{ matrix.username }}
@@ -75,8 +90,9 @@ jobs:
     
     - name: Copy repository to remote system
       run: |
-        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/key -o StrictHostKeyChecking=no" \
-          ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
+        tar -czf - --exclude=.git .  | ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}" \
+          "mkdir -p tests/${{ env.UNIQUE_DIR }} && cd tests/${{ env.UNIQUE_DIR }} && tar xzf -"
     
     - name: Run tests with coverage and verification
       run: |

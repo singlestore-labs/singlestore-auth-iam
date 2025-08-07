@@ -100,7 +100,7 @@ The server will start on port 8080 by default. Once it's fully ready to accept r
 | `--required-audience` | "" | Required audience value for GCP tokens |
 | `--azure-tenant` | "common" | Azure tenant ID |
 | `--token-expiry` | 1h | Token expiry duration |
-| `--allowed-audiences` | "https://auth.singlestore.com" | Comma-separated list of allowed audiences |
+| `--allowed-audiences` | "https://authsvc.singlestore.com" | Comma-separated list of allowed audiences |
 | `--verbose` | false | Enable verbose logging |
 
 ## Testing Scenarios
@@ -141,7 +141,7 @@ s2iam_test_server --required-audience=https://myapp.example.com
 s2iam_test_server --azure-tenant=12345678-1234-1234-1234-123456789012
 
 # Set custom allowed audiences
-s2iam_test_server --allowed-audiences=https://auth.singlestore.com,https://myapp.com
+s2iam_test_server --allowed-audiences=https://authsvc.singlestore.com,https://myapp.com
 ```
 
 ## Client Integration Examples

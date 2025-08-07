@@ -15,7 +15,7 @@ import (
 
 const (
 	// defaultServer is the default authentication server endpoint
-	defaultServer = "https://auth.singlestore.com/auth/iam/:jwtType"
+	defaultServer = "https://authsvc.singlestore.com/auth/iam/:jwtType"
 )
 
 // JWTOptions are used to configure how to get JWTs

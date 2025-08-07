@@ -21,7 +21,7 @@ const (
 	gcpMetadataURL = "http://metadata.google.internal/computeMetadata/v1/"
 
 	// Default audience for identity tokens
-	defaultAudience = "https://auth.singlestore.com"
+	defaultAudience = "https://authsvc.singlestore.com"
 )
 
 // GCPClient implements the CloudProviderClient interface for GCP
@@ -44,16 +44,11 @@ func (c *GCPClient) copy() *GCPClient {
 	}
 }
 
-// gcpClient is a singleton instance for GCPClient
-var gcpClient = &GCPClient{}
-
-// NewClient returns the GCP client singleton
+// NewClient returns a new GCP client instance
 func NewClient(logger models.Logger) models.CloudProviderClient {
-	gcpClient.mu.Lock()
-	defer gcpClient.mu.Unlock()
-
-	gcpClient.logger = logger
-	return gcpClient
+	return &GCPClient{
+		logger: logger,
+	}
 }
 
 // Detect tests if we are executing within GCP
@@ -245,7 +240,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 // getIDToken retrieves a GCP identity token for the given audience
 func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, error) {
-	tokenURL := fmt.Sprintf("%sinstance/service-accounts/default/identity?audience=%s", gcpMetadataURL, audience)
+	tokenURL := fmt.Sprintf("%sinstance/service-accounts/default/identity?audience=%s&format=full", gcpMetadataURL, audience)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
 		return "", errors.Errorf("failed to create token request: %w", err)
@@ -282,8 +277,6 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 // getIdentityFromToken parses the token to extract identity information
 func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*models.CloudIdentity, error) {
 	// Use the IDToken library to validate and parse the token
-	// This is a simplification - in a real implementation, we might want to parse without full validation
-	// for efficiency, since the token just came from the metadata service
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
 		return nil, errors.Errorf("failed to create token validator: %w", err)
@@ -294,75 +287,8 @@ func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*mo
 		return nil, errors.Errorf("failed to parse ID token: %w", err)
 	}
 
-	// Extract identity information
-	projectID := ""
-	instanceID := ""
-	serviceAccount := ""
-	zone := ""
-
-	// Extract the project number/ID
-	if val, ok := payload.Claims["google/compute_engine/project_number"].(string); ok {
-		projectID = val
-	} else if val, ok := payload.Claims["project_id"].(string); ok {
-		projectID = val
-	}
-
-	// Extract the instance ID
-	if val, ok := payload.Claims["google/compute_engine/instance_id"].(string); ok {
-		instanceID = val
-	} else {
-		// For non-GCE resources, generate a placeholder
-		instanceID = "non-gce-resource"
-	}
-
-	// Extract service account email
-	if val, ok := payload.Claims["email"].(string); ok {
-		serviceAccount = val
-	}
-
-	// Extract zone if present
-	if val, ok := payload.Claims["google/compute_engine/zone"].(string); ok {
-		zone = val
-	}
-
-	// Construct a more detailed identifier
-	identifier := fmt.Sprintf("projects/%s/instances/%s", projectID, instanceID)
-	if serviceAccount != "" {
-		identifier += "/serviceAccounts/" + serviceAccount
-	}
-
-	resourceType := "instance"
-	if strings.Contains(serviceAccount, "cloud-function") {
-		resourceType = "function"
-	} else if strings.Contains(serviceAccount, "app-engine") {
-		resourceType = "appengine"
-	}
-
-	region := ""
-	if zone != "" {
-		// Extract region from zone (e.g., us-central1-a -> us-central1)
-		parts := strings.Split(zone, "-")
-		if len(parts) >= 3 {
-			region = strings.Join(parts[:len(parts)-1], "-")
-		}
-	}
-
-	// Prepare additional claims
-	additionalClaims := make(map[string]string)
-	for k, v := range payload.Claims {
-		if str, ok := v.(string); ok {
-			additionalClaims[k] = str
-		}
-	}
-
-	return &models.CloudIdentity{
-		Provider:         models.ProviderGCP,
-		Identifier:       identifier,
-		AccountID:        projectID,
-		Region:           region,
-		ResourceType:     resourceType,
-		AdditionalClaims: additionalClaims,
-	}, nil
+	// Use the shared identity extraction function to ensure consistency with verifier
+	return extractGCPIdentityFromToken(ctx, payload, c.logger)
 }
 
 // AssumeRole configures the provider to use a different service account
