@@ -233,7 +233,7 @@ class AzureClient(CloudProviderClient):
             raise ProviderIdentityUnavailable(f"Failed to get Azure identity: {e}")
 
     async def _extract_principal_id_from_token(self, access_token: str) -> str:
-        """Extract principal ID from JWT token using same priority as Go implementation."""
+        """Extract principal ID from JWT using same priority as Go implementation."""
         import base64
         import json
         

@@ -13,7 +13,7 @@ This service is not yet available. This library may be updated before the servic
 
 ## Overview
 
-The `singlestore-auth-iam` library provides a seamless way to authenticate with SingleStore services using cloud provider IAM credentials. It automatically discovers your cloud environment (AWS, GCP, Azure) and obtains JWT tokens for:
+The `singlestore-auth-iam` library provides a seamless way to authenticate with SingleStore services using cloud provider IAM credentials. It automatically discovers your cloud environment (AWS, GCP, Azure) and obtains JWTs for:
 
 - **Database Access**: Connect to [SingleStore Helios](https://www.singlestore.com/product-overview/) databases
 - **Management API**: Make calls to the [SingleStore Management API](https://docs.singlestore.com/cloud/user-and-workspace-administration/management-api/)

@@ -882,7 +882,7 @@ func TestGetDatabaseJWT_ProductionServer(t *testing.T) {
 	t.Log("Successfully got and validated JWT from production server")
 }
 
-// validateJWTWithProductionJWKS validates a JWT token using the JWKS from the production server
+// validateJWTWithProductionJWKS validates a JWT using the JWKS from the production server
 func validateJWTWithProductionJWKS(t *testing.T, tokenString string) error {
 	// Create a JWKS set pointing to the production server's OIDC JWKS endpoint
 	jwks, err := jwkset.NewDefaultHTTPClient([]string{"https://authsvc.singlestore.com/auth/oidc/op/Customer/keys"})

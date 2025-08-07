@@ -1,6 +1,6 @@
 # SingleStore Auth IAM - Python Client Library
 
-A Python client library for getting JWT tokens from SingleStore's IAM service when running in cloud environments (AWS, GCP, Azure).
+A Python client library for getting JWTs from SingleStore's IAM service when running in cloud environments (AWS, GCP, Azure).
 
 ## Installation
 
@@ -15,13 +15,13 @@ import asyncio
 from s2iam import get_jwt_database
 
 async def main():
-    # Get a JWT token for database access
-    jwt_token = await get_jwt_database("your-workspace-group-id")
-    print(f"JWT: {jwt_token}")
+        # Get a JWT for database access
+    jwt = await get_jwt_database("your-workspace-group-id")
+    print(f"JWT: {jwt}")
 
-    # Or with no workspace group ID (some configurations)
-    jwt_token = await get_jwt_database()
-    print(f"JWT: {jwt_token}")
+    # Or without workspace group ID
+    jwt = await get_jwt_database()
+    print(f"JWT: {jwt}")
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -34,15 +34,15 @@ import asyncio
 from s2iam import get_jwt_api
 
 async def main():
-    # Get a JWT token for API gateway access
-    jwt_token = await get_jwt_api()
-    print(f"JWT: {jwt_token}")
+    # Get a JWT for API gateway access
+    jwt = await get_jwt_api()
+    print(f"JWT: {jwt}")
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-That's it! The library automatically detects your cloud environment and gets the appropriate JWT token.
+That's it! The library automatically detects your cloud environment and gets the appropriate JWT.
 
 ## Configuration
 
@@ -65,7 +65,7 @@ The library automatically detects and works in:
 from s2iam import get_jwt_database, CloudProviderNotFound
 
 try:
-    jwt_token = await get_jwt_database("workspace-id")
+    jwt = await get_jwt_database("workspace-id")
 except CloudProviderNotFound:
     print("Not running in a supported cloud environment")
 ```
@@ -74,7 +74,7 @@ except CloudProviderNotFound:
 
 ### Workspace Group ID
 
-The `workspace_group_id` parameter is optional for `get_jwt_database()`. When provided, it scopes the JWT token to a specific workspace group. When omitted (or `None`), the token may have broader access depending on your SingleStore configuration.
+The `workspace_group_id` parameter is optional for `get_jwt_database()`. When provided, it scopes the JWT to a specific workspace group. When omitted (or `None`), the JWT may have broader access depending on your SingleStore configuration.
 
 ### Environment Variables
 
@@ -112,7 +112,7 @@ Automatically detect which cloud provider the application is running on.
 
 #### `get_jwt(jwt_type, workspace_group_id=None, server_url=None, **kwargs)`
 
-Get a JWT token from SingleStore's authentication service.
+Get a JWT from SingleStore's authentication service.
 
 **Parameters:**
 - `jwt_type` (JWTType): Type of JWT to request
@@ -120,7 +120,7 @@ Get a JWT token from SingleStore's authentication service.
 - `server_url` (str): Authentication server URL
 - `**kwargs`: Additional provider-specific parameters
 
-**Returns:** `str` (JWT token)
+**Returns:** `str` (JWT)
 
 ### Cloud Provider Clients
 

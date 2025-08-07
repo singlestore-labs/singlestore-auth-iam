@@ -174,19 +174,19 @@ class TestProviderSpecificValidation:
             assert identity.region is not None
 
             # Test JWT retrieval
-            jwt_token = await s2iam.get_jwt(
+            jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
 
-            assert jwt_token is not None
-            assert len(jwt_token) > 100
+            assert jwt is not None
+            assert len(jwt) > 100
 
             print(f"✓ AWS Account: {identity.account_id}")
             print(f"✓ AWS Region: {identity.region}")
-            print(f"✓ JWT Token: {len(jwt_token)} chars")
+            print(f"✓ JWT: {len(jwt)} chars")
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
@@ -218,19 +218,19 @@ class TestProviderSpecificValidation:
             assert identity.region is not None
 
             # Test JWT retrieval
-            jwt_token = await s2iam.get_jwt(
+            jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
 
-            assert jwt_token is not None
-            assert len(jwt_token) > 100
+            assert jwt is not None
+            assert len(jwt) > 100
 
             print(f"✓ GCP Project: {identity.account_id}")
             print(f"✓ GCP Region: {identity.region}")
-            print(f"✓ JWT Token: {len(jwt_token)} chars")
+            print(f"✓ JWT: {len(jwt)} chars")
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
@@ -262,19 +262,19 @@ class TestProviderSpecificValidation:
             assert identity.region is not None
 
             # Test JWT retrieval
-            jwt_token = await s2iam.get_jwt(
+            jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
 
-            assert jwt_token is not None
-            assert len(jwt_token) > 100
+            assert jwt is not None
+            assert len(jwt) > 100
 
             print(f"✓ Azure Subscription: {identity.account_id}")
             print(f"✓ Azure Region: {identity.region}")
-            print(f"✓ JWT Token: {len(jwt_token)} chars")
+            print(f"✓ JWT: {len(jwt)} chars")
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
@@ -372,13 +372,13 @@ class TestHappyPath:
         print(f"✓ Headers being sent to test server:")
         for key, value in client_headers.items():
             if key.lower() in ['authorization', 'x-cloud-provider', 'x-aws-access-key-id']:
-                # For JWT tokens (GCP/Azure), decode and show claims
+                # For JWTs (GCP/Azure), decode and show claims
                 if key.lower() == 'authorization' and value.startswith('Bearer '):
-                    jwt_token_header = value[7:]  # Remove 'Bearer ' prefix
+                    jwt_header = value[7:]  # Remove 'Bearer ' prefix
                     try:
                         import jwt
                         # Decode without verification to see claims
-                        claims = jwt.decode(jwt_token_header, options={"verify_signature": False})
+                        claims = jwt.decode(jwt_header, options={"verify_signature": False})
                         print(f"    {key}: Bearer <JWT with claims: {claims}>")
                     except Exception as e:
                         print(f"    {key}: Bearer <JWT decode failed: {e}>")
@@ -387,7 +387,7 @@ class TestHappyPath:
             else:
                 print(f"    {key}: {value}")
         
-        # Get JWT token using the test server
+        # Get JWT using the test server
         if provider.get_type() == CloudProviderType.GCP:
             # For GCP, use explicit audience to ensure compatibility 
             database_jwt = await s2iam.get_jwt_database(

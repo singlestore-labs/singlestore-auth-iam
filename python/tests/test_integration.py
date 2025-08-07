@@ -92,18 +92,18 @@ class TestJWTIntegration:
             provider = await require_cloud_role(timeout=10.0)
 
             # Get JWT using test server
-            jwt_token = await s2iam.get_jwt(
+            jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
 
-            assert jwt_token is not None
-            assert isinstance(jwt_token, str)
-            assert len(jwt_token) > 0
+            assert jwt is not None
+            assert isinstance(jwt, str)
+            assert len(jwt) > 0
 
-            print(f"Received JWT token: {jwt_token[:50]}...")
+            print(f"Received JWT: {jwt[:50]}...")
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)
@@ -126,15 +126,15 @@ class TestJWTIntegration:
             provider = await require_cloud_role(timeout=10.0)
 
             for jwt_type in [JWTType.DATABASE_ACCESS, JWTType.API_GATEWAY_ACCESS]:
-                jwt_token = await s2iam.get_jwt(
+                jwt = await s2iam.get_jwt(
                     jwt_type=jwt_type,
                     server_url=f"{test_server.server_url}/auth/iam/{jwt_type.value}",
                     provider=provider,
                     workspace_group_id="test-workspace",
                 )
 
-                assert jwt_token is not None
-                print(f"JWT for {jwt_type.value}: {jwt_token[:50]}...")
+                assert jwt is not None
+                print(f"JWT for {jwt_type.value}: {jwt[:50]}...")
 
         except s2iam.CloudProviderNotFound:
             # If S2IAM_TEST_CLOUD_PROVIDER is set, fail instead of skip (test environment should be configured)

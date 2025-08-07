@@ -1,5 +1,5 @@
 """
-JWT token functionality for SingleStore authentication.
+JWT functionality for SingleStore authentication.
 """
 
 from typing import Optional
@@ -27,25 +27,25 @@ async def get_jwt(
     **kwargs,
 ) -> str:
     """
-    Get a JWT token from SingleStore's authentication service.
-
+    Get a JWT from SingleStore's authentication service.
+    
+    This function attempts to obtain a JWT from SingleStore's authentication service
+    using the detected cloud provider's identity.
+    
     Args:
-        jwt_type: Type of JWT to request
-        workspace_group_id: Workspace group ID
-        server_url: Authentication server URL
-        provider: Optional provider client (will auto-detect if not provided)
-        additional_params: Additional provider-specific parameters
-        assume_role_identifier: Role to assume before getting JWT
-        timeout: Request timeout in seconds
-        logger: Optional logger instance
-        **kwargs: Additional options
-
+        jwt_type (JWTType): The type of JWT to request (database, api)
+        workspace_group_id (Optional[str]): Workspace group ID to scope the JWT to.
+            Only used for database JWTs. When None, the JWT may have broader access.
+        timeout (float): Timeout in seconds for the request
+        server_url (Optional[str]): Override the default server URL
+        logger (Optional[Logger]): Logger instance for debug output
+        
     Returns:
-        JWT token string
-
+        str: JWT string
+        
     Raises:
-        CloudProviderNotFound: If no provider can be detected
-        Exception: If JWT request fails
+        NoCloudProviderDetectedError: If no cloud provider is detected
+        Exception: If JWT acquisition fails
     """
     # Detect provider if not provided
     if provider is None:
@@ -106,14 +106,14 @@ async def get_jwt(
         ) as response:
             if response.status == 200:
                 response_data = await response.json()
-                jwt_token = response_data.get("jwt")
-                if not jwt_token:
-                    raise Exception("No JWT token in response")
+                jwt = response_data.get("jwt")
+                if not jwt:
+                    raise Exception("No JWT in response")
 
                 if logger:
-                    logger.log("Successfully obtained JWT token")
+                    logger.log("Successfully obtained JWT")
 
-                return jwt_token
+                return jwt
             else:
                 error_text = await response.text()
                 raise Exception(
@@ -139,7 +139,7 @@ async def get_jwt_database(
     **kwargs,
 ) -> str:
     """
-    Get a JWT token for database access.
+    Get a JWT for database access.
 
     Args:
         workspace_group_id: Workspace group ID (optional - can be None or empty string)
@@ -152,7 +152,7 @@ async def get_jwt_database(
         **kwargs: Additional options
 
     Returns:
-        JWT token string for database access
+        str: JWT string for database access
     """
     return await get_jwt(
         jwt_type=JWTType.DATABASE_ACCESS,
@@ -178,10 +178,9 @@ async def get_jwt_api(
     **kwargs,
 ) -> str:
     """
-    Get a JWT token for API gateway access.
+    Get a JWT for API gateway access.
 
     Args:
-        workspace_group_id: Workspace group ID (optional for API access)
         server_url: Authentication server URL (defaults to production)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
@@ -191,7 +190,7 @@ async def get_jwt_api(
         **kwargs: Additional options
 
     Returns:
-        JWT token string for API gateway access
+        str: JWT string for API gateway access
     """
     return await get_jwt(
         jwt_type=JWTType.API_GATEWAY_ACCESS,
