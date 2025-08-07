@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -44,6 +45,18 @@ type Server struct {
 	verifiers  s2verifier.Verifiers
 	requestLog []RequestInfo
 	listener   net.Listener // Add a field to store the listener
+}
+
+// debugLog writes to a debug file if S2IAM_TEST_SERVER_DEBUG_LOG is set
+func debugLog(format string, args ...interface{}) {
+	if debugFile := os.Getenv("S2IAM_TEST_SERVER_DEBUG_LOG"); debugFile != "" {
+		f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err == nil {
+			defer f.Close()
+			timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+			fmt.Fprintf(f, "[%s] %s\n", timestamp, fmt.Sprintf(format, args...))
+		}
+	}
 }
 
 // RequestInfo captures details about incoming requests
@@ -280,12 +293,17 @@ func (s *Server) GetPort() int {
 
 // handleAuth handles authentication requests
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
+	debugLog("===== GO TEST SERVER: Received auth request for %s =====", r.URL.Path)
+	debugLog("===== GO TEST SERVER: Request method: %s =====", r.Method)
+
 	// Extract JWT type from URL
 	pathParts := strings.Split(r.URL.Path, "/")
 	jwtType := ""
 	if len(pathParts) >= 4 {
 		jwtType = pathParts[len(pathParts)-1]
 	}
+
+	debugLog("===== GO TEST SERVER: JWT type: %s =====", jwtType)
 
 	// Log request details
 	reqInfo := RequestInfo{
@@ -363,21 +381,29 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 // createJWT generates a JWT for the given identity
 func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (string, error) {
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.Identifier: %s =====", identity.Identifier)
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.AccountID: %s =====", identity.AccountID)
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.Provider: %s =====", identity.Provider)
+	debugLog("===== GO TEST SERVER: Setting JWT sub claim to: %s =====", identity.Identifier)
+
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":          identity.Identifier,
-		"provider":     identity.Provider,
-		"accountID":    identity.AccountID,
-		"region":       identity.Region,
-		"resourceType": identity.ResourceType,
-		"jwtType":      jwtType,
-		"iat":          now.Unix(),
-		"exp":          now.Add(s.config.TokenExpiry).Unix(),
+		"sub":                 identity.Identifier,
+		"provider":            identity.Provider,
+		"accountID":           identity.AccountID,
+		"region":              identity.Region,
+		"resourceType":        identity.ResourceType,
+		"jwtType":             jwtType,
+		"createdByTestServer": true,
+		"iat":                 now.Unix(),
+		"exp":                 now.Add(s.config.TokenExpiry).Unix(),
 	}
 
 	// Add any additional properties
 	for key, value := range identity.AdditionalClaims {
-		claims[key] = value
+		if _, ok := claims[key]; !ok {
+			claims[key] = value
+		}
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

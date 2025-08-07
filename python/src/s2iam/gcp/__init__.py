@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from typing import Optional
 import socket
+import jwt
 
 import aiohttp
 
@@ -159,28 +160,16 @@ class GCPClient(CloudProviderClient):
                 token = await self._get_impersonated_token(audience)
                 project_info = await self._get_project_info()
 
-                # Use email address directly as identifier (matches Go implementation)
-                identity = CloudIdentity(
-                    provider=CloudProviderType.GCP,
-                    identifier=self._service_account_email,
-                    account_id=self._service_account_email,
-                    region=await self._get_zone(),
-                    resource_type="gcp-service-account",
-                )
+                # Parse impersonated token to extract identity information
+                identity = await self._extract_identity_from_token(token, self._service_account_email)
             else:
                 # Get default identity token
                 token = await self._get_identity_token(audience)
                 project_info = await self._get_project_info()
                 service_account = await self._get_service_account()
 
-                # Use email address directly as identifier (matches Go implementation)
-                identity = CloudIdentity(
-                    provider=CloudProviderType.GCP,
-                    identifier=service_account,
-                    account_id=service_account,
-                    region=await self._get_zone(),
-                    resource_type="gcp-compute-instance",
-                )
+                # Parse token to extract identity information (matching Go implementation)
+                identity = await self._extract_identity_from_token(token, service_account)
 
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -293,6 +282,63 @@ class GCPClient(CloudProviderClient):
             self._log(f"Failed to get zone: {e}")
 
         return ""
+
+
+    async def _extract_identity_from_token(self, token: str, service_account: str) -> CloudIdentity:
+        """Extract identity information from GCP token (matching Go implementation).
+        
+        Args:
+            token: The GCP identity token
+            service_account: The service account email from metadata
+            
+        Returns:
+            CloudIdentity with correct identifier and account_id
+        """
+        try:
+            # Parse JWT without verification (since we got it from GCP directly)
+            import jwt
+            claims = jwt.decode(token, options={"verify_signature": False})
+            
+            # Get numeric account ID from sub claim (always present)
+            account_id = claims.get("sub", "")
+            if not account_id:
+                raise ValueError("No sub claim found in GCP token")
+            
+            # Determine identifier - prefer verified email, fallback to sub
+            identifier = account_id  # Default to numeric ID
+            if claims.get("email") and claims.get("email_verified", False):
+                identifier = claims["email"]
+                self._log(f"Using verified email as identifier: {identifier}")
+            else:
+                self._log(f"Using sub claim as identifier: {identifier}")
+                
+            # Extract region from zone if available
+            region = ""
+            zone = await self._get_zone()
+            if zone:
+                # Extract region from zone (e.g., us-east4-c -> us-east4)
+                parts = zone.split("-")
+                if len(parts) >= 3:
+                    region = "-".join(parts[:-1])
+                    
+            return CloudIdentity(
+                provider=CloudProviderType.GCP,
+                identifier=identifier,
+                account_id=account_id,  # This is the numeric sub from JWT
+                region=region,
+                resource_type="gcp-compute-instance",
+            )
+            
+        except Exception as e:
+            self._log(f"Failed to extract identity from token: {e}")
+            # Fallback to service account email for both fields
+            return CloudIdentity(
+                provider=CloudProviderType.GCP,
+                identifier=service_account,
+                account_id=service_account,
+                region=await self._get_zone(),
+                resource_type="gcp-compute-instance",
+            )
 
 
 def new_client(logger: Optional[Logger] = None) -> CloudProviderClient:

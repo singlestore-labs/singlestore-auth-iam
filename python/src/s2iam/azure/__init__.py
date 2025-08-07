@@ -200,8 +200,8 @@ class AzureClient(CloudProviderClient):
             # Get instance metadata
             instance_metadata = await self._get_instance_metadata()
 
-            # Create identity
-            principal_id = token_data.get("client_id", "unknown")
+            # Create identity - extract principal ID from JWT claims to match Go implementation
+            principal_id = await self._extract_principal_id_from_token(token_data["access_token"])
             subscription_id = instance_metadata.get("compute", {}).get(
                 "subscriptionId", ""
             )
@@ -231,6 +231,44 @@ class AzureClient(CloudProviderClient):
         except Exception as e:
             self._log(f"Failed to get identity headers: {e}")
             raise ProviderIdentityUnavailable(f"Failed to get Azure identity: {e}")
+
+    async def _extract_principal_id_from_token(self, access_token: str) -> str:
+        """Extract principal ID from JWT token using same priority as Go implementation."""
+        import base64
+        import json
+        
+        try:
+            # Split JWT and decode payload (second part)
+            parts = access_token.split('.')
+            if len(parts) != 3:
+                raise ValueError("Invalid JWT format")
+            
+            # Decode payload (add padding if needed)
+            payload = parts[1]
+            # Add padding for base64 decoding
+            payload += '=' * (4 - len(payload) % 4)
+            decoded_payload = base64.urlsafe_b64decode(payload)
+            claims = json.loads(decoded_payload)
+            
+            # Use same priority as Go implementation:
+            # 1. oid (object ID) - primary location
+            if "oid" in claims:
+                return claims["oid"]
+            
+            # 2. sub (subject) - alternative
+            if "sub" in claims:
+                return claims["sub"]
+            
+            # 3. appid (application ID) - last resort
+            if "appid" in claims:
+                return claims["appid"]
+                
+            raise ValueError("Principal ID not found in Azure token")
+            
+        except Exception as e:
+            self._log(f"Failed to extract principal ID from token: {e}")
+            # Fallback to client_id from metadata response
+            return "unknown"
 
     async def _get_managed_identity_token(
         self, resource: str, client_id: Optional[str] = None

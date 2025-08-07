@@ -332,3 +332,160 @@ class TestErrorHandlingValidation:
                     "Cloud provider detection failed - expected to detect provider in test environment"
                 )
             pytest.skip("No cloud provider detected")
+
+
+@pytest.mark.asyncio 
+class TestHappyPath:
+    """
+    Comprehensive happy path test that matches the Go testHappyPath function.
+    This test validates critical security properties including:
+    - Client-side vs server-side identity consistency
+    - JWT parsing and claims validation
+    - Provider-specific format validation
+    - Cross-validation between identity and JWT claims
+    """
+
+    @pytest.mark.integration
+    async def test_happy_path_comprehensive(self, test_server):
+        """
+        Test the complete happy path with comprehensive validations matching Go implementation.
+        This is the most important test - it validates security-critical properties.
+        """
+        import jwt
+        import re
+        from tests.testhelp import require_cloud_role
+        
+        # This test requires cloud role - skip if in no-role environment
+        provider = await require_cloud_role(timeout=10.0)
+        
+        # Get client-side identity for comparison
+        client_headers, client_identity = await provider.get_identity_headers()
+        assert client_identity is not None, "Client identity should not be nil"
+        assert client_identity.identifier != "", "Client identifier should not be empty"
+        
+        print(f"✓ Client Identity: {client_identity.identifier}")
+        print(f"✓ Client Provider: {client_identity.provider.value}")
+        print(f"✓ Client Account ID: {client_identity.account_id}")
+        print(f"✓ Client Region: {client_identity.region}")
+        
+        # Log the headers being sent to the test server
+        print(f"✓ Headers being sent to test server:")
+        for key, value in client_headers.items():
+            if key.lower() in ['authorization', 'x-cloud-provider', 'x-aws-access-key-id']:
+                # For JWT tokens (GCP/Azure), decode and show claims
+                if key.lower() == 'authorization' and value.startswith('Bearer '):
+                    jwt_token_header = value[7:]  # Remove 'Bearer ' prefix
+                    try:
+                        import jwt
+                        # Decode without verification to see claims
+                        claims = jwt.decode(jwt_token_header, options={"verify_signature": False})
+                        print(f"    {key}: Bearer <JWT with claims: {claims}>")
+                    except Exception as e:
+                        print(f"    {key}: Bearer <JWT decode failed: {e}>")
+                else:
+                    print(f"    {key}: {value}")
+            else:
+                print(f"    {key}: {value}")
+        
+        # Get JWT token using the test server
+        if provider.get_type() == CloudProviderType.GCP:
+            # For GCP, use explicit audience to ensure compatibility 
+            database_jwt = await s2iam.get_jwt_database(
+                workspace_group_id="test-workspace",
+                server_url=f"{test_server.server_url}/auth/iam/database",
+                additional_params={"audience": "https://authsvc.singlestore.com"}
+            )
+        else:
+            database_jwt = await s2iam.get_jwt_database(
+                workspace_group_id="test-workspace", 
+                server_url=f"{test_server.server_url}/auth/iam/database"
+            )
+        
+        assert database_jwt is not None, "JWT should not be None"
+        assert database_jwt != "", "JWT should not be empty"
+        assert database_jwt.startswith("eyJ"), "JWT should start with eyJ"
+        
+        # Parse and validate JWT claims (without signature verification for test server)
+        jwt_claims = jwt.decode(database_jwt, options={"verify_signature": False})
+        assert jwt_claims is not None, "JWT claims should not be None"
+        
+        # Debug: Print all JWT claims to see what we're actually getting
+        print(f"🔍 JWT Claims from server: {jwt_claims}")
+        
+        # Verify this is actually from our Go test server
+        created_by_test_server = jwt_claims.get("createdByTestServer", False)
+        print(f"🔍 JWT createdByTestServer: {created_by_test_server}")
+        assert created_by_test_server == True, (
+            f"JWT was not created by Go test server! Claims: {jwt_claims}"
+        )
+        
+        # Verify the JWT sub claim contains the client identifier
+        jwt_subject = jwt_claims.get("sub")
+        assert jwt_subject is not None, "JWT sub claim should not be None"
+        assert jwt_subject != "", "JWT sub claim should not be empty"
+        
+        print(f"🔍 Client Identifier: {client_identity.identifier}")
+        print(f"🔍 JWT sub claim: {jwt_subject}")
+        
+        # CRITICAL: Client identifier should match JWT sub claim
+        assert client_identity.identifier == jwt_subject, (
+            f"CRITICAL: Client Identifier ({client_identity.identifier}) differs from JWT sub claim ({jwt_subject}). "
+            f"The JWT sub claim should match the client identifier! Full JWT claims: {jwt_claims}"
+        )
+        
+        # Provider-specific format validations matching Go implementation
+        provider_type = provider.get_type()
+        
+        if provider_type == CloudProviderType.AWS:
+            # AWS AccountID should be in ARN format
+            aws_arn_pattern = re.compile(r'^arn:aws:.*:.*:.*')
+            assert aws_arn_pattern.match(jwt_subject), (
+                f"AWS AccountID should be in ARN format, got: {jwt_subject}"
+            )
+            
+        elif provider_type == CloudProviderType.GCP:
+            # For GCP: Identifier should be email, AccountID should be numeric, JWT sub should be email
+            gcp_email_pattern = re.compile(r'^[a-zA-Z0-9\-_]+@[a-zA-Z0-9\-_]+\.iam\.gserviceaccount\.com$')
+            gcp_numeric_pattern = re.compile(r'^\d{10,}$')  # At least 10 digits
+            
+            # Identifier should be service account email format
+            assert gcp_email_pattern.match(client_identity.identifier), (
+                f"GCP Identifier should be service account email format, got: {client_identity.identifier}"
+            )
+            
+            # AccountID should be numeric service account ID
+            assert gcp_numeric_pattern.match(client_identity.account_id), (
+                f"GCP AccountID should be numeric service account ID, got: {client_identity.account_id}"
+            )
+            
+            # JWT sub claim should match the email identifier
+            assert client_identity.identifier == jwt_subject, (
+                f"GCP JWT sub claim should contain the email identifier, got: {jwt_subject}, "
+                f"expected: {client_identity.identifier}"
+            )
+            
+        elif provider_type == CloudProviderType.AZURE:
+            # Azure AccountID should be subscription ID (UUID format)
+            azure_uuid_pattern = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+            assert azure_uuid_pattern.match(jwt_subject), (
+                f"Azure AccountID should be subscription ID (UUID format), got: {jwt_subject}"
+            )
+            
+        else:
+            pytest.fail(f"Unknown provider type: {provider_type}")
+        
+        # Additional JWT validations
+        assert "iat" in jwt_claims, "JWT should have issued at (iat) claim"
+        assert "exp" in jwt_claims, "JWT should have expiration (exp) claim"
+        
+        # Verify JWT is not expired (basic sanity check)
+        import time
+        current_time = int(time.time())
+        jwt_exp = jwt_claims.get("exp")
+        assert jwt_exp > current_time, f"JWT should not be expired (exp: {jwt_exp}, now: {current_time})"
+        
+        print(f"✓ Happy path validation successful for {provider_type.value}")
+        print(f"  Client identity: {client_identity.identifier}")
+        print(f"  Account ID: {client_identity.account_id}") 
+        print(f"  JWT subject: {jwt_subject}")
+        print(f"  JWT expires: {jwt_exp}")
