@@ -90,8 +90,9 @@ jobs:
     
     - name: Copy repository to remote system
       run: |
-        rsync -avz --exclude='.git' -e "ssh -i ~/.ssh/key -o StrictHostKeyChecking=no" \
-          ./ "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/"
+        tar -czf - --exclude=.git .  | ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}" \
+          "mkdir -p tests/${{ env.UNIQUE_DIR }} && cd tests/${{ env.UNIQUE_DIR }} && tar xzf -"
     
     - name: Run tests with coverage and verification
       run: |
