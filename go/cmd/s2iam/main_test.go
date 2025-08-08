@@ -119,7 +119,7 @@ func TestRun_Success(t *testing.T) {
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simple mock that returns a JWT
-		response := map[string]string{"jwt": "test-jwt-token"}
+		response := map[string]string{"jwt": "test-jwt"}
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -147,7 +147,7 @@ func TestRun_Success(t *testing.T) {
 	output := buf.String()
 
 	require.NoError(t, err)
-	assert.Contains(t, output, "test-jwt-token")
+	assert.Contains(t, output, "test-jwt")
 }
 
 // TestRun_NoCloudProvider tests that cloud provider detection fails quickly in local development
@@ -192,7 +192,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]string{"jwt": "test-jwt-token"}
+		response := map[string]string{"jwt": "test-jwt"}
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -223,7 +223,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Contains(t, output, "STATUS=0")
-	assert.Contains(t, output, "TOKEN=test-jwt-token")
+	assert.Contains(t, output, "TOKEN=test-jwt")
 }
 
 func TestGetLogger(t *testing.T) {
@@ -256,7 +256,7 @@ func TestRealMain(t *testing.T) {
 			},
 			exitCode: 0,
 			wantErr:  false,
-			wantOut:  "test-jwt-token",
+			wantOut:  "test-jwt",
 		},
 	}
 
@@ -329,7 +329,7 @@ func TestRealMain(t *testing.T) {
 
 	// Create a test server that returns a JWT
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]string{"jwt": "test-jwt-token"}
+		response := map[string]string{"jwt": "test-jwt"}
 		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
