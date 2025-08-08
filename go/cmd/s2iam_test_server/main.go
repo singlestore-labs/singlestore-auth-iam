@@ -187,9 +187,6 @@ func (s *Server) Run(ctx context.Context) error {
 	// Log standard text message
 	log.Printf("Starting S2IAM test server on port %d", actualPort)
 
-	// Print port in a format that's easy for Python to parse
-	fmt.Printf("SERVER_PORT=%d\n", actualPort)
-
 	// Create HTTP server
 	httpServer := &http.Server{
 		Handler: mux,

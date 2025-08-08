@@ -122,27 +122,37 @@ class GoTestServerManager:
         print(f"DEBUG: Test server started successfully on port {self.actual_port}")
 
     def _read_server_port(self) -> int:
-        """Read the server port from stdout."""
-        # The Go server prints "SERVER_PORT=12345" to stdout
-        # Read stdout until we find this line
+        """Read the server port from JSON output."""
+        import json
+        
+        # The Go server prints JSON with server_info containing the port
+        # Read stdout until we find the JSON object
         start_time = time.time()
         timeout = 10  # 10 second timeout
+        buffer = ""
 
         while time.time() - start_time < timeout:
             if self.process.stdout:
                 try:
                     line = self.process.stdout.readline()
-                    if line and "SERVER_PORT=" in line:
-                        port_str = line.split("SERVER_PORT=")[1].strip()
-                        port = int(port_str)
-                        print(f"DEBUG: Got server port {port} from stdout")
-                        return port
+                    if line:
+                        buffer += line
+                        # Try to parse JSON when we have a complete object
+                        if buffer.strip().startswith("{") and buffer.strip().endswith("}"):
+                            try:
+                                server_info = json.loads(buffer.strip())
+                                port = server_info["server_info"]["port"]
+                                print(f"DEBUG: Got server port {port} from JSON")
+                                return port
+                            except (json.JSONDecodeError, KeyError):
+                                # Not valid JSON or missing port, keep reading
+                                pass
                 except Exception as e:
                     print(f"DEBUG: Error reading stdout: {e}")
                     break
             time.sleep(0.1)
 
-        raise Exception("Could not read server port from stdout")
+        raise Exception("Could not read server port from JSON output")
 
     def stop(self) -> None:
         """Stop the Go test server."""
