@@ -47,6 +47,15 @@ setup_environment() {
     
     cd "$PYTHON_DIR"
     
+    # Ensure Go is available in this SSH session too (CI may start a fresh session per step)
+    # Common install paths: snap (/snap/bin) and tarball (/usr/local/go/bin)
+    export PATH="/usr/local/go/bin:/snap/bin:$PATH"
+    if command -v go >/dev/null 2>&1; then
+        print_status "go found: $(go version)"
+    else
+        print_warning "go not found on PATH in this session; if Python tests build the Go test server, they may fail"
+    fi
+    
     # Check if we should use system packages (when USE_SYSTEM_PACKAGES=1)
     if [ "${USE_SYSTEM_PACKAGES:-0}" = "1" ]; then
         print_status "Using system packages (skipping virtual environment creation)"

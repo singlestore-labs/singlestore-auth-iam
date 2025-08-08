@@ -59,6 +59,9 @@ class GoTestServerManager:
 
         # Build the test server
         logger.debug("Building test server...")
+        logger.debug("Build command: go build -o s2iam_test_server ./cmd/s2iam_test_server")
+        logger.debug("Build working directory: %s", self.go_dir)
+
         build_result = subprocess.run(
             ["go", "build", "-o", "s2iam_test_server", "./cmd/s2iam_test_server"],
             cwd=self.go_dir,
@@ -67,46 +70,81 @@ class GoTestServerManager:
         )
 
         if build_result.returncode != 0:
-            logger.debug("Build failed with stderr: %s", build_result.stderr)
-            logger.debug("Build failed with stdout: %s", build_result.stdout)
+            logger.error("Build failed with return code: %s", build_result.returncode)
+            logger.error("Build failed with stderr: %s", build_result.stderr)
+            logger.error("Build failed with stdout: %s", build_result.stdout)
             raise Exception(f"Failed to build test server: {build_result.stderr}")
 
         logger.debug("Build successful, starting server...")
+
+        # Verify binary was created and is executable
+        binary_path = os.path.join(self.go_dir, "s2iam_test_server")
+        if not os.path.exists(binary_path):
+            logger.error("Binary not found after build: %s", binary_path)
+            raise Exception(f"Test server binary not found after build: {binary_path}")
+
+        if not os.access(binary_path, os.X_OK):
+            logger.error("Binary not executable: %s", binary_path)
+            raise Exception(f"Test server binary not executable: {binary_path}")
+
+        logger.debug("Binary verified: %s (size: %d bytes)", binary_path, os.path.getsize(binary_path))
 
         # Set debug log file for Go server
         debug_log_file = os.path.join(self.go_dir, "test_server_debug.log")
         self.debug_log_file = debug_log_file  # Store for later access
         env = os.environ.copy()
         env["S2IAM_TEST_SERVER_DEBUG_LOG"] = debug_log_file
+        # Also route process stderr to this file to keep stdout clean for JSON
+        self._stderr_file = open(debug_log_file, "w")
 
         logger.debug("Go server debug log will be written to: %s", debug_log_file)
 
+        # Prepare server command
+        server_cmd = [
+            "./s2iam_test_server",
+            "-port",
+            str(self.port),
+            "-timeout",
+            f"{self.timeout_minutes}m",
+        ]
+        logger.debug("Starting server with command: %s", ' '.join(server_cmd))
+        logger.debug("Server working directory: %s", self.go_dir)
+        logger.debug(
+            "Server environment variables: %s",
+            {k: v for k, v in env.items() if k.startswith("S2IAM")},
+        )
+
         # Start the server with timeout
         self.process = subprocess.Popen(
-            [
-                "./s2iam_test_server",
-                "-port",
-                str(self.port),
-                "-timeout",
-                f"{self.timeout_minutes}m",
-            ],
+            server_cmd,
             cwd=self.go_dir,
             env=env,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=self._stderr_file,
             text=True,
+            bufsize=1,  # line-buffered for text mode
         )
 
         logger.debug("Server process started with PID: %s", self.process.pid)
 
-        # Wait for server to start
-        time.sleep(2)
+        # Wait for server to start - increased wait time for CI
+        logger.debug("Waiting for server to initialize...")
+        time.sleep(3)  # Increased from 2 to 3 seconds
 
-        if self.process.poll() is not None:
+        # Check if process is still running
+        poll_result = self.process.poll()
+        if poll_result is not None:
             stdout, stderr = self.process.communicate()
-            logger.debug("Server failed to start - stdout: %s", stdout)
-            logger.debug("Server failed to start - stderr: %s", stderr)
-            raise Exception(f"Test server failed to start: {stderr}")
+            logger.error(
+                "Server failed to start - process exited with code: %s", poll_result
+            )
+            logger.error("Server failed to start - stdout: %s", stdout)
+            logger.error("Server failed to start - stderr: %s", stderr)
+            raise Exception(
+                f"Test server failed to start (exit code: {poll_result}): {stderr}"
+            )
+
+        logger.debug("Server process still running, attempting to read port...")
 
         # If we used port 0, read the actual port from server output
         if self.port == 0:
@@ -120,37 +158,61 @@ class GoTestServerManager:
         logger.debug("Test server started successfully on port %s", self.actual_port)
 
     def _read_server_port(self) -> int:
-        """Read the server port from JSON output."""
+        """Read the server port from JSON written to stdout (synchronous, simple)."""
         import json
 
-        # The Go server prints JSON with server_info containing the port
-        # Read stdout until we find the JSON object
         start_time = time.time()
-        timeout = 10  # 10 second timeout
+        timeout = 30  # seconds
         buffer = ""
+        all_stdout: list[str] = []
+        brace_count = 0
+        in_json = False
+
+        logger.debug("Reading server port from JSON output (timeout=%ds)...", timeout)
 
         while time.time() - start_time < timeout:
-            if self.process.stdout:
-                try:
-                    line = self.process.stdout.readline()
-                    if line:
-                        buffer += line
-                        # Try to parse JSON when we have a complete object
-                        if buffer.strip().startswith("{") and buffer.strip().endswith("}"):
-                            try:
-                                server_info = json.loads(buffer.strip())
-                                port = server_info["server_info"]["port"]
-                                logger.debug("Got server port %s from JSON", port)
-                                return port
-                            except (json.JSONDecodeError, KeyError):
-                                # Not valid JSON or missing port, keep reading
-                                pass
-                except Exception as e:
-                    logger.debug("Error reading stdout: %s", e)
-                    break
-            time.sleep(0.1)
+            if not self.process or self.process.poll() is not None:
+                logger.error("Server process ended while reading port")
+                break
 
-        raise Exception("Could not read server port from JSON output")
+            # Blocking read of one line; server prints pretty JSON with newlines
+            line = self.process.stdout.readline() if self.process and self.process.stdout else ""
+            if not line:
+                time.sleep(0.05)
+                continue
+
+            all_stdout.append(line)
+            buffer += line
+            logger.debug("STDOUT: %s", line.rstrip())
+
+            for ch in line:
+                if ch == '{':
+                    brace_count += 1
+                    in_json = True
+                elif ch == '}':
+                    brace_count -= 1
+
+            if in_json and brace_count == 0:
+                js_start = buffer.find('{')
+                js_end = buffer.rfind('}') + 1
+                if js_start >= 0 and js_end > js_start:
+                    js = buffer[js_start:js_end]
+                    try:
+                        obj = json.loads(js)
+                        port = obj["server_info"]["port"]
+                        logger.debug("Parsed port from JSON: %s", port)
+                        return port
+                    except Exception as e:
+                        logger.debug("JSON parse failed (continuing): %s", e)
+                        buffer = ""
+                        brace_count = 0
+                        in_json = False
+
+        logger.error("Failed to read server port within %ds", timeout)
+        logger.error("All stdout received:\n%s", ''.join(all_stdout))
+        if self.process:
+            logger.error("Server process exit code: %s", self.process.poll())
+        raise Exception(f"Could not read server port from JSON output after {timeout}s timeout")
 
     def stop(self) -> None:
         """Stop the Go test server."""
@@ -162,6 +224,17 @@ class GoTestServerManager:
                 self.process.kill()
                 self.process.wait()
             self.process = None
+
+        # Ensure stderr file is closed
+        if hasattr(self, "_stderr_file") and self._stderr_file and not self._stderr_file.closed:
+            try:
+                self._stderr_file.flush()
+            except Exception:
+                pass
+            try:
+                self._stderr_file.close()
+            except Exception:
+                pass
 
         # Show debug log contents if available
         self.show_debug_log()

@@ -290,17 +290,10 @@ ServerReady:
 	// Output as JSON
 	jsonInfo, err := json.MarshalIndent(serverInfo, "", "  ")
 	if err != nil {
-		log.Printf("Warning: Failed to marshal server info to JSON: %v", err)
+		log.Fatalf("Warning: Failed to marshal server info to JSON: %v", err)
 	} else {
 		fmt.Println(string(jsonInfo))
 	}
-
-	// Also print human-readable endpoints for convenience
-	log.Printf("Server ready. Endpoints:")
-	log.Printf("  Auth:       http://localhost:%d/auth/iam/:jwtType", actualPort)
-	log.Printf("  Public Key: http://localhost:%d/info/public-key", actualPort)
-	log.Printf("  Requests:   http://localhost:%d/info/requests", actualPort)
-	log.Printf("  Health:     http://localhost:%d/health", actualPort)
 
 	// Wait for the server to complete (or error)
 	return <-serverErr
