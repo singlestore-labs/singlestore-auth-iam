@@ -36,14 +36,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e '.[dev]'
     
-    # Skip linting for now - too many style issues to fix
-    # - name: Run linting and type checking
-    #   working-directory: ./python
-    #   run: |
-    #     flake8 src tests
-    #     black --check src tests
-    #     isort --check-only src tests
-    #     mypy src
+    - name: Run linting and type checking
+      working-directory: ./python
+      run: |
+        flake8 src tests
+        black --check src tests
+        isort --check-only src tests
+        mypy src
     
     - name: Run tests with coverage
       working-directory: ./python

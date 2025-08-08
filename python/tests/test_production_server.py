@@ -6,6 +6,7 @@ Currently tests database JWT only, with GCP temporarily skipped due to audience 
 """
 
 import pytest
+import time
 
 import s2iam
 from s2iam import CloudProviderType
@@ -140,11 +141,9 @@ async def test_production_server_timeout_handling():
     print(f"✓ Detected provider: {client.get_type().value}")
 
     # Test with reasonable timeout
-    start_time = __import__("time").time()
+    start = time.perf_counter()
     jwt = await s2iam.get_jwt_database(workspace_group_id="timeout-test-workspace", timeout=30.0)
-    end_time = __import__("time").time()
-
-    elapsed = end_time - start_time
+    elapsed = time.perf_counter() - start
 
     assert jwt is not None, "Database JWT should be generated within timeout"
     assert elapsed < 30.0, f"Request should complete within timeout (took {elapsed:.2f}s)"
