@@ -82,9 +82,7 @@ async def detect_provider(
                 loop.close()
         except Exception as e:
             with errors_lock:
-                all_errors.append(
-                    f"Provider {client.get_type().value} detection failed: {e}"
-                )
+                all_errors.append(f"Provider {client.get_type().value} detection failed: {e}")
             if logger:
                 logger.log(f"Provider {client.get_type().value} detection failed: {e}")
 

@@ -88,14 +88,10 @@ async def get_jwt(
 
     # Log request if logger available
     if logger:
-        logger.log(
-            f"Requesting JWT from {server_url} for provider {identity.provider.value}"
-        )
+        logger.log(f"Requesting JWT from {server_url} for provider {identity.provider.value}")
 
     # Make JWT request
-    async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=timeout)
-    ) as session:
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         async with session.post(
             server_url,
             headers={
@@ -116,9 +112,7 @@ async def get_jwt(
                 return jwt
             else:
                 error_text = await response.text()
-                raise Exception(
-                    f"JWT request failed with status {response.status}: {error_text}"
-                )
+                raise Exception(f"JWT request failed with status {response.status}: {error_text}")
 
 
 # Legacy function name for compatibility

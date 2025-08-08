@@ -6,13 +6,12 @@ to ensure consistent test behavior across language implementations.
 """
 
 import os
-from typing import Optional
 
 import pytest
 
 import s2iam
 
-from s2iam.models import CloudProviderClient, CloudProviderType
+from s2iam.models import CloudProviderClient
 
 
 async def expect_cloud_provider_detected(timeout: float = 5.0) -> CloudProviderClient:

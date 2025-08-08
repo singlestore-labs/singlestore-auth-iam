@@ -53,9 +53,7 @@ class TestModels:
 
     def test_cloud_identity_defaults(self):
         """Test CloudIdentity with default values."""
-        identity = CloudIdentity(
-            provider=CloudProviderType.GCP, identifier="test-identity"
-        )
+        identity = CloudIdentity(provider=CloudProviderType.GCP, identifier="test-identity")
 
         assert identity.provider == CloudProviderType.GCP
         assert identity.identifier == "test-identity"
@@ -117,9 +115,7 @@ class TestInterfaces:
         assert logger.messages == ["test message"]
 
         # This should not raise any type errors
-        assert isinstance(
-            logger, object
-        )  # Logger is a Protocol, so this is basic check
+        assert isinstance(logger, object)  # Logger is a Protocol, so this is basic check
 
     def test_cloud_provider_client_interface(self):
         """Test CloudProviderClient abstract interface."""

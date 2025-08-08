@@ -54,9 +54,7 @@ class AzureClient(CloudProviderClient):
 
         # Try to access Azure metadata service
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=3)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 async with session.get(
                     "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
                     headers={"Metadata": "true"},
@@ -68,9 +66,7 @@ class AzureClient(CloudProviderClient):
                             self._detected = True
                             return
                     else:
-                        self._log(
-                            f"Azure metadata service returned status {response.status}"
-                        )
+                        self._log(f"Azure metadata service returned status {response.status}")
         except Exception as e:
             self._log(f"Failed to access Azure metadata service: {e}")
 
@@ -133,18 +129,14 @@ class AzureClient(CloudProviderClient):
                             ) == "invalid_request" and "Identity not found" in error_data.get(
                                 "error_description", ""
                             ):
-                                raise Exception(
-                                    "No managed identity configured on this Azure VM"
-                                )
+                                raise Exception("No managed identity configured on this Azure VM")
                         except Exception:
                             # If we can't parse the error, still fail
                             pass
 
                     # Any other error status
                     text = await response.text()
-                    raise Exception(
-                        f"Managed identity test failed: {response.status} - {text}"
-                    )
+                    raise Exception(f"Managed identity test failed: {response.status} - {text}")
 
         except aiohttp.ClientError as e:
             # Network errors (timeout, connection refused, etc.)
@@ -157,11 +149,9 @@ class AzureClient(CloudProviderClient):
     async def _verify_identity_access(self) -> None:
         """Verify we can access Azure identity services."""
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=2)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                 async with session.get(
-                    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/",
+                    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/",  # noqa: E501
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status != 200:
@@ -169,9 +159,7 @@ class AzureClient(CloudProviderClient):
                             "Azure metadata available but no identity access"
                         )
         except aiohttp.ClientError as e:
-            raise ProviderIdentityUnavailable(
-                f"Cannot access Azure identity metadata: {e}"
-            )
+            raise ProviderIdentityUnavailable(f"Cannot access Azure identity metadata: {e}")
 
     def get_type(self) -> CloudProviderType:
         """Return Azure provider type."""
@@ -190,9 +178,7 @@ class AzureClient(CloudProviderClient):
     ) -> tuple[dict[str, str], CloudIdentity]:
         """Get Azure identity headers."""
         if not self._detected:
-            raise ProviderNotDetected(
-                "Azure provider not detected, call detect() first"
-            )
+            raise ProviderNotDetected("Azure provider not detected, call detect() first")
 
         try:
             # Get access token for Azure management API
@@ -203,20 +189,14 @@ class AzureClient(CloudProviderClient):
                 )
             else:
                 # Use default identity
-                token_data = await self._get_managed_identity_token(
-                    "https://management.azure.com/"
-                )
+                token_data = await self._get_managed_identity_token("https://management.azure.com/")
 
             # Get instance metadata
             instance_metadata = await self._get_instance_metadata()
 
             # Create identity - extract principal ID from JWT claims to match Go implementation
-            principal_id = await self._extract_principal_id_from_token(
-                token_data["access_token"]
-            )
-            subscription_id = instance_metadata.get("compute", {}).get(
-                "subscriptionId", ""
-            )
+            principal_id = await self._extract_principal_id_from_token(token_data["access_token"])
+            subscription_id = instance_metadata.get("compute", {}).get("subscriptionId", "")
             location = instance_metadata.get("compute", {}).get("location", "")
 
             identity = CloudIdentity(
@@ -290,9 +270,7 @@ class AzureClient(CloudProviderClient):
             params["client_id"] = client_id
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, params=params, headers={"Metadata": "true"}
-            ) as response:
+            async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
                 if response.status == 200:
                     return await response.json()
                 else:

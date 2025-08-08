@@ -5,14 +5,12 @@ These tests validate the library against the production authsvc.singlestore.com 
 Currently tests database JWT only, with GCP temporarily skipped due to audience configuration.
 """
 
-import os
-
 import pytest
 
 import s2iam
 from s2iam import CloudProviderType
 
-from .testhelp import expect_cloud_provider_detected, require_cloud_role
+from .testhelp import require_cloud_role
 
 
 async def _test_production_database_jwt(client):
@@ -93,12 +91,8 @@ async def test_production_database_jwt_with_workspace_details():
     for workspace in test_workspaces:
         jwt = await s2iam.get_jwt_database(workspace_group_id=workspace, timeout=30.0)
 
-        assert (
-            jwt is not None
-        ), f"Database JWT should be generated for workspace {workspace}"
-        assert (
-            len(jwt) > 0
-        ), f"Database JWT should not be empty for workspace {workspace}"
+        assert jwt is not None, f"Database JWT should be generated for workspace {workspace}"
+        assert len(jwt) > 0, f"Database JWT should not be empty for workspace {workspace}"
         assert jwt.startswith(
             "eyJ"
         ), f"Database JWT should be valid JWT format for workspace {workspace}"
@@ -126,9 +120,7 @@ async def test_production_server_error_handling():
         )
         # If this succeeds, validate the JWT
         if jwt:
-            assert jwt.startswith(
-                "eyJ"
-            ), "JWT should be valid format even with empty workspace"
+            assert jwt.startswith("eyJ"), "JWT should be valid format even with empty workspace"
             print("✓ Production server handles empty workspace ID gracefully")
     except Exception as e:
         # If this fails, it's also acceptable - just log it
@@ -137,13 +129,9 @@ async def test_production_server_error_handling():
     # Test with very long workspace ID
     try:
         long_workspace = "a" * 200  # Very long workspace ID
-        jwt = await s2iam.get_jwt_database(
-            workspace_group_id=long_workspace, timeout=30.0
-        )
+        jwt = await s2iam.get_jwt_database(workspace_group_id=long_workspace, timeout=30.0)
         if jwt:
-            assert jwt.startswith(
-                "eyJ"
-            ), "JWT should be valid format even with long workspace"
+            assert jwt.startswith("eyJ"), "JWT should be valid format even with long workspace"
             print("✓ Production server handles long workspace ID gracefully")
     except Exception as e:
         # If this fails, it's also acceptable - just log it
@@ -165,17 +153,13 @@ async def test_production_server_timeout_handling():
 
     # Test with reasonable timeout
     start_time = __import__("time").time()
-    jwt = await s2iam.get_jwt_database(
-        workspace_group_id="timeout-test-workspace", timeout=30.0
-    )
+    jwt = await s2iam.get_jwt_database(workspace_group_id="timeout-test-workspace", timeout=30.0)
     end_time = __import__("time").time()
 
     elapsed = end_time - start_time
 
     assert jwt is not None, "Database JWT should be generated within timeout"
-    assert (
-        elapsed < 30.0
-    ), f"Request should complete within timeout (took {elapsed:.2f}s)"
+    assert elapsed < 30.0, f"Request should complete within timeout (took {elapsed:.2f}s)"
 
     print(f"✓ Production server response time: {elapsed:.2f} seconds")
     print(f"✓ Successfully generated JWT within timeout")

@@ -51,9 +51,7 @@ class GCPClient(CloudProviderClient):
                 return
             except Exception:
                 self._log("Metadata service available but no identity access")
-                raise ProviderIdentityUnavailable(
-                    "GCP metadata available but no identity access"
-                )
+                raise ProviderIdentityUnavailable("GCP metadata available but no identity access")
 
         # Try to access GCP metadata service directly
         self._log("Trying metadata service")
@@ -71,15 +69,13 @@ class GCPClient(CloudProviderClient):
                         if response.status == 200:
                             return True
                         else:
-                            raise Exception(
-                                f"Metadata service returned status {response.status}"
-                            )
+                            raise Exception(f"Metadata service returned status {response.status}")
                 finally:
                     socket.setdefaulttimeout(None)  # Reset to default
 
             # Run sync operation in executor to avoid blocking event loop
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, sync_check)
+            _result = await loop.run_in_executor(None, sync_check)
 
             self._log("Successfully detected GCP environment")
             self._detected = True
@@ -89,7 +85,7 @@ class GCPClient(CloudProviderClient):
             error_msg = str(e) if str(e) else f"{type(e).__name__}"
             self._log(f"Metadata service error: {error_msg}")
             raise Exception(
-                f"Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): {error_msg}"
+                f"Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): {error_msg}"  # noqa: E501
             )
 
         raise Exception(
@@ -101,9 +97,7 @@ class GCPClient(CloudProviderClient):
         try:
             # Use asyncio.wait_for with explicit timeout (matches Go's pattern)
             async def check_identity_access():
-                async with aiohttp.ClientSession(
-                    timeout=aiohttp.ClientTimeout(total=2)
-                ) as session:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                     async with session.get(
                         "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/",
                         headers={"Metadata-Flavor": "Google"},
@@ -117,18 +111,12 @@ class GCPClient(CloudProviderClient):
             await asyncio.wait_for(check_identity_access(), timeout=2.0)
 
         except asyncio.TimeoutError:
-            raise ProviderIdentityUnavailable(
-                "Cannot access GCP identity metadata: timeout"
-            )
+            raise ProviderIdentityUnavailable("Cannot access GCP identity metadata: timeout")
         except aiohttp.ClientError as e:
-            raise ProviderIdentityUnavailable(
-                f"Cannot access GCP identity metadata: {e}"
-            )
+            raise ProviderIdentityUnavailable(f"Cannot access GCP identity metadata: {e}")
         except Exception as e:
             error_msg = str(e) if str(e) else f"{type(e).__name__}"
-            raise ProviderIdentityUnavailable(
-                f"Cannot access GCP identity metadata: {error_msg}"
-            )
+            raise ProviderIdentityUnavailable(f"Cannot access GCP identity metadata: {error_msg}")
 
     def get_type(self) -> CloudProviderType:
         """Return GCP provider type."""
@@ -167,13 +155,11 @@ class GCPClient(CloudProviderClient):
             else:
                 # Get default identity token
                 token = await self._get_identity_token(audience)
-                project_info = await self._get_project_info()
+                _project_info = await self._get_project_info()
                 service_account = await self._get_service_account()
 
                 # Parse token to extract identity information (matching Go implementation)
-                identity = await self._extract_identity_from_token(
-                    token, service_account
-                )
+                identity = await self._extract_identity_from_token(token, service_account)
 
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -188,12 +174,10 @@ class GCPClient(CloudProviderClient):
 
     async def _get_identity_token(self, audience: str) -> str:
         """Get identity token from metadata service."""
-        url = f"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={audience}&format=full"
+        url = f"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={audience}&format=full"  # noqa: E501
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, headers={"Metadata-Flavor": "Google"}
-            ) as response:
+            async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
                 if response.status == 200:
                     return await response.text()
                 else:
@@ -202,12 +186,10 @@ class GCPClient(CloudProviderClient):
     async def _get_impersonated_token(self, audience: str) -> str:
         """Get token through service account impersonation."""
         # First get our own token for authentication
-        self_token = await self._get_identity_token(
-            "https://iamcredentials.googleapis.com/"
-        )
+        self_token = await self._get_identity_token("https://iamcredentials.googleapis.com/")
 
         # Request impersonated token
-        url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{self._service_account_email}:generateIdToken"
+        url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{self._service_account_email}:generateIdToken"  # noqa: E501
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -223,9 +205,7 @@ class GCPClient(CloudProviderClient):
                     return data["token"]
                 else:
                     text = await response.text()
-                    raise Exception(
-                        f"Impersonation failed with status {response.status}: {text}"
-                    )
+                    raise Exception(f"Impersonation failed with status {response.status}: {text}")
 
     async def _get_project_info(self) -> dict[str, str]:
         """Get project information from metadata."""
@@ -279,17 +259,13 @@ class GCPClient(CloudProviderClient):
                     if response.status == 200:
                         zone_path = await response.text()
                         # Extract zone from path like "projects/123/zones/us-central1-a"
-                        return (
-                            zone_path.split("/")[-1] if "/" in zone_path else zone_path
-                        )
+                        return zone_path.split("/")[-1] if "/" in zone_path else zone_path
         except Exception as e:
             self._log(f"Failed to get zone: {e}")
 
         return ""
 
-    async def _extract_identity_from_token(
-        self, token: str, service_account: str
-    ) -> CloudIdentity:
+    async def _extract_identity_from_token(self, token: str, service_account: str) -> CloudIdentity:
         """Extract identity information from GCP token (matching Go implementation).
 
         Args:

@@ -46,9 +46,7 @@ class AWSClient(CloudProviderClient):
         try:
             import aiohttp
 
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=3)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 # Try to get IMDSv2 token first
                 async with session.put(
                     "http://169.254.169.254/latest/api/token",
@@ -130,9 +128,7 @@ class AWSClient(CloudProviderClient):
             try:
                 import aiohttp
 
-                async with aiohttp.ClientSession(
-                    timeout=aiohttp.ClientTimeout(total=3)
-                ) as session:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                     # Get token first
                     async with session.put(
                         "http://169.254.169.254/latest/api/token",

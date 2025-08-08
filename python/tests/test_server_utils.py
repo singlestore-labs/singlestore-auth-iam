@@ -5,7 +5,6 @@ Shared test utilities for managing the Go test server.
 import os
 import subprocess
 import time
-import socket
 from typing import Optional
 
 
@@ -23,9 +22,7 @@ class GoTestServerManager:
         self.port = port if port is not None else 0
         self.timeout_minutes = timeout_minutes
         self.process: Optional[subprocess.Popen] = None
-        self.server_url = (
-            f"http://localhost:{self.port}"  # Will be updated after server starts
-        )
+        self.server_url = f"http://localhost:{self.port}"  # Will be updated after server starts
         self.go_dir = self._get_go_directory(go_dir)
         self.actual_port: Optional[int] = None
 
@@ -33,9 +30,7 @@ class GoTestServerManager:
         """Get the Go directory location for the two known test scenarios."""
         if go_dir:
             if not os.path.exists(os.path.join(go_dir, "go.mod")):
-                raise Exception(
-                    f"Specified Go directory does not contain go.mod: {go_dir}"
-                )
+                raise Exception(f"Specified Go directory does not contain go.mod: {go_dir}")
             return os.path.abspath(go_dir)
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -124,7 +119,7 @@ class GoTestServerManager:
     def _read_server_port(self) -> int:
         """Read the server port from JSON output."""
         import json
-        
+
         # The Go server prints JSON with server_info containing the port
         # Read stdout until we find the JSON object
         start_time = time.time()

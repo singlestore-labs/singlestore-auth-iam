@@ -13,7 +13,7 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType
 
-from .testhelp import expect_cloud_provider_detected, require_cloud_role
+from .testhelp import expect_cloud_provider_detected
 
 
 @pytest.mark.asyncio
@@ -42,9 +42,7 @@ class TestFastPathDetection:
             }
 
             # Try to get region from existing environment
-            region = os.environ.get("AWS_REGION") or os.environ.get(
-                "AWS_DEFAULT_REGION"
-            )
+            region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
             if region:
                 env_vars_to_set["AWS_REGION"] = region
 
@@ -88,9 +86,7 @@ class TestFastPathDetection:
                 return
 
             # Test that both providers work equivalently
-            await self._test_equivalent_functionality(
-                normal_provider, fastpath_provider
-            )
+            await self._test_equivalent_functionality(normal_provider, fastpath_provider)
 
     async def _test_equivalent_functionality(self, normal_provider, fastpath_provider):
         """Test that both providers produce equivalent results."""

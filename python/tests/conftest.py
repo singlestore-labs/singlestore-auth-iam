@@ -41,29 +41,21 @@ def pytest_collection_modifyitems(config, items):
                 # Only skip if we're clearly in a CI environment without cloud access
                 if os.environ.get("GITHUB_ACTIONS") and not _is_any_cloud_environment():
                     item.add_marker(
-                        pytest.mark.skip(
-                            reason="Test explicitly requires cloud environment"
-                        )
+                        pytest.mark.skip(reason="Test explicitly requires cloud environment")
                     )
 
             # Provider-specific tests should only skip if we're in CI and not in the right cloud
             if item.get_closest_marker("aws") and os.environ.get("GITHUB_ACTIONS"):
                 if not _check_aws_metadata():
-                    item.add_marker(
-                        pytest.mark.skip(reason="Not running in AWS environment")
-                    )
+                    item.add_marker(pytest.mark.skip(reason="Not running in AWS environment"))
 
             if item.get_closest_marker("gcp") and os.environ.get("GITHUB_ACTIONS"):
                 if not _check_gcp_metadata():
-                    item.add_marker(
-                        pytest.mark.skip(reason="Not running in GCP environment")
-                    )
+                    item.add_marker(pytest.mark.skip(reason="Not running in GCP environment"))
 
             if item.get_closest_marker("azure") and os.environ.get("GITHUB_ACTIONS"):
                 if not _check_azure_metadata():
-                    item.add_marker(
-                        pytest.mark.skip(reason="Not running in Azure environment")
-                    )
+                    item.add_marker(pytest.mark.skip(reason="Not running in Azure environment"))
 
 
 def _is_any_cloud_environment():
@@ -97,11 +89,7 @@ def _is_any_cloud_environment():
                 return True
 
             # Check metadata services as fallback
-            return (
-                _check_aws_metadata()
-                or _check_gcp_metadata()
-                or _check_azure_metadata()
-            )
+            return _check_aws_metadata() or _check_gcp_metadata() or _check_azure_metadata()
     except RuntimeError:
         # No event loop, we can create one
         pass
@@ -171,9 +159,7 @@ def _check_aws_metadata():
             import urllib.request
 
             # Try to get token first (IMDSv2)
-            req = urllib.request.Request(
-                "http://169.254.169.254/latest/api/token", method="PUT"
-            )
+            req = urllib.request.Request("http://169.254.169.254/latest/api/token", method="PUT")
             req.add_header("X-aws-ec2-metadata-token-ttl-seconds", "21600")
 
             with urllib.request.urlopen(req, timeout=2) as response:

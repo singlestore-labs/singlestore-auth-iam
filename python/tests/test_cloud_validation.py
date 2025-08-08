@@ -16,9 +16,7 @@ from .testhelp import expect_cloud_provider_detected, require_cloud_role
 @pytest.fixture(scope="session")
 def test_server():
     """Fixture to manage the Go test server for the entire test session."""
-    server = GoTestServerManager(
-        timeout_minutes=5
-    )  # Auto-shutdown after 5 minutes, random port
+    server = GoTestServerManager(timeout_minutes=5)  # Auto-shutdown after 5 minutes, random port
     try:
         server.start()
         yield server
@@ -79,9 +77,7 @@ class TestCloudProviderValidation:
             assert database_jwt.startswith("eyJ")
 
             # Test API JWT using convenience function
-            api_jwt = await s2iam.get_jwt_api(
-                server_url=f"{test_server.server_url}/auth/iam/api"
-            )
+            api_jwt = await s2iam.get_jwt_api(server_url=f"{test_server.server_url}/auth/iam/api")
             assert api_jwt is not None
             assert isinstance(api_jwt, str)
             assert len(api_jwt) > 100
@@ -125,9 +121,7 @@ class TestCloudProviderValidation:
             assert database_jwt.startswith("eyJ")
 
             # Test API convenience function
-            api_jwt = await s2iam.get_jwt_api(
-                server_url=f"{test_server.server_url}/auth/iam/api"
-            )
+            api_jwt = await s2iam.get_jwt_api(server_url=f"{test_server.server_url}/auth/iam/api")
 
             assert api_jwt is not None
             assert isinstance(api_jwt, str)
@@ -315,9 +309,7 @@ class TestErrorHandlingValidation:
                 CloudProviderType.GCP,
                 CloudProviderType.AZURE,
             ]
-            pytest.skip(
-                "Running in cloud environment - cannot test no-provider scenario"
-            )
+            pytest.skip("Running in cloud environment - cannot test no-provider scenario")
         except s2iam.CloudProviderNotFound:
             # This is expected when not in cloud
             pass
@@ -395,12 +387,8 @@ class TestHappyPath:
                 if key.lower() == "authorization" and value.startswith("Bearer "):
                     jwt_header = value[7:]  # Remove 'Bearer ' prefix
                     try:
-                        import jwt
-
                         # Decode without verification to see claims
-                        claims = jwt.decode(
-                            jwt_header, options={"verify_signature": False}
-                        )
+                        claims = jwt.decode(jwt_header, options={"verify_signature": False})
                         print(f"    {key}: Bearer <JWT with claims: {claims}>")
                     except Exception as e:
                         print(f"    {key}: Bearer <JWT decode failed: {e}>")
@@ -438,7 +426,7 @@ class TestHappyPath:
         created_by_test_server = jwt_claims.get("createdByTestServer", False)
         print(f"🔍 JWT createdByTestServer: {created_by_test_server}")
         assert (
-            created_by_test_server == True
+            created_by_test_server is True
         ), f"JWT was not created by Go test server! Claims: {jwt_claims}"
 
         # Verify the JWT sub claim contains the client identifier

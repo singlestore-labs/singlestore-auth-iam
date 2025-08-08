@@ -18,9 +18,7 @@ from .testhelp import expect_cloud_provider_detected, require_cloud_role
 @pytest.fixture(scope="session")
 def test_server():
     """Fixture to manage the test server lifecycle."""
-    server = GoTestServerManager(
-        timeout_minutes=5
-    )  # Auto-shutdown after 5 minutes, random port
+    server = GoTestServerManager(timeout_minutes=5)  # Auto-shutdown after 5 minutes, random port
     server.start()
     yield server
     server.stop()
@@ -80,9 +78,7 @@ class TestCloudProviderDetection:
                 pytest.fail(
                     "Cloud provider detection failed - expected to detect provider in test environment"
                 )
-            pytest.skip(
-                "No cloud provider detected - not running in a cloud environment"
-            )
+            pytest.skip("No cloud provider detected - not running in a cloud environment")
 
 
 @pytest.mark.asyncio
@@ -119,9 +115,7 @@ class TestJWTIntegration:
                 pytest.fail(
                     "Cloud provider detection failed - expected to detect provider in test environment"
                 )
-            pytest.skip(
-                "No cloud provider detected - not running in a cloud environment"
-            )
+            pytest.skip("No cloud provider detected - not running in a cloud environment")
 
     async def test_jwt_different_types(self, test_server):
         """Test different JWT types with the test server."""
@@ -152,9 +146,7 @@ class TestJWTIntegration:
                 pytest.fail(
                     "Cloud provider detection failed - expected to detect provider in test environment"
                 )
-            pytest.skip(
-                "No cloud provider detected - not running in a cloud environment"
-            )
+            pytest.skip("No cloud provider detected - not running in a cloud environment")
 
 
 @pytest.mark.asyncio
