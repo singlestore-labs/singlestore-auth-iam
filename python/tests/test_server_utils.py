@@ -2,10 +2,13 @@
 Shared test utilities for managing the Go test server.
 """
 
+import logging
 import os
 import subprocess
 import time
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class GoTestServerManager:
@@ -48,14 +51,14 @@ class GoTestServerManager:
     def start(self) -> None:
         """Start the Go test server."""
         if self.process and self.process.poll() is None:
-            print(f"DEBUG: Test server already running on port {self.port}")
+            logger.debug("Test server already running on port %s", self.port)
             return  # Already running
 
-        print(f"DEBUG: Starting Go test server on port {self.port}")
-        print(f"DEBUG: Using Go directory: {self.go_dir}")
+        logger.debug("Starting Go test server on port %s", self.port)
+        logger.debug("Using Go directory: %s", self.go_dir)
 
         # Build the test server
-        print("DEBUG: Building test server...")
+        logger.debug("Building test server...")
         build_result = subprocess.run(
             ["go", "build", "-o", "s2iam_test_server", "./cmd/s2iam_test_server"],
             cwd=self.go_dir,
@@ -64,11 +67,11 @@ class GoTestServerManager:
         )
 
         if build_result.returncode != 0:
-            print(f"DEBUG: Build failed with stderr: {build_result.stderr}")
-            print(f"DEBUG: Build failed with stdout: {build_result.stdout}")
+            logger.debug("Build failed with stderr: %s", build_result.stderr)
+            logger.debug("Build failed with stdout: %s", build_result.stdout)
             raise Exception(f"Failed to build test server: {build_result.stderr}")
 
-        print("DEBUG: Build successful, starting server...")
+        logger.debug("Build successful, starting server...")
 
         # Set debug log file for Go server
         debug_log_file = os.path.join(self.go_dir, "test_server_debug.log")
@@ -76,7 +79,7 @@ class GoTestServerManager:
         env = os.environ.copy()
         env["S2IAM_TEST_SERVER_DEBUG_LOG"] = debug_log_file
 
-        print(f"DEBUG: Go server debug log will be written to: {debug_log_file}")
+        logger.debug("Go server debug log will be written to: %s", debug_log_file)
 
         # Start the server with timeout
         self.process = subprocess.Popen(
@@ -94,15 +97,15 @@ class GoTestServerManager:
             text=True,
         )
 
-        print(f"DEBUG: Server process started with PID: {self.process.pid}")
+        logger.debug("Server process started with PID: %s", self.process.pid)
 
         # Wait for server to start
         time.sleep(2)
 
         if self.process.poll() is not None:
             stdout, stderr = self.process.communicate()
-            print(f"DEBUG: Server failed to start - stdout: {stdout}")
-            print(f"DEBUG: Server failed to start - stderr: {stderr}")
+            logger.debug("Server failed to start - stdout: %s", stdout)
+            logger.debug("Server failed to start - stderr: %s", stderr)
             raise Exception(f"Test server failed to start: {stderr}")
 
         # If we used port 0, read the actual port from server output
@@ -114,7 +117,7 @@ class GoTestServerManager:
         # Update server_url with actual port
         self.server_url = f"http://localhost:{self.actual_port}"
 
-        print(f"DEBUG: Test server started successfully on port {self.actual_port}")
+        logger.debug("Test server started successfully on port %s", self.actual_port)
 
     def _read_server_port(self) -> int:
         """Read the server port from JSON output."""
@@ -137,13 +140,13 @@ class GoTestServerManager:
                             try:
                                 server_info = json.loads(buffer.strip())
                                 port = server_info["server_info"]["port"]
-                                print(f"DEBUG: Got server port {port} from JSON")
+                                logger.debug("Got server port %s from JSON", port)
                                 return port
                             except (json.JSONDecodeError, KeyError):
                                 # Not valid JSON or missing port, keep reading
                                 pass
                 except Exception as e:
-                    print(f"DEBUG: Error reading stdout: {e}")
+                    logger.debug("Error reading stdout: %s", e)
                     break
             time.sleep(0.1)
 
@@ -178,7 +181,7 @@ class GoTestServerManager:
                 print(f"Error reading debug log: {e}")
             print("===== END GO SERVER DEBUG LOG =====\n")
         else:
-            print("DEBUG: No Go server debug log file found")
+            logger.debug("No Go server debug log file found")
 
     def is_running(self) -> bool:
         """Check if the test server is running."""
