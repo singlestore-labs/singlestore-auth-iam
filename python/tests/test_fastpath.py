@@ -117,9 +117,7 @@ class TestFastPathDetection:
             ), "Both providers should extract same account ID"
 
             # Compare regions
-            assert (
-                normal_identity.region == fastpath_identity.region
-            ), "Both providers should extract same region"
+            assert normal_identity.region == fastpath_identity.region, "Both providers should extract same region"
 
             # Compare essential headers
             essential_headers = ["X-Cloud-Provider", "Authorization"]

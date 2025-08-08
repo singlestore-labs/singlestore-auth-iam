@@ -149,9 +149,7 @@ class GCPClient(CloudProviderClient):
                 project_info = await self._get_project_info()
 
                 # Parse impersonated token to extract identity information
-                identity = await self._extract_identity_from_token(
-                    token, self._service_account_email
-                )
+                identity = await self._extract_identity_from_token(token, self._service_account_email)
             else:
                 # Get default identity token
                 token = await self._get_identity_token(audience)

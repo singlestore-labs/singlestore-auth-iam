@@ -124,9 +124,7 @@ class AzureClient(CloudProviderClient):
                         # Check for "Identity not found" error like Go implementation
                         try:
                             error_data = await response.json()
-                            if error_data.get(
-                                "error"
-                            ) == "invalid_request" and "Identity not found" in error_data.get(
+                            if error_data.get("error") == "invalid_request" and "Identity not found" in error_data.get(
                                 "error_description", ""
                             ):
                                 raise Exception("No managed identity configured on this Azure VM")
@@ -155,9 +153,7 @@ class AzureClient(CloudProviderClient):
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status != 200:
-                        raise ProviderIdentityUnavailable(
-                            "Azure metadata available but no identity access"
-                        )
+                        raise ProviderIdentityUnavailable("Azure metadata available but no identity access")
         except aiohttp.ClientError as e:
             raise ProviderIdentityUnavailable(f"Cannot access Azure identity metadata: {e}")
 
@@ -211,9 +207,7 @@ class AzureClient(CloudProviderClient):
                 "X-Cloud-Provider": "azure",
                 "Authorization": f"Bearer {token_data['access_token']}",
                 "X-Azure-Subscription-ID": subscription_id,
-                "X-Azure-Resource-Group": instance_metadata.get("compute", {}).get(
-                    "resourceGroupName", ""
-                ),
+                "X-Azure-Resource-Group": instance_metadata.get("compute", {}).get("resourceGroupName", ""),
                 "X-Azure-Location": location,
             }
 
@@ -259,9 +253,7 @@ class AzureClient(CloudProviderClient):
             # Fallback to client_id from metadata response
             return "unknown"
 
-    async def _get_managed_identity_token(
-        self, resource: str, client_id: Optional[str] = None
-    ) -> dict[str, str]:
+    async def _get_managed_identity_token(self, resource: str, client_id: Optional[str] = None) -> dict[str, str]:
         """Get token from Azure managed identity endpoint."""
         url = "http://169.254.169.254/metadata/identity/oauth2/token"
         params = {"api-version": "2018-02-01", "resource": resource}
@@ -275,9 +267,7 @@ class AzureClient(CloudProviderClient):
                     return await response.json()
                 else:
                     text = await response.text()
-                    raise Exception(
-                        f"Failed to get managed identity token: {response.status} - {text}"
-                    )
+                    raise Exception(f"Failed to get managed identity token: {response.status} - {text}")
 
     async def _get_instance_metadata(self) -> dict[str, Any]:
         """Get Azure instance metadata."""

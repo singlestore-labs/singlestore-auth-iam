@@ -76,6 +76,9 @@ type RequestInfo struct {
 }
 
 func main() {
+	// Redirect all log output to stderr to keep stdout clean for JSON
+	log.SetOutput(os.Stderr)
+
 	config := parseFlags()
 
 	srv, err := NewServer(config)

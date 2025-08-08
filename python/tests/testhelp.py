@@ -34,9 +34,7 @@ async def expect_cloud_provider_detected(timeout: float = 5.0) -> CloudProviderC
         provider = await s2iam.detect_provider(timeout=timeout)
         return provider
     except s2iam.CloudProviderNotFound:
-        pytest.fail(
-            "Cloud provider detection failed - expected to detect provider in test environment"
-        )
+        pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
     except s2iam.CloudProviderDetectedNoIdentity:
         pytest.skip("cloud provider detected no identity")
 

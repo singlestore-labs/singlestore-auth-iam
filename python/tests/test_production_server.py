@@ -61,9 +61,7 @@ async def test_production_database_jwt_gcp():
     # but production server only accepts "https://auth.singlestore.com"
     # This should be fixed on the server side to accept both audiences
     if client.get_type() == CloudProviderType.GCP:
-        pytest.skip(
-            "GCP production server test skipped due to audience mismatch - needs server-side fix"
-        )
+        pytest.skip("GCP production server test skipped due to audience mismatch - needs server-side fix")
 
     await _test_production_database_jwt(client)
 
@@ -75,9 +73,7 @@ async def test_production_database_jwt_with_workspace_details():
 
     # Skip GCP due to audience issues
     if client.get_type() == CloudProviderType.GCP:
-        pytest.skip(
-            "GCP temporarily skipped - production server audience configuration in progress"
-        )
+        pytest.skip("GCP temporarily skipped - production server audience configuration in progress")
 
     print(f"✓ Detected provider: {client.get_type().value}")
 
@@ -93,9 +89,7 @@ async def test_production_database_jwt_with_workspace_details():
 
         assert jwt is not None, f"Database JWT should be generated for workspace {workspace}"
         assert len(jwt) > 0, f"Database JWT should not be empty for workspace {workspace}"
-        assert jwt.startswith(
-            "eyJ"
-        ), f"Database JWT should be valid JWT format for workspace {workspace}"
+        assert jwt.startswith("eyJ"), f"Database JWT should be valid JWT format for workspace {workspace}"
 
         print(f"✓ Successfully generated JWT for workspace: {workspace}")
 
@@ -107,17 +101,13 @@ async def test_production_server_error_handling():
 
     # Skip GCP due to audience issues
     if client.get_type() == CloudProviderType.GCP:
-        pytest.skip(
-            "GCP temporarily skipped - production server audience configuration in progress"
-        )
+        pytest.skip("GCP temporarily skipped - production server audience configuration in progress")
 
     print(f"✓ Detected provider: {client.get_type().value}")
 
     # Test with invalid workspace ID (should still work but may have different behavior)
     try:
-        jwt = await s2iam.get_jwt_database(
-            workspace_group_id="", timeout=30.0  # Empty workspace ID
-        )
+        jwt = await s2iam.get_jwt_database(workspace_group_id="", timeout=30.0)  # Empty workspace ID
         # If this succeeds, validate the JWT
         if jwt:
             assert jwt.startswith("eyJ"), "JWT should be valid format even with empty workspace"
@@ -145,9 +135,7 @@ async def test_production_server_timeout_handling():
 
     # Skip GCP due to audience issues
     if client.get_type() == CloudProviderType.GCP:
-        pytest.skip(
-            "GCP temporarily skipped - production server audience configuration in progress"
-        )
+        pytest.skip("GCP temporarily skipped - production server audience configuration in progress")
 
     print(f"✓ Detected provider: {client.get_type().value}")
 

@@ -14,12 +14,8 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "aws: marks tests as AWS-specific")
     config.addinivalue_line("markers", "gcp: marks tests as GCP-specific")
     config.addinivalue_line("markers", "azure: marks tests as Azure-specific")
-    config.addinivalue_line(
-        "markers", "cloud_validation: marks tests as automated cloud validation tests"
-    )
-    config.addinivalue_line(
-        "markers", "requires_cloud: marks tests that require real cloud environment"
-    )
+    config.addinivalue_line("markers", "cloud_validation: marks tests as automated cloud validation tests")
+    config.addinivalue_line("markers", "requires_cloud: marks tests that require real cloud environment")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -40,9 +36,7 @@ def pytest_collection_modifyitems(config, items):
             if item.get_closest_marker("requires_cloud"):
                 # Only skip if we're clearly in a CI environment without cloud access
                 if os.environ.get("GITHUB_ACTIONS") and not _is_any_cloud_environment():
-                    item.add_marker(
-                        pytest.mark.skip(reason="Test explicitly requires cloud environment")
-                    )
+                    item.add_marker(pytest.mark.skip(reason="Test explicitly requires cloud environment"))
 
             # Provider-specific tests should only skip if we're in CI and not in the right cloud
             if item.get_closest_marker("aws") and os.environ.get("GITHUB_ACTIONS"):
@@ -137,9 +131,7 @@ def _check_aws_metadata():
                 import urllib.request
 
                 # Try to get token first (IMDSv2)
-                req = urllib.request.Request(
-                    "http://169.254.169.254/latest/api/token", method="PUT"
-                )
+                req = urllib.request.Request("http://169.254.169.254/latest/api/token", method="PUT")
                 req.add_header("X-aws-ec2-metadata-token-ttl-seconds", "21600")
 
                 with urllib.request.urlopen(req, timeout=2) as response:
@@ -193,9 +185,7 @@ def _check_gcp_metadata():
                 import urllib.error
                 import urllib.request
 
-                req = urllib.request.Request(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/id"
-                )
+                req = urllib.request.Request("http://metadata.google.internal/computeMetadata/v1/instance/id")
                 req.add_header("Metadata-Flavor", "Google")
 
                 with urllib.request.urlopen(req, timeout=2) as response:
@@ -213,9 +203,7 @@ def _check_gcp_metadata():
             import urllib.error
             import urllib.request
 
-            req = urllib.request.Request(
-                "http://metadata.google.internal/computeMetadata/v1/instance/id"
-            )
+            req = urllib.request.Request("http://metadata.google.internal/computeMetadata/v1/instance/id")
             req.add_header("Metadata-Flavor", "Google")
 
             with urllib.request.urlopen(req, timeout=2) as response:
@@ -248,9 +236,7 @@ def _check_azure_metadata():
                 import urllib.error
                 import urllib.request
 
-                req = urllib.request.Request(
-                    "http://169.254.169.254/metadata/instance?api-version=2018-02-01"
-                )
+                req = urllib.request.Request("http://169.254.169.254/metadata/instance?api-version=2018-02-01")
                 req.add_header("Metadata", "true")
 
                 with urllib.request.urlopen(req, timeout=2) as response:
@@ -268,9 +254,7 @@ def _check_azure_metadata():
             import urllib.error
             import urllib.request
 
-            req = urllib.request.Request(
-                "http://169.254.169.254/metadata/instance?api-version=2018-02-01"
-            )
+            req = urllib.request.Request("http://169.254.169.254/metadata/instance?api-version=2018-02-01")
             req.add_header("Metadata", "true")
 
             with urllib.request.urlopen(req, timeout=2) as response:

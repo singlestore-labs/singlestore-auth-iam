@@ -95,9 +95,7 @@ class TestCloudProviderValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected - not running in cloud environment")
 
     @pytest.mark.integration
@@ -129,9 +127,7 @@ class TestCloudProviderValidation:
             assert api_jwt.startswith("eyJ")
 
             # Test without workspace_group_id
-            api_jwt_no_workspace = await s2iam.get_jwt_api(
-                server_url=f"{test_server.server_url}/auth/iam/api"
-            )
+            api_jwt_no_workspace = await s2iam.get_jwt_api(server_url=f"{test_server.server_url}/auth/iam/api")
 
             assert api_jwt_no_workspace is not None
             assert isinstance(api_jwt_no_workspace, str)
@@ -146,9 +142,7 @@ class TestCloudProviderValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected - not running in cloud environment")
 
 
@@ -196,9 +190,7 @@ class TestProviderSpecificValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
 
     @pytest.mark.integration
@@ -242,9 +234,7 @@ class TestProviderSpecificValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
 
     @pytest.mark.integration
@@ -288,9 +278,7 @@ class TestProviderSpecificValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
 
 
@@ -335,9 +323,7 @@ class TestErrorHandlingValidation:
                 or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
                 or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
             ):
-                pytest.fail(
-                    "Cloud provider detection failed - expected to detect provider in test environment"
-                )
+                pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
             pytest.skip("No cloud provider detected")
 
 
@@ -425,9 +411,7 @@ class TestHappyPath:
         # Verify this is actually from our Go test server
         created_by_test_server = jwt_claims.get("createdByTestServer", False)
         print(f"🔍 JWT createdByTestServer: {created_by_test_server}")
-        assert (
-            created_by_test_server is True
-        ), f"JWT was not created by Go test server! Claims: {jwt_claims}"
+        assert created_by_test_server is True, f"JWT was not created by Go test server! Claims: {jwt_claims}"
 
         # Verify the JWT sub claim contains the client identifier
         jwt_subject = jwt_claims.get("sub")
@@ -449,15 +433,11 @@ class TestHappyPath:
         if provider_type == CloudProviderType.AWS:
             # AWS AccountID should be in ARN format
             aws_arn_pattern = re.compile(r"^arn:aws:.*:.*:.*")
-            assert aws_arn_pattern.match(
-                jwt_subject
-            ), f"AWS AccountID should be in ARN format, got: {jwt_subject}"
+            assert aws_arn_pattern.match(jwt_subject), f"AWS AccountID should be in ARN format, got: {jwt_subject}"
 
         elif provider_type == CloudProviderType.GCP:
             # For GCP: Identifier should be email, AccountID should be numeric, JWT sub should be email
-            gcp_email_pattern = re.compile(
-                r"^[a-zA-Z0-9\-_]+@[a-zA-Z0-9\-_]+\.iam\.gserviceaccount\.com$"
-            )
+            gcp_email_pattern = re.compile(r"^[a-zA-Z0-9\-_]+@[a-zA-Z0-9\-_]+\.iam\.gserviceaccount\.com$")
             gcp_numeric_pattern = re.compile(r"^\d{10,}$")  # At least 10 digits
 
             # Identifier should be service account email format
@@ -497,9 +477,7 @@ class TestHappyPath:
 
         current_time = int(time.time())
         jwt_exp = jwt_claims.get("exp")
-        assert (
-            jwt_exp > current_time
-        ), f"JWT should not be expired (exp: {jwt_exp}, now: {current_time})"
+        assert jwt_exp > current_time, f"JWT should not be expired (exp: {jwt_exp}, now: {current_time})"
 
         print(f"✓ Happy path validation successful for {provider_type.value}")
         print(f"  Client identity: {client_identity.identifier}")

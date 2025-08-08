@@ -109,9 +109,7 @@ class AWSClient(CloudProviderClient):
         except Exception as e:
             self._log(f"AWS STS client detection failed: {e}")
 
-        raise Exception(
-            "Not running on AWS: no environment variable, metadata service, or STS client detected"
-        )
+        raise Exception("Not running on AWS: no environment variable, metadata service, or STS client detected")
 
     async def _ensure_region(self) -> None:
         """Determine and set the AWS region."""
@@ -192,9 +190,7 @@ class AWSClient(CloudProviderClient):
                 self._log(f"Assuming role: {self._role_arn}")
                 assume_response = await loop.run_in_executor(
                     None,
-                    lambda: self._sts_client.assume_role(
-                        RoleArn=self._role_arn, RoleSessionName="s2iam-session"
-                    ),
+                    lambda: self._sts_client.assume_role(RoleArn=self._role_arn, RoleSessionName="s2iam-session"),
                 )
 
                 credentials = assume_response["Credentials"]
@@ -209,9 +205,7 @@ class AWSClient(CloudProviderClient):
                 assumed_sts = assumed_session.client("sts")
 
                 # Get identity with assumed role
-                identity_response = await loop.run_in_executor(
-                    None, assumed_sts.get_caller_identity
-                )
+                identity_response = await loop.run_in_executor(None, assumed_sts.get_caller_identity)
 
                 # For assumed roles, use the temporary credentials
                 headers = {
@@ -221,14 +215,11 @@ class AWSClient(CloudProviderClient):
                 }
             else:
                 # Get current identity first to check if we're using session credentials
-                identity_response = await loop.run_in_executor(
-                    None, self._sts_client.get_caller_identity
-                )
+                identity_response = await loop.run_in_executor(None, self._sts_client.get_caller_identity)
 
                 # Check if we're already using session credentials (like EC2 instance role)
                 is_using_session_credentials = (
-                    ":assumed-role/" in identity_response["Arn"]
-                    or os.environ.get("AWS_SESSION_TOKEN") is not None
+                    ":assumed-role/" in identity_response["Arn"] or os.environ.get("AWS_SESSION_TOKEN") is not None
                 )
 
                 if is_using_session_credentials:
@@ -250,9 +241,7 @@ class AWSClient(CloudProviderClient):
                 else:
                     # For regular credentials, get session token like Go implementation
                     self._log("Getting session token for permanent credentials")
-                    session_response = await loop.run_in_executor(
-                        None, self._sts_client.get_session_token
-                    )
+                    session_response = await loop.run_in_executor(None, self._sts_client.get_session_token)
                     session_creds = session_response["Credentials"]
 
                     headers = {
