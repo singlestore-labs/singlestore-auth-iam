@@ -67,7 +67,7 @@ async def detect_provider(
         """Test a provider in a thread (like Go goroutine)."""
         if stop_event.is_set():
             return
-        
+
         try:
             # Run the async detect() in this thread's event loop
             loop = asyncio.new_event_loop()
@@ -82,7 +82,9 @@ async def detect_provider(
                 loop.close()
         except Exception as e:
             with errors_lock:
-                all_errors.append(f"Provider {client.get_type().value} detection failed: {e}")
+                all_errors.append(
+                    f"Provider {client.get_type().value} detection failed: {e}"
+                )
             if logger:
                 logger.log(f"Provider {client.get_type().value} detection failed: {e}")
 
@@ -98,19 +100,17 @@ async def detect_provider(
     try:
         result = result_queue.get(timeout=timeout)
         stop_event.set()  # Ensure all threads stop
-        
+
         if logger:
             logger.log(f"Detected provider: {result.get_type().value}")
         return result
-        
+
     except queue.Empty:
         # Timeout occurred
         stop_event.set()
-        
+
         # Wait a bit for threads to finish
         for thread in threads:
             thread.join(timeout=0.1)
-        
-        raise CloudProviderNotFound(
-            f"Provider detection timed out after {timeout}s"
-        )
+
+        raise CloudProviderNotFound(f"Provider detection timed out after {timeout}s")

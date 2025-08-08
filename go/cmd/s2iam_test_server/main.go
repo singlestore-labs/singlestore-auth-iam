@@ -35,6 +35,7 @@ type Config struct {
 	TokenExpiry      time.Duration
 	AllowedAudiences []string
 	Verbose          bool
+	Timeout          time.Duration
 }
 
 // Server holds the test server state
@@ -52,9 +53,11 @@ func debugLog(format string, args ...interface{}) {
 	if debugFile := os.Getenv("S2IAM_TEST_SERVER_DEBUG_LOG"); debugFile != "" {
 		f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err == nil {
-			defer f.Close()
+			defer func() {
+				_ = f.Close()
+			}()
 			timestamp := time.Now().Format("2006-01-02 15:04:05.000")
-			fmt.Fprintf(f, "[%s] %s\n", timestamp, fmt.Sprintf(format, args...))
+			_, _ = fmt.Fprintf(f, "[%s] %s\n", timestamp, fmt.Sprintf(format, args...))
 		}
 	}
 }
@@ -104,6 +107,7 @@ func parseFlags() Config {
 	flag.DurationVar(&config.TokenExpiry, "token-expiry", time.Hour, "Token expiry duration")
 	flag.StringVar(&allowedAudiencesStr, "allowed-audiences", "https://authsvc.singlestore.com", "Comma-separated list of allowed audiences")
 	flag.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
+	flag.DurationVar(&config.Timeout, "timeout", 0, "Auto-shutdown timeout (0 = no timeout)")
 
 	flag.Parse()
 
@@ -183,6 +187,9 @@ func (s *Server) Run(ctx context.Context) error {
 	// Log standard text message
 	log.Printf("Starting S2IAM test server on port %d", actualPort)
 
+	// Print port in a format that's easy for Python to parse
+	fmt.Printf("SERVER_PORT=%d\n", actualPort)
+
 	// Create HTTP server
 	httpServer := &http.Server{
 		Handler: mux,
@@ -194,9 +201,25 @@ func (s *Server) Run(ctx context.Context) error {
 		serverErr <- httpServer.Serve(s.listener)
 	}()
 
-	// Handle context cancellation
+	// Handle context cancellation and auto-shutdown timeout
 	go func() {
-		<-ctx.Done()
+		if s.config.Timeout > 0 {
+			// Set up auto-shutdown timer
+			timer := time.NewTimer(s.config.Timeout)
+			defer timer.Stop()
+
+			select {
+			case <-ctx.Done():
+				// Context cancelled before timeout
+			case <-timer.C:
+				// Timeout reached
+				log.Printf("Auto-shutdown timeout (%v) reached, shutting down server...", s.config.Timeout)
+			}
+		} else {
+			// No timeout, just wait for context cancellation
+			<-ctx.Done()
+		}
+
 		log.Printf("Shutting down server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

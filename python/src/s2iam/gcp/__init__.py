@@ -62,7 +62,7 @@ class GCPClient(CloudProviderClient):
             def sync_check():
                 req = urllib.request.Request(
                     "http://metadata.google.internal/computeMetadata/v1/instance/id",
-                    headers={"Metadata-Flavor": "Google"}
+                    headers={"Metadata-Flavor": "Google"},
                 )
                 # Set socket timeout to match Go implementation
                 socket.setdefaulttimeout(3.0)
@@ -71,18 +71,20 @@ class GCPClient(CloudProviderClient):
                         if response.status == 200:
                             return True
                         else:
-                            raise Exception(f"Metadata service returned status {response.status}")
+                            raise Exception(
+                                f"Metadata service returned status {response.status}"
+                            )
                 finally:
                     socket.setdefaulttimeout(None)  # Reset to default
-            
+
             # Run sync operation in executor to avoid blocking event loop
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, sync_check)
-            
+
             self._log("Successfully detected GCP environment")
             self._detected = True
             return
-            
+
         except Exception as e:
             error_msg = str(e) if str(e) else f"{type(e).__name__}"
             self._log(f"Metadata service error: {error_msg}")
@@ -110,10 +112,10 @@ class GCPClient(CloudProviderClient):
                             raise ProviderIdentityUnavailable(
                                 f"GCP metadata available but no identity access (status {response.status})"
                             )
-            
+
             # Use wait_for with 2 second timeout (matches Go implementation)
             await asyncio.wait_for(check_identity_access(), timeout=2.0)
-            
+
         except asyncio.TimeoutError:
             raise ProviderIdentityUnavailable(
                 "Cannot access GCP identity metadata: timeout"
@@ -144,9 +146,7 @@ class GCPClient(CloudProviderClient):
     ) -> tuple[dict[str, str], CloudIdentity]:
         """Get GCP identity headers."""
         if not self._detected:
-            raise ProviderNotDetected(
-                "GCP provider not detected, call detect() first"
-            )
+            raise ProviderNotDetected("GCP provider not detected, call detect() first")
 
         audience = (
             additional_params.get("audience", "https://authsvc.singlestore.com")
@@ -161,7 +161,9 @@ class GCPClient(CloudProviderClient):
                 project_info = await self._get_project_info()
 
                 # Parse impersonated token to extract identity information
-                identity = await self._extract_identity_from_token(token, self._service_account_email)
+                identity = await self._extract_identity_from_token(
+                    token, self._service_account_email
+                )
             else:
                 # Get default identity token
                 token = await self._get_identity_token(audience)
@@ -169,7 +171,9 @@ class GCPClient(CloudProviderClient):
                 service_account = await self._get_service_account()
 
                 # Parse token to extract identity information (matching Go implementation)
-                identity = await self._extract_identity_from_token(token, service_account)
+                identity = await self._extract_identity_from_token(
+                    token, service_account
+                )
 
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -283,27 +287,27 @@ class GCPClient(CloudProviderClient):
 
         return ""
 
-
-    async def _extract_identity_from_token(self, token: str, service_account: str) -> CloudIdentity:
+    async def _extract_identity_from_token(
+        self, token: str, service_account: str
+    ) -> CloudIdentity:
         """Extract identity information from GCP token (matching Go implementation).
-        
+
         Args:
             token: The GCP identity token
             service_account: The service account email from metadata
-            
+
         Returns:
             CloudIdentity with correct identifier and account_id
         """
         try:
             # Parse JWT without verification (since we got it from GCP directly)
-            import jwt
             claims = jwt.decode(token, options={"verify_signature": False})
-            
+
             # Get numeric account ID from sub claim (always present)
             account_id = claims.get("sub", "")
             if not account_id:
                 raise ValueError("No sub claim found in GCP token")
-            
+
             # Determine identifier - prefer verified email, fallback to sub
             identifier = account_id  # Default to numeric ID
             if claims.get("email") and claims.get("email_verified", False):
@@ -311,7 +315,7 @@ class GCPClient(CloudProviderClient):
                 self._log(f"Using verified email as identifier: {identifier}")
             else:
                 self._log(f"Using sub claim as identifier: {identifier}")
-                
+
             # Extract region from zone if available
             region = ""
             zone = await self._get_zone()
@@ -320,7 +324,7 @@ class GCPClient(CloudProviderClient):
                 parts = zone.split("-")
                 if len(parts) >= 3:
                     region = "-".join(parts[:-1])
-                    
+
             return CloudIdentity(
                 provider=CloudProviderType.GCP,
                 identifier=identifier,
@@ -328,7 +332,7 @@ class GCPClient(CloudProviderClient):
                 region=region,
                 resource_type="gcp-compute-instance",
             )
-            
+
         except Exception as e:
             self._log(f"Failed to extract identity from token: {e}")
             # Fallback to service account email for both fields

@@ -101,6 +101,7 @@ class AWSClient(CloudProviderClient):
         # Try STS client as fallback
         try:
             import boto3
+
             sts_client = boto3.client("sts")
             identity = sts_client.get_caller_identity()
             if identity and identity.get("Account"):
@@ -176,13 +177,12 @@ class AWSClient(CloudProviderClient):
     ) -> tuple[dict[str, str], CloudIdentity]:
         """Get AWS identity headers."""
         if not self._detected:
-            raise ProviderNotDetected(
-                "AWS provider not detected, call detect() first"
-            )
+            raise ProviderNotDetected("AWS provider not detected, call detect() first")
 
         # Initialize STS client if not already done
         if not self._sts_client:
             import boto3
+
             await self._ensure_region()
             self._session = boto3.Session()
             self._sts_client = self._session.client("sts", region_name=self._region)

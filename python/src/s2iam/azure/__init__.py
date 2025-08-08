@@ -4,6 +4,8 @@ Microsoft Azure cloud provider client implementation.
 
 import asyncio
 import os
+import base64
+import json
 from typing import Any, Optional
 
 import aiohttp
@@ -86,6 +88,7 @@ class AzureClient(CloudProviderClient):
         # Try Azure default credentials as fallback
         try:
             from azure.identity import DefaultAzureCredential
+
             credential = DefaultAzureCredential()
             loop = asyncio.get_event_loop()
             token = await loop.run_in_executor(
@@ -114,7 +117,7 @@ class AzureClient(CloudProviderClient):
                     "http://169.254.169.254/metadata/identity/oauth2/token",
                     params={
                         "api-version": "2018-02-01",
-                        "resource": "https://management.azure.com/"
+                        "resource": "https://management.azure.com/",
                     },
                     headers={"Metadata": "true"},
                 ) as response:
@@ -125,17 +128,24 @@ class AzureClient(CloudProviderClient):
                         # Check for "Identity not found" error like Go implementation
                         try:
                             error_data = await response.json()
-                            if (error_data.get("error") == "invalid_request" and 
-                                "Identity not found" in error_data.get("error_description", "")):
-                                raise Exception("No managed identity configured on this Azure VM")
+                            if error_data.get(
+                                "error"
+                            ) == "invalid_request" and "Identity not found" in error_data.get(
+                                "error_description", ""
+                            ):
+                                raise Exception(
+                                    "No managed identity configured on this Azure VM"
+                                )
                         except Exception:
                             # If we can't parse the error, still fail
                             pass
-                    
+
                     # Any other error status
                     text = await response.text()
-                    raise Exception(f"Managed identity test failed: {response.status} - {text}")
-                    
+                    raise Exception(
+                        f"Managed identity test failed: {response.status} - {text}"
+                    )
+
         except aiohttp.ClientError as e:
             # Network errors (timeout, connection refused, etc.)
             self._log(f"Managed identity network error: {e}")
@@ -201,7 +211,9 @@ class AzureClient(CloudProviderClient):
             instance_metadata = await self._get_instance_metadata()
 
             # Create identity - extract principal ID from JWT claims to match Go implementation
-            principal_id = await self._extract_principal_id_from_token(token_data["access_token"])
+            principal_id = await self._extract_principal_id_from_token(
+                token_data["access_token"]
+            )
             subscription_id = instance_metadata.get("compute", {}).get(
                 "subscriptionId", ""
             )
@@ -234,37 +246,34 @@ class AzureClient(CloudProviderClient):
 
     async def _extract_principal_id_from_token(self, access_token: str) -> str:
         """Extract principal ID from JWT using same priority as Go implementation."""
-        import base64
-        import json
-        
         try:
             # Split JWT and decode payload (second part)
-            parts = access_token.split('.')
+            parts = access_token.split(".")
             if len(parts) != 3:
                 raise ValueError("Invalid JWT format")
-            
+
             # Decode payload (add padding if needed)
             payload = parts[1]
             # Add padding for base64 decoding
-            payload += '=' * (4 - len(payload) % 4)
+            payload += "=" * (4 - len(payload) % 4)
             decoded_payload = base64.urlsafe_b64decode(payload)
             claims = json.loads(decoded_payload)
-            
+
             # Use same priority as Go implementation:
             # 1. oid (object ID) - primary location
             if "oid" in claims:
                 return claims["oid"]
-            
+
             # 2. sub (subject) - alternative
             if "sub" in claims:
                 return claims["sub"]
-            
+
             # 3. appid (application ID) - last resort
             if "appid" in claims:
                 return claims["appid"]
-                
+
             raise ValueError("Principal ID not found in Azure token")
-            
+
         except Exception as e:
             self._log(f"Failed to extract principal ID from token: {e}")
             # Fallback to client_id from metadata response

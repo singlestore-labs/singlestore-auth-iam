@@ -28,10 +28,10 @@ async def get_jwt(
 ) -> str:
     """
     Get a JWT from SingleStore's authentication service.
-    
+
     This function attempts to obtain a JWT from SingleStore's authentication service
     using the detected cloud provider's identity.
-    
+
     Args:
         jwt_type (JWTType): The type of JWT to request (database, api)
         workspace_group_id (Optional[str]): Workspace group ID to scope the JWT to.
@@ -39,10 +39,10 @@ async def get_jwt(
         timeout (float): Timeout in seconds for the request
         server_url (Optional[str]): Override the default server URL
         logger (Optional[Logger]): Logger instance for debug output
-        
+
     Returns:
         str: JWT string
-        
+
     Raises:
         NoCloudProviderDetectedError: If no cloud provider is detected
         Exception: If JWT acquisition fails
