@@ -16,23 +16,39 @@ jobs:
 
     strategy:
       matrix:
-        # Aside from general setup of dot files and such, which
-        # a personal preference, the following should be done. 
-        # Assuming ubuntu.
+        # Self-hosted runner setup for cloud provider testing.
+        # Assuming Ubuntu environment on AWS EC2, GCP Compute Engine, or Azure VM.
         #
+        # Base system setup:
         # sudo apt update
         # sudo snap install go --classic
+        # sudo apt install -y python3 python3-pip python3-venv
+        # sudo apt install -y python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography
+	# sudo apt install -y python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests 
+	# sudo apt install -y python3-azure-identity python3-google-auth-oauthlib
         #
-        # AWS:
+        # AWS EC2 setup:
         # sudo snap install aws-cli --classic
+        # Ensure EC2 instance has IAM role attached for AWS credential access
         #
-        # Azure:
+        # GCP Compute Engine setup:
+        # Ensure VM has service account attached with appropriate permissions
+        # GCP credentials are automatically available via metadata service
+        #
+        # Azure VM setup:
         # curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-        # az vm identity assign --name $identity --resource-group $resource_group
+        # az vm identity assign --name $vm_name --resource-group $resource_group
+        # Ensure VM has managed identity enabled for Azure credential access
         #
-        # Environment Variables:
+        # Environment Variables for testing:
         # S2IAM_TEST_ASSUME_ROLE - Set to a role ARN/identifier to test role assumption (AWS/GCP only)
-        # S2IAM_TEST_CLOUD_PROVIDER - Set to indicate cloud tests should run (for providers without role assumption like Azure)
+        # S2IAM_TEST_CLOUD_PROVIDER - Set to indicate cloud tests should run (aws/gcp/azure)
+        # S2IAM_DEBUGGING - Set to true for verbose test output
+        #
+        # Both Go and Python testing are fully automated via GitHub Actions
+        # Go: Runs integration tests with coverage reporting (go coverage format)
+        # Python: Uses automated validation framework with coverage reporting (XML format)
+        # Coverage from all environments (no CSP, AWS, Azure, GCP) is uploaded to Codecov
         #
         include:
           - name: aws-positive
@@ -94,7 +110,7 @@ jobs:
           "${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}" \
           "mkdir -p tests/${{ env.UNIQUE_DIR }} && cd tests/${{ env.UNIQUE_DIR }} && tar xzf -"
     
-    - name: Run tests with coverage and verification
+    - name: Run Go tests with coverage and verification
       run: |
         ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee test_output.log
           set -ex
@@ -106,9 +122,39 @@ jobs:
 
           ls -la coverage.out
         EOF
+
+    - name: Run Python tests with coverage
+      run: |
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} << 'EOF' 2>&1 | tee python_test_output.log
+          set -ex
+          cd tests/${{ env.UNIQUE_DIR }}/python
+          
+          # Install Python 3 and dependencies if not available
+          if ! command -v python3 &> /dev/null; then
+            sudo apt update
+            sudo apt install -y python3 python3-pip python3-venv
+          fi
+          
+          # Install Python dependencies for s2iam library
+          sudo apt install -y python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests python3-azure-identity python3-google-auth-oauthlib || true
+          
+          # Run Python tests with coverage using our automated validation framework
+          env USE_SYSTEM_PACKAGES=1 ${{ env.EXTRA_ENV }} S2IAM_DEBUGGING=true ./tests/run_cloud_validation.sh --coverage
+          
+          # Verify test completion
+          echo "Checking for test completion marker..."
+          if [ ! -f "coverage.xml" ]; then
+            echo "ERROR: Coverage file not generated - tests may have failed"
+            exit 1
+          fi
+          
+          # Verify coverage file was generated
+          ls -la coverage.xml
+        EOF
     
     - name: Verify test results
       run: |
+        echo "=== Verifying Go test results ==="
         echo "Checking for TestWithDebugging..."
         grep --silent -- "--- PASS: TestWithDebugging" test_output.log
         echo "Checking for PASS..."
@@ -123,9 +169,16 @@ jobs:
         grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam_test_server	" test_output.log
         echo "Checking s2iam package pattern..."
         grep --silent "^ok  	github.com/singlestore-labs/singlestore-auth-iam/go/s2iam	" test_output.log
+        echo "Go tests passed successfully!"
+        
+        echo "=== Verifying Python test results ==="
+        echo "Checking for Python test completion..."
+        grep --silent "Test run completed successfully!" python_test_output.log
+        echo "Python tests passed successfully!"
+        
         echo "All tests passed successfully!"
     
-    - name: Download coverage file
+    - name: Download Go coverage file
       run: |
         # Verify coverage file exists on remote
         ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
@@ -134,24 +187,53 @@ jobs:
         
         # Download coverage file from remote
         scp -i ~/.ssh/key -o StrictHostKeyChecking=no \
-          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./coverage.out
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/go/coverage.out ./go-coverage.out
           
         # Verify local coverage file
-        echo "Local coverage file: $(ls -la coverage.out)"
+        echo "Local Go coverage file: $(ls -la go-coverage.out)"
 
-    - name: Display coverage
+    - name: Download Python coverage file
       run: |
+        # Verify Python coverage file exists on remote
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} \
+          "ls -la tests/${{ env.UNIQUE_DIR }}/python/coverage.xml"
+        
+        # Download Python coverage file from remote
+        scp -i ~/.ssh/key -o StrictHostKeyChecking=no \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}:tests/${{ env.UNIQUE_DIR }}/python/coverage.xml ./python-coverage.xml
+          
+        # Verify local Python coverage file
+        echo "Local Python coverage file: $(ls -la python-coverage.xml)"
+
+    - name: Display Go coverage
+      run: |
+        echo "=== Go Coverage ==="
         echo "Original coverage file paths:"
-        (grep azure coverage.out | head) || echo no azure in coverage
-        head -2 coverage.out
-    
-    - name: Upload coverage to Codecov
+        (grep azure go-coverage.out | head) || echo no azure in go coverage
+        head -2 go-coverage.out
+        echo ""
+        echo "=== Python Coverage ==="
+        echo "Python coverage summary:"
+        head -10 python-coverage.xml
+
+    - name: Upload Go coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
       with:
         fail_ci_if_error: true
-        name: ${{ matrix.name }}-coverage
-        file: ./coverage.out
-        flags: ${{ matrix.name }}
+        name: ${{ matrix.name }}-go-coverage
+        file: ./go-coverage.out
+        flags: go,${{ matrix.name }}
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload Python coverage to Codecov
+      uses: codecov/codecov-action@v5.4.3
+      with:
+        fail_ci_if_error: true
+        name: ${{ matrix.name }}-python-coverage
+        file: ./python-coverage.xml
+        flags: python,${{ matrix.name }}
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
