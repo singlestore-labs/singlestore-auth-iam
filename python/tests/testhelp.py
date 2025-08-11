@@ -6,6 +6,9 @@ to ensure consistent test behavior across language implementations.
 """
 
 import os
+import base64
+import json
+from typing import Optional, Dict, Any, Tuple
 
 import pytest
 
@@ -75,3 +78,52 @@ def maybe_parallel() -> None:
         # In pytest, we might need to be careful with Azure rate limiting
         # This could be expanded if using pytest-xdist
         pass
+
+
+async def validate_identity_and_jwt(
+    provider: CloudProviderClient,
+    workspace_group_id: str,
+    server_url: str,
+    audience: Optional[str] = None,
+) -> Tuple[dict, s2iam.CloudIdentity, dict]:
+    """Shared validation: fetch identity headers, request JWT, verify claims vs identity.
+
+    Mirrors Go testHappyPath logic focusing on end-result consistency rather than implementation details.
+    Returns (headers, identity, jwt_claims) for further provider-specific assertions.
+    """
+    # Get identity headers first
+    additional_params = {"audience": audience} if audience else None
+    headers, identity = await provider.get_identity_headers(additional_params)
+
+    # Request JWT via convenience function (database JWT selected for richer validation)
+    jwt_token = await s2iam.get_jwt_database(
+        workspace_group_id=workspace_group_id,
+        server_url=server_url,
+        provider=provider,
+        additional_params=additional_params,
+    )
+    assert jwt_token and jwt_token.count(".") == 2, "JWT structure invalid"
+
+    # Decode payload (test server signature not verified here)
+    parts = jwt_token.split(".")
+    payload_b64 = parts[1] + "=" * (4 - len(parts[1]) % 4)
+    try:
+        claims: Dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload_b64))
+    except Exception as e:  # pragma: no cover - defensive
+        raise AssertionError(f"Failed to decode JWT claims: {e}")
+
+    # Cross-check identity vs claims (subset matching Go semantics)
+    assert claims.get("sub") == identity.identifier, "JWT sub must match identity identifier"
+    # Account ID may legitimately be missing or normalized differently across providers (e.g., Azure).
+    # Only assert when both sides provide a non-empty value to avoid false negatives.
+    claim_account = claims.get("accountID")
+    if identity.account_id and claim_account:
+        assert claim_account == identity.account_id, "JWT accountID mismatch"
+    if identity.region:
+        assert claims.get("region") == identity.region, "JWT region mismatch"
+    # Don't assert resourceType: server may normalize differently across providers.
+
+    provider_claim = str(claims.get("provider"))
+    assert provider_claim.lower() == identity.provider.value.lower(), "JWT provider claim mismatch"
+
+    return headers, identity, claims

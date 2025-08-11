@@ -13,7 +13,8 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType
 
-from .testhelp import expect_cloud_provider_detected
+from .testhelp import expect_cloud_provider_detected, validate_identity_and_jwt
+from .test_server_utils import GoTestServerManager
 
 
 @pytest.mark.asyncio
@@ -119,12 +120,27 @@ class TestFastPathDetection:
             # Compare regions
             assert normal_identity.region == fastpath_identity.region, "Both providers should extract same region"
 
-            # Compare essential headers
-            essential_headers = ["X-Cloud-Provider", "Authorization"]
-            for header in essential_headers:
-                assert normal_headers.get(header) == fastpath_headers.get(
-                    header
-                ), f"Both providers should produce same {header} header"
+            # End-result validation using shared helper (mirrors Go shared happy-path code)
+            server = GoTestServerManager(timeout_minutes=1)
+            try:
+                server.start()
+                # Use helper with fast-path provider
+                provider_type = normal_provider.get_type()
+                audience = "https://authsvc.singlestore.com" if provider_type == CloudProviderType.GCP else None
+                _, fast_identity, claims = await validate_identity_and_jwt(
+                    fastpath_provider,
+                    workspace_group_id="test-workspace",
+                    server_url=f"{server.server_url}/auth/iam/database",
+                    audience=audience,
+                )
+                # Cross-check that fast-path identity matches normal detection identity on critical fields
+                assert fast_identity.identifier == normal_identity.identifier, "Identifier mismatch"
+                assert fast_identity.provider == normal_identity.provider, "Provider type mismatch"
+                assert fast_identity.account_id == normal_identity.account_id, "Account ID mismatch"
+                assert fast_identity.region == normal_identity.region, "Region mismatch"
+                print("✓ Fast-path validation: identity and JWT claims consistent with normal detection")
+            finally:
+                server.stop()
 
             print("✓ Fast-path and normal detection produced equivalent results")
 
