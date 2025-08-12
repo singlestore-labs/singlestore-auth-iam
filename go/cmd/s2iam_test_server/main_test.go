@@ -248,7 +248,7 @@ func TestServer_JWTVerification(t *testing.T) {
 	}
 
 	// Create a JWT
-	token, err := srv.createJWT(identity, "database")
+	token, _, err := srv.createJWT(identity, "database")
 	require.NoError(t, err, "Should be able to create a JWT")
 
 	// Get the public key

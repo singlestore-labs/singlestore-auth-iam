@@ -73,6 +73,8 @@ type RequestInfo struct {
 	Region     string
 	JWTType    string
 	Headers    map[string]string
+	Claims     map[string]interface{} `json:"claims,omitempty"`
+	Identity   map[string]string      `json:"identity,omitempty"`
 }
 
 func main() {
@@ -365,12 +367,11 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update request info with identity
+	// Populate identity fields prior to JWT creation
 	reqInfo.Provider = string(identity.Provider)
 	reqInfo.Identifier = identity.Identifier
 	reqInfo.AccountID = identity.AccountID
 	reqInfo.Region = identity.Region
-	s.requestLog = append(s.requestLog, reqInfo)
 
 	if s.config.Verbose {
 		log.Printf("Verified identity: %s %s", identity.Provider, identity.Identifier)
@@ -378,17 +379,43 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Return empty JWT if configured
 	if s.config.ReturnEmptyJWT {
+		// Still record identity structure
+		reqInfo.Identity = map[string]string{
+			"provider":     string(identity.Provider),
+			"identifier":   identity.Identifier,
+			"accountID":    identity.AccountID,
+			"region":       identity.Region,
+			"resourceType": identity.ResourceType,
+		}
+		s.requestLog = append(s.requestLog, reqInfo)
 		response := map[string]string{"jwt": ""}
 		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Create JWT
-	tokenString, err := s.createJWT(identity, jwtType)
+	// Create JWT (also get claims used)
+	tokenString, claims, err := s.createJWT(identity, jwtType)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error creating JWT: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	// Attach structured identity and claims for test inspection
+	reqInfo.Identity = map[string]string{
+		"provider":     string(identity.Provider),
+		"identifier":   identity.Identifier,
+		"accountID":    identity.AccountID,
+		"region":       identity.Region,
+		"resourceType": identity.ResourceType,
+	}
+	// Copy claims map[string]interface{} to plain map (already map[string]interface{})
+	reqInfo.Claims = make(map[string]interface{}, len(claims))
+	for k, v := range claims {
+		// Only include JSON-serializable simple values for clarity
+		reqInfo.Claims[k] = v
+	}
+
+	s.requestLog = append(s.requestLog, reqInfo)
 
 	response := map[string]string{"jwt": tokenString}
 	w.Header().Set("Content-Type", "application/json")
@@ -396,7 +423,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 // createJWT generates a JWT for the given identity
-func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (string, error) {
+func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (string, jwt.MapClaims, error) {
 	debugLog("===== GO TEST SERVER: Creating JWT with identity.Identifier: %s =====", identity.Identifier)
 	debugLog("===== GO TEST SERVER: Creating JWT with identity.AccountID: %s =====", identity.AccountID)
 	debugLog("===== GO TEST SERVER: Creating JWT with identity.Provider: %s =====", identity.Provider)
@@ -415,7 +442,7 @@ func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (stri
 		"exp":                 now.Add(s.config.TokenExpiry).Unix(),
 	}
 
-	// Add any additional properties
+	// Add any additional properties, but never override above claims
 	for key, value := range identity.AdditionalClaims {
 		if _, ok := claims[key]; !ok {
 			claims[key] = value
@@ -423,7 +450,8 @@ func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (stri
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	return token.SignedString(s.privateKey)
+	signed, err := token.SignedString(s.privateKey)
+	return signed, claims, err
 }
 
 // handlePublicKey returns the server's public key
