@@ -251,13 +251,23 @@ class AWSClient(CloudProviderClient):
                         "X-Cloud-Provider": "aws",
                     }
 
-            # Create identity object
+            # Derive region and resource_type from the signed ARN (matches Go verifier logic)
+            arn = identity_response["Arn"]
+            arn_parts = arn.split(":")
+            region_from_arn = arn_parts[3] if len(arn_parts) >= 4 else ""
+            resource_type = ""
+            if len(arn_parts) >= 6:
+                res_parts = arn_parts[5].split("/")
+                if len(res_parts) >= 1 and res_parts[0]:
+                    resource_type = res_parts[0]
+
+            # Create identity using signed-data-derived fields
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
-                identifier=identity_response["Arn"],
+                identifier=arn,
                 account_id=identity_response["Account"],
-                region=self._region or "",
-                resource_type="aws-identity",
+                region=region_from_arn,
+                resource_type=resource_type,
             )
 
             self._log(f"Generated headers for identity: {identity.identifier}")

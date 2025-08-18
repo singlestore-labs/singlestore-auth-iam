@@ -187,28 +187,48 @@ class AzureClient(CloudProviderClient):
                 # Use default identity
                 token_data = await self._get_managed_identity_token("https://management.azure.com/")
 
-            # Get instance metadata
+            # Get instance metadata (unsigned) - we only use subscription/resource group names for
+            # informational additional claims; REGION MUST COME FROM SIGNED TOKEN CLAIMS ONLY.
             instance_metadata = await self._get_instance_metadata()
 
-            # Create identity - extract principal ID from JWT claims to match Go implementation
-            principal_id = await self._extract_principal_id_from_token(token_data["access_token"])
+            # Extract principal ID and claims from token
+            principal_id, token_claims = await self._extract_principal_id_and_claims(token_data["access_token"])
             subscription_id = instance_metadata.get("compute", {}).get("subscriptionId", "")
-            location = instance_metadata.get("compute", {}).get("location", "")
 
+            # Derive region strictly from signed token (xms_mirid) to match Go verifier logic.
+            # We DO NOT trust the metadata 'location' field for region equality because it is not
+            # cryptographically bound to the managed identity token and the server only sees the token.
+            region = ""
+            mirid = token_claims.get("xms_mirid", "")
+            if isinstance(mirid, str) and mirid:
+                parts = mirid.split("/")
+                for i in range(len(parts) - 1):
+                    if parts[i] == "resourceGroups" and i + 1 < len(parts):
+                        rg_name = parts[i + 1]
+                        rg_parts = rg_name.split("-")
+                        if len(rg_parts) > 2:
+                            region = rg_parts[-2] + "-" + rg_parts[-1]
+                            break
+
+            # Build identity with region derived only from signed data (may be empty)
             identity = CloudIdentity(
                 provider=CloudProviderType.AZURE,
                 identifier=principal_id,
                 account_id=subscription_id,
-                region=location,
+                region=region,
                 resource_type="azure-managed-identity",
             )
+
+            # Record unsigned metadata location for observability without asserting equality
+            metadata_location = instance_metadata.get("compute", {}).get("location", "")
+            if metadata_location and metadata_location != region:
+                identity.additional_claims["metadata_location"] = metadata_location
 
             headers = {
                 "X-Cloud-Provider": "azure",
                 "Authorization": f"Bearer {token_data['access_token']}",
                 "X-Azure-Subscription-ID": subscription_id,
                 "X-Azure-Resource-Group": instance_metadata.get("compute", {}).get("resourceGroupName", ""),
-                "X-Azure-Location": location,
             }
 
             self._log(f"Generated headers for identity: {identity.identifier}")
@@ -218,40 +238,27 @@ class AzureClient(CloudProviderClient):
             self._log(f"Failed to get identity headers: {e}")
             raise ProviderIdentityUnavailable(f"Failed to get Azure identity: {e}")
 
-    async def _extract_principal_id_from_token(self, access_token: str) -> str:
-        """Extract principal ID from JWT using same priority as Go implementation."""
+    async def _extract_principal_id_and_claims(self, access_token: str) -> tuple[str, dict[str, Any]]:
+        """Extract principal ID and full claims from JWT (signed data only)."""
         try:
-            # Split JWT and decode payload (second part)
             parts = access_token.split(".")
             if len(parts) != 3:
                 raise ValueError("Invalid JWT format")
-
-            # Decode payload (add padding if needed)
             payload = parts[1]
-            # Add padding for base64 decoding
             payload += "=" * (4 - len(payload) % 4)
             decoded_payload = base64.urlsafe_b64decode(payload)
             claims = json.loads(decoded_payload)
 
-            # Use same priority as Go implementation:
-            # 1. oid (object ID) - primary location
             if "oid" in claims:
-                return claims["oid"]
-
-            # 2. sub (subject) - alternative
+                return claims["oid"], claims
             if "sub" in claims:
-                return claims["sub"]
-
-            # 3. appid (application ID) - last resort
+                return claims["sub"], claims
             if "appid" in claims:
-                return claims["appid"]
-
+                return claims["appid"], claims
             raise ValueError("Principal ID not found in Azure token")
-
         except Exception as e:
             self._log(f"Failed to extract principal ID from token: {e}")
-            # Fallback to client_id from metadata response
-            return "unknown"
+            return "unknown", {}
 
     async def _get_managed_identity_token(self, resource: str, client_id: Optional[str] = None) -> dict[str, str]:
         """Get token from Azure managed identity endpoint."""

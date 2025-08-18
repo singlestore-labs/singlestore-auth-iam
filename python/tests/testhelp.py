@@ -38,7 +38,7 @@ async def expect_cloud_provider_detected(timeout: float = 5.0) -> CloudProviderC
         return provider
     except s2iam.CloudProviderNotFound:
         pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
-    except s2iam.CloudProviderDetectedNoIdentity:
+    except s2iam.ProviderIdentityUnavailable:
         pytest.skip("cloud provider detected no identity")
 
 
@@ -112,18 +112,47 @@ async def validate_identity_and_jwt(
     except Exception as e:  # pragma: no cover - defensive
         raise AssertionError(f"Failed to decode JWT claims: {e}")
 
-    # Cross-check identity vs claims (subset matching Go semantics)
-    assert claims.get("sub") == identity.identifier, "JWT sub must match identity identifier"
-    # Account ID may legitimately be missing or normalized differently across providers (e.g., Azure).
-    # Only assert when both sides provide a non-empty value to avoid false negatives.
-    claim_account = claims.get("accountID")
-    if identity.account_id and claim_account:
-        assert claim_account == identity.account_id, "JWT accountID mismatch"
-    if identity.region:
-        assert claims.get("region") == identity.region, "JWT region mismatch"
-    # Don't assert resourceType: server may normalize differently across providers.
+    # Build a synthetic identity from claims for full-struct style comparison like Go test.
+    claim_identity = {
+        "identifier": claims.get("sub", ""),
+        "account_id": claims.get("accountID", ""),
+        "region": claims.get("region", ""),
+        "provider": str(claims.get("provider", "")),
+        "resource_type": claims.get("resourceType", ""),
+    }
 
-    provider_claim = str(claims.get("provider"))
-    assert provider_claim.lower() == identity.provider.value.lower(), "JWT provider claim mismatch"
+    # Core identifier must match.
+    if claim_identity["identifier"] != identity.identifier:
+        raise AssertionError(
+            f"JWT sub mismatch: claim={claim_identity['identifier']!r} identity={identity.identifier!r}"
+        )
+
+    # Provider must match (case-insensitive).
+    if claim_identity["provider"].lower() != identity.provider.value.lower():
+        raise AssertionError(
+            f"JWT provider mismatch: claim={claim_identity['provider']!r} identity={identity.provider.value!r}"
+        )
+
+    # AccountID comparison only when both sides non-empty (avoid false negatives for providers without accountID).
+    if identity.account_id and claim_identity["account_id"]:
+        if claim_identity["account_id"] != identity.account_id:
+            raise AssertionError(
+                f"JWT accountID mismatch: claim={claim_identity['account_id']!r} identity={identity.account_id!r}"
+            )
+
+    # Region strict equality: if identity has a region we expect claim present and equal.
+    if identity.region:
+        if claim_identity["region"] != identity.region:
+            raise AssertionError(
+                f"JWT region mismatch: claim={claim_identity['region']!r} identity={identity.region!r}"
+            )
+    else:
+        # If identity has no region, tolerate empty claim (but avoid surprising non-empty claim differing).
+        if claim_identity["region"] and claim_identity["region"] != identity.region:
+            raise AssertionError(
+                f"JWT region unexpected value when identity has none: claim={claim_identity['region']!r}"
+            )
+
+    # resourceType intentionally not asserted strictly (server normalization differences allowed).
 
     return headers, identity, claims

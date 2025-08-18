@@ -39,14 +39,14 @@ class TestCloudProviderValidation:
         assert provider is not None
         ptype = provider.get_type()
         assert ptype in [CloudProviderType.AWS, CloudProviderType.GCP, CloudProviderType.AZURE]
-        # Try to get identity headers; in no-role hosts this may raise CloudProviderDetectedNoIdentity
+        # Try to get identity headers; in no-role hosts this may raise ProviderIdentityUnavailable
         try:
             headers, identity = await provider.get_identity_headers()
             assert identity.identifier
             assert identity.provider == ptype
             # Minimal field presence (some may be empty depending on provider specifics)
             _ = headers  # ensure used
-        except s2iam.CloudProviderDetectedNoIdentity:
+        except s2iam.ProviderIdentityUnavailable:
             # Acceptable for *-no-role scenarios; skip to keep quick validation green
             pytest.skip("cloud provider detected but no identity available (no-role environment)")
 
