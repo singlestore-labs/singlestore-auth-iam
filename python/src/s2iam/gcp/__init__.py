@@ -75,7 +75,7 @@ class GCPClient(CloudProviderClient):
 
             # Run sync operation in executor to avoid blocking event loop
             loop = asyncio.get_event_loop()
-            _result = await loop.run_in_executor(None, sync_check)
+            await loop.run_in_executor(None, sync_check)
 
             self._log("Successfully detected GCP environment")
             self._detected = True
@@ -146,14 +146,12 @@ class GCPClient(CloudProviderClient):
             if self._service_account_email:
                 # Get token through impersonation
                 token = await self._get_impersonated_token(audience)
-                project_info = await self._get_project_info()
 
                 # Parse impersonated token to extract identity information
                 identity = await self._extract_identity_from_token(token, self._service_account_email)
             else:
                 # Get default identity token
                 token = await self._get_identity_token(audience)
-                _project_info = await self._get_project_info()
                 service_account = await self._get_service_account()
 
                 # Parse token to extract identity information (matching Go implementation)

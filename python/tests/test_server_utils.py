@@ -242,7 +242,7 @@ class GoTestServerManager:
     def show_debug_log(self) -> None:
         """Display the contents of the Go server debug log."""
         if hasattr(self, "debug_log_file") and os.path.exists(self.debug_log_file):
-            print(f"\n===== GO SERVER DEBUG LOG CONTENTS =====")
+            print("\n===== GO SERVER DEBUG LOG CONTENTS =====")
             try:
                 with open(self.debug_log_file, "r") as f:
                     contents = f.read().strip()

@@ -25,7 +25,7 @@ async def _test_production_database_jwt(client):
     assert len(jwt) > 0, "Database JWT should not be empty"
     assert jwt.startswith("eyJ"), "Database JWT should be a valid JWT format"
 
-    print(f"✓ Successfully generated database JWT from production server")
+    print("✓ Successfully generated database JWT from production server")
     print(f"  Provider: {client.get_type().value}")
     print(f"  JWT length: {len(jwt)} characters")
 
@@ -149,4 +149,4 @@ async def test_production_server_timeout_handling():
     assert elapsed < 30.0, f"Request should complete within timeout (took {elapsed:.2f}s)"
 
     print(f"✓ Production server response time: {elapsed:.2f} seconds")
-    print(f"✓ Successfully generated JWT within timeout")
+    print("✓ Successfully generated JWT within timeout")

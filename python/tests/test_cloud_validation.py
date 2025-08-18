@@ -90,8 +90,13 @@ class TestHappyPath:
         now = int(time.time())
         assert claims["exp"] > now, "JWT expired"
         print(
-            f"✓ Happy path success: id={identity.identifier} acct={identity.account_id} region={identity.region} exp={claims.get('exp')}"
+            "✓ Happy path success: "
+            f"id={identity.identifier} "
+            f"acct={identity.account_id} "
+            f"region={identity.region} "
+            f"exp={claims.get('exp')}"
         )
+
 
 @pytest.mark.asyncio
 class TestServerIntegration:
@@ -109,7 +114,6 @@ class TestServerIntegration:
         )
         assert claims.get("createdByTestServer") is True
         # Minimal assertion ensures test recognized as passed when environment is correct
-
 
     @pytest.mark.integration
     @pytest.mark.gcp
