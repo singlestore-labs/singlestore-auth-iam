@@ -3,9 +3,9 @@ Microsoft Azure cloud provider client implementation.
 """
 
 import asyncio
-import os
 import base64
 import json
+import os
 from typing import Any, Optional
 
 import aiohttp
@@ -271,7 +271,9 @@ class AzureClient(CloudProviderClient):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
                 if response.status == 200:
-                    return await response.json()
+                    data = await response.json()
+                    # Azure MI returns a JSON object with string fields like access_token, expires_in, etc.
+                    return {str(k): str(v) for k, v in data.items() if isinstance(k, str)}
                 else:
                     text = await response.text()
                     raise Exception(f"Failed to get managed identity token: {response.status} - {text}")
@@ -285,7 +287,8 @@ class AzureClient(CloudProviderClient):
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status == 200:
-                        return await response.json()
+                        data = await response.json()
+                        return data if isinstance(data, dict) else {}
                     else:
                         return {}
         except Exception as e:

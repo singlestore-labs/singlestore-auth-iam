@@ -13,8 +13,8 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType
 
-from .testhelp import expect_cloud_provider_detected, validate_identity_and_jwt
 from .test_server_utils import GoTestServerManager
+from .testhelp import expect_cloud_provider_detected, validate_identity_and_jwt
 
 
 @pytest.mark.asyncio

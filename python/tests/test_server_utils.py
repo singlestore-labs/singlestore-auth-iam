@@ -107,7 +107,7 @@ class GoTestServerManager:
             "-timeout",
             f"{self.timeout_minutes}m",
         ]
-        logger.debug("Starting server with command: %s", ' '.join(server_cmd))
+        logger.debug("Starting server with command: %s", " ".join(server_cmd))
         logger.debug("Server working directory: %s", self.go_dir)
         logger.debug(
             "Server environment variables: %s",
@@ -135,14 +135,10 @@ class GoTestServerManager:
         poll_result = self.process.poll()
         if poll_result is not None:
             stdout, stderr = self.process.communicate()
-            logger.error(
-                "Server failed to start - process exited with code: %s", poll_result
-            )
+            logger.error("Server failed to start - process exited with code: %s", poll_result)
             logger.error("Server failed to start - stdout: %s", stdout)
             logger.error("Server failed to start - stderr: %s", stderr)
-            raise Exception(
-                f"Test server failed to start (exit code: {poll_result}): {stderr}"
-            )
+            raise Exception(f"Test server failed to start (exit code: {poll_result}): {stderr}")
 
         logger.debug("Server process still running, attempting to read port...")
 
@@ -186,15 +182,15 @@ class GoTestServerManager:
             logger.debug("STDOUT: %s", line.rstrip())
 
             for ch in line:
-                if ch == '{':
+                if ch == "{":
                     brace_count += 1
                     in_json = True
-                elif ch == '}':
+                elif ch == "}":
                     brace_count -= 1
 
             if in_json and brace_count == 0:
-                js_start = buffer.find('{')
-                js_end = buffer.rfind('}') + 1
+                js_start = buffer.find("{")
+                js_end = buffer.rfind("}") + 1
                 if js_start >= 0 and js_end > js_start:
                     js = buffer[js_start:js_end]
                     try:
@@ -209,7 +205,7 @@ class GoTestServerManager:
                         in_json = False
 
         logger.error("Failed to read server port within %ds", timeout)
-        logger.error("All stdout received:\n%s", ''.join(all_stdout))
+        logger.error("All stdout received:\n%s", "".join(all_stdout))
         if self.process:
             logger.error("Server process exit code: %s", self.process.poll())
         raise Exception(f"Could not read server port from JSON output after {timeout}s timeout")

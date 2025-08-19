@@ -1,10 +1,13 @@
 """
 AWS cloud provider client implementation.
+
+Note: This module uses boto3 which doesn't ship type stubs; we ignore its types for mypy.
+# mypy: disable-error-code=import-untyped
 """
 
 import asyncio
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from ..models import (
     CloudIdentity,
@@ -25,8 +28,9 @@ class AWSClient(CloudProviderClient):
         self._region: Optional[str] = None
         self._identity: Optional[CloudIdentity] = None
         self._role_arn: Optional[str] = None
-        self._sts_client: Optional[object] = None
-        self._session: Optional[object] = None
+        # boto3 session and sts client are untyped; use Any and initialize lazily
+        self._sts_client: Optional[Any] = None
+        self._session: Optional[Any] = None
 
     def _log(self, message: str) -> None:
         """Log a message if logger is available."""
@@ -34,15 +38,7 @@ class AWSClient(CloudProviderClient):
             self._logger.log(f"AWS: {message}")
 
     async def _check_metadata_service(self) -> bool:
-        """Check AWS metadata service using IMDSv2.
-
-        AWS Instance Metadata Service v2 (IMDSv2) is the preferred method:
-        1. Get a session token first via PUT request
-        2. Use token in subsequent metadata requests
-        3. Fall back to IMDSv1 (no token) for compatibility
-
-        This matches the detection strategy used in the Go implementation.
-        """
+        """Check AWS metadata service using IMDSv2 with IMDSv1 fallback."""
         try:
             import aiohttp
 
@@ -54,21 +50,19 @@ class AWSClient(CloudProviderClient):
                 ) as token_resp:
                     if token_resp.status == 200:
                         token = await token_resp.text()
-
-                        # Try to get instance metadata with token
+                        # Try with token
                         async with session.get(
                             "http://169.254.169.254/latest/meta-data/instance-id",
                             headers={"X-aws-ec2-metadata-token": token},
                         ) as resp:
                             return resp.status == 200
 
-                    # Fallback: try without token (IMDSv1)
-                    async with session.get(
-                        "http://169.254.169.254/latest/meta-data/instance-id",
-                        timeout=aiohttp.ClientTimeout(total=2),
-                    ) as resp:
-                        return resp.status == 200
-
+                # Fallback without token (IMDSv1)
+                async with session.get(
+                    "http://169.254.169.254/latest/meta-data/instance-id",
+                    timeout=aiohttp.ClientTimeout(total=2),
+                ) as resp:
+                    return resp.status == 200
         except Exception as e:
             self._log(f"Metadata service check failed: {e}")
             return False
@@ -77,7 +71,7 @@ class AWSClient(CloudProviderClient):
         """Detect if running on AWS (matches Go implementation)."""
         self._log("Starting AWS detection")
 
-        # Fast path: Check all relevant AWS environment variables
+        # Fast path: Check AWS-related environment variables
         env_vars = [
             "AWS_EXECUTION_ENV",
             "AWS_REGION",
@@ -185,17 +179,28 @@ class AWSClient(CloudProviderClient):
         try:
             loop = asyncio.get_event_loop()
 
+            # mypy: after initialization above, ensure non-None and use locals for narrowing
+            assert self._sts_client is not None
+            assert self._session is not None
+            sts_client = self._sts_client
+            session = self._session
+
             # If assuming a role, do that first
             if self._role_arn:
                 self._log(f"Assuming role: {self._role_arn}")
                 assume_response = await loop.run_in_executor(
                     None,
-                    lambda: self._sts_client.assume_role(RoleArn=self._role_arn, RoleSessionName="s2iam-session"),
+                    lambda: sts_client.assume_role(
+                        RoleArn=self._role_arn,
+                        RoleSessionName="s2iam-session",
+                    ),
                 )
 
                 credentials = assume_response["Credentials"]
 
                 # Create new STS client with assumed role credentials
+                import boto3
+
                 assumed_session = boto3.Session(
                     aws_access_key_id=credentials["AccessKeyId"],
                     aws_secret_access_key=credentials["SecretAccessKey"],
@@ -208,14 +213,15 @@ class AWSClient(CloudProviderClient):
                 identity_response = await loop.run_in_executor(None, assumed_sts.get_caller_identity)
 
                 # For assumed roles, use the temporary credentials
-                headers = {
+                headers: dict[str, str] = {
                     "X-AWS-Access-Key-ID": credentials["AccessKeyId"],
                     "X-AWS-Secret-Access-Key": credentials["SecretAccessKey"],
                     "X-AWS-Session-Token": credentials["SessionToken"],
+                    "X-Cloud-Provider": "aws",
                 }
             else:
                 # Get current identity first to check if we're using session credentials
-                identity_response = await loop.run_in_executor(None, self._sts_client.get_caller_identity)
+                identity_response = await loop.run_in_executor(None, sts_client.get_caller_identity)
 
                 # Check if we're already using session credentials (like EC2 instance role)
                 is_using_session_credentials = (
@@ -227,7 +233,9 @@ class AWSClient(CloudProviderClient):
                     self._log("Using existing session credentials")
 
                     # Get current credentials from boto3 session
-                    creds = self._session.get_credentials()
+                    creds = session.get_credentials()
+                    if creds is None:
+                        raise ProviderIdentityUnavailable("No AWS credentials available from session")
 
                     headers = {
                         "X-AWS-Access-Key-ID": creds.access_key,
@@ -236,12 +244,12 @@ class AWSClient(CloudProviderClient):
                     }
 
                     # Add session token if it exists
-                    if creds.token:
+                    if getattr(creds, "token", None):
                         headers["X-AWS-Session-Token"] = creds.token
                 else:
                     # For regular credentials, get session token like Go implementation
                     self._log("Getting session token for permanent credentials")
-                    session_response = await loop.run_in_executor(None, self._sts_client.get_session_token)
+                    session_response = await loop.run_in_executor(None, sts_client.get_session_token)
                     session_creds = session_response["Credentials"]
 
                     headers = {

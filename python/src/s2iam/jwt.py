@@ -2,7 +2,7 @@
 JWT functionality for SingleStore authentication.
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 import aiohttp
 
@@ -24,7 +24,7 @@ async def get_jwt(
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str:
     """
     Get a JWT from SingleStore's authentication service.
@@ -102,21 +102,21 @@ async def get_jwt(
         ) as response:
             if response.status == 200:
                 response_data = await response.json()
-                jwt = response_data.get("jwt")
-                if not jwt:
+                jwt_value = response_data.get("jwt")
+                if not isinstance(jwt_value, str) or not jwt_value:
                     raise Exception("No JWT in response")
 
                 if logger:
                     logger.log("Successfully obtained JWT")
 
-                return jwt
+                return jwt_value
             else:
                 error_text = await response.text()
                 raise Exception(f"JWT request failed with status {response.status}: {error_text}")
 
 
 # Legacy function name for compatibility
-async def get_jwt_token(*args, **kwargs) -> str:
+async def get_jwt_token(*args: Any, **kwargs: Any) -> str:
     """Legacy alias for get_jwt."""
     return await get_jwt(*args, **kwargs)
 
@@ -130,7 +130,7 @@ async def get_jwt_database(
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str:
     """
     Get a JWT for database access.
@@ -169,7 +169,7 @@ async def get_jwt_api(
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> str:
     """
     Get a JWT for API gateway access.

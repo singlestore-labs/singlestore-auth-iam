@@ -5,8 +5,9 @@ These tests validate the library against the production authsvc.singlestore.com 
 Currently tests database JWT only, with GCP temporarily skipped due to audience configuration.
 """
 
-import pytest
 import time
+
+import pytest
 
 import s2iam
 from s2iam import CloudProviderType

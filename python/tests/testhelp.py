@@ -5,15 +5,14 @@ This module provides helper functions that match the Go testhelp implementation
 to ensure consistent test behavior across language implementations.
 """
 
-import os
 import base64
 import json
-from typing import Optional, Dict, Any, Tuple
+import os
+from typing import Any, Dict, Optional, Tuple
 
 import pytest
 
 import s2iam
-
 from s2iam.models import CloudProviderClient
 
 

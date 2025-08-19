@@ -4,8 +4,8 @@ Main API for the s2iam library.
 
 import asyncio
 import os
-import threading
 import queue
+import threading
 from typing import Optional
 
 from .aws import new_client as new_aws_client
@@ -58,9 +58,9 @@ async def detect_provider(
         ]
 
     # Use threading approach that mirrors Go goroutines + channel pattern
-    result_queue = queue.Queue()
+    result_queue: "queue.Queue[CloudProviderClient]" = queue.Queue()
     stop_event = threading.Event()
-    all_errors = []
+    all_errors: list[str] = []
     errors_lock = threading.Lock()
 
     def test_provider_sync(client: CloudProviderClient) -> None:
@@ -96,7 +96,7 @@ async def detect_provider(
 
     # Wait for first result or timeout (like Go select)
     try:
-        result = result_queue.get(timeout=timeout)
+        result: CloudProviderClient = result_queue.get(timeout=timeout)
         stop_event.set()  # Ensure all threads stop
 
         if logger:

@@ -4,13 +4,13 @@ Google Cloud Platform provider client implementation.
 
 import asyncio
 import os
-import urllib.request
-import urllib.error
-from typing import Optional
 import socket
-import jwt
+import urllib.error
+import urllib.request
+from typing import Any, Optional
 
 import aiohttp
+import jwt
 
 from ..models import (
     CloudIdentity,
@@ -25,7 +25,7 @@ from ..models import (
 class GCPClient(CloudProviderClient):
     """GCP implementation of CloudProviderClient."""
 
-    def __init__(self, logger: Optional[Logger] = None):
+    def __init__(self, logger: Optional[Logger] = None) -> None:
         self._logger = logger
         self._detected = False
         self._service_account_email: Optional[str] = None
@@ -57,7 +57,7 @@ class GCPClient(CloudProviderClient):
         self._log("Trying metadata service")
         try:
             # Use urllib with explicit timeout (matches Go's http.Client{Timeout: 3 * time.Second})
-            def sync_check():
+            def sync_check() -> bool:
                 req = urllib.request.Request(
                     "http://metadata.google.internal/computeMetadata/v1/instance/id",
                     headers={"Metadata-Flavor": "Google"},
@@ -96,7 +96,7 @@ class GCPClient(CloudProviderClient):
         """Verify we can access identity-related metadata."""
         try:
             # Use asyncio.wait_for with explicit timeout (matches Go's pattern)
-            async def check_identity_access():
+            async def check_identity_access() -> None:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                     async with session.get(
                         "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/",
@@ -198,7 +198,10 @@ class GCPClient(CloudProviderClient):
             ) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return data["token"]
+                    token_value = data.get("token") if isinstance(data, dict) else None
+                    if not isinstance(token_value, str):
+                        raise Exception("Impersonation response did not include a string token")
+                    return token_value
                 else:
                     text = await response.text()
                     raise Exception(f"Impersonation failed with status {response.status}: {text}")
@@ -240,7 +243,8 @@ class GCPClient(CloudProviderClient):
                 headers={"Metadata-Flavor": "Google"},
             ) as response:
                 if response.status == 200:
-                    return await response.text()
+                    text_value = await response.text()
+                    return str(text_value)
                 else:
                     return "unknown"
 
@@ -273,7 +277,7 @@ class GCPClient(CloudProviderClient):
         """
         try:
             # Parse JWT without verification (since we got it from GCP directly)
-            claims = jwt.decode(token, options={"verify_signature": False})
+            claims: dict[str, Any] = jwt.decode(token, options={"verify_signature": False})
 
             # Get numeric account ID from sub claim (always present)
             account_id = claims.get("sub", "")
