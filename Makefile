@@ -88,7 +88,7 @@ test-go-local:
 
 test-python-local:
 	@echo "Running Python local tests..."
-		cd python && python -m pytest tests/ -v
+	cd python && python -m pytest tests/ -v
 
 check-cloud-env:
 	@if [ -z "$$S2IAM_TEST_CLOUD_PROVIDER" ] && [ -z "$$S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE" ] && [ -z "$$S2IAM_TEST_ASSUME_ROLE" ]; then \
@@ -173,8 +173,8 @@ lint-python:
 	@echo "Running Python linters..."
 	cd python && python3 -m flake8 --max-line-length=120 src tests 
 	cd python && python3 -m black --check src tests
-        cd python && isort --check-only src tests
-        cd python && mypy src
+	cd python && isort --check-only src tests
+	cd python && mypy src
 
 format: format-go format-python
 
