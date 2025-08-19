@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ type Config struct {
 	TokenExpiry      time.Duration
 	AllowedAudiences []string
 	Verbose          bool
+	Timeout          time.Duration
 }
 
 // Server holds the test server state
@@ -44,6 +46,20 @@ type Server struct {
 	verifiers  s2verifier.Verifiers
 	requestLog []RequestInfo
 	listener   net.Listener // Add a field to store the listener
+}
+
+// debugLog writes to a debug file if S2IAM_TEST_SERVER_DEBUG_LOG is set
+func debugLog(format string, args ...interface{}) {
+	if debugFile := os.Getenv("S2IAM_TEST_SERVER_DEBUG_LOG"); debugFile != "" {
+		f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err == nil {
+			defer func() {
+				_ = f.Close()
+			}()
+			timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+			_, _ = fmt.Fprintf(f, "[%s] %s\n", timestamp, fmt.Sprintf(format, args...))
+		}
+	}
 }
 
 // RequestInfo captures details about incoming requests
@@ -57,9 +73,14 @@ type RequestInfo struct {
 	Region     string
 	JWTType    string
 	Headers    map[string]string
+	Claims     map[string]interface{} `json:"claims,omitempty"`
+	Identity   map[string]string      `json:"identity,omitempty"`
 }
 
 func main() {
+	// Redirect all log output to stderr to keep stdout clean for JSON
+	log.SetOutput(os.Stderr)
+
 	config := parseFlags()
 
 	srv, err := NewServer(config)
@@ -91,6 +112,7 @@ func parseFlags() Config {
 	flag.DurationVar(&config.TokenExpiry, "token-expiry", time.Hour, "Token expiry duration")
 	flag.StringVar(&allowedAudiencesStr, "allowed-audiences", "https://authsvc.singlestore.com", "Comma-separated list of allowed audiences")
 	flag.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
+	flag.DurationVar(&config.Timeout, "timeout", 0, "Auto-shutdown timeout (0 = no timeout)")
 
 	flag.Parse()
 
@@ -181,9 +203,25 @@ func (s *Server) Run(ctx context.Context) error {
 		serverErr <- httpServer.Serve(s.listener)
 	}()
 
-	// Handle context cancellation
+	// Handle context cancellation and auto-shutdown timeout
 	go func() {
-		<-ctx.Done()
+		if s.config.Timeout > 0 {
+			// Set up auto-shutdown timer
+			timer := time.NewTimer(s.config.Timeout)
+			defer timer.Stop()
+
+			select {
+			case <-ctx.Done():
+				// Context cancelled before timeout
+			case <-timer.C:
+				// Timeout reached
+				log.Printf("Auto-shutdown timeout (%v) reached, shutting down server...", s.config.Timeout)
+			}
+		} else {
+			// No timeout, just wait for context cancellation
+			<-ctx.Done()
+		}
+
 		log.Printf("Shutting down server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -254,17 +292,10 @@ ServerReady:
 	// Output as JSON
 	jsonInfo, err := json.MarshalIndent(serverInfo, "", "  ")
 	if err != nil {
-		log.Printf("Warning: Failed to marshal server info to JSON: %v", err)
+		log.Fatalf("Warning: Failed to marshal server info to JSON: %v", err)
 	} else {
 		fmt.Println(string(jsonInfo))
 	}
-
-	// Also print human-readable endpoints for convenience
-	log.Printf("Server ready. Endpoints:")
-	log.Printf("  Auth:       http://localhost:%d/auth/iam/:jwtType", actualPort)
-	log.Printf("  Public Key: http://localhost:%d/info/public-key", actualPort)
-	log.Printf("  Requests:   http://localhost:%d/info/requests", actualPort)
-	log.Printf("  Health:     http://localhost:%d/health", actualPort)
 
 	// Wait for the server to complete (or error)
 	return <-serverErr
@@ -280,12 +311,17 @@ func (s *Server) GetPort() int {
 
 // handleAuth handles authentication requests
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
+	debugLog("===== GO TEST SERVER: Received auth request for %s =====", r.URL.Path)
+	debugLog("===== GO TEST SERVER: Request method: %s =====", r.Method)
+
 	// Extract JWT type from URL
 	pathParts := strings.Split(r.URL.Path, "/")
 	jwtType := ""
 	if len(pathParts) >= 4 {
 		jwtType = pathParts[len(pathParts)-1]
 	}
+
+	debugLog("===== GO TEST SERVER: JWT type: %s =====", jwtType)
 
 	// Log request details
 	reqInfo := RequestInfo{
@@ -331,12 +367,11 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update request info with identity
+	// Populate identity fields prior to JWT creation
 	reqInfo.Provider = string(identity.Provider)
 	reqInfo.Identifier = identity.Identifier
 	reqInfo.AccountID = identity.AccountID
 	reqInfo.Region = identity.Region
-	s.requestLog = append(s.requestLog, reqInfo)
 
 	if s.config.Verbose {
 		log.Printf("Verified identity: %s %s", identity.Provider, identity.Identifier)
@@ -344,17 +379,43 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Return empty JWT if configured
 	if s.config.ReturnEmptyJWT {
+		// Still record identity structure
+		reqInfo.Identity = map[string]string{
+			"provider":     string(identity.Provider),
+			"identifier":   identity.Identifier,
+			"accountID":    identity.AccountID,
+			"region":       identity.Region,
+			"resourceType": identity.ResourceType,
+		}
+		s.requestLog = append(s.requestLog, reqInfo)
 		response := map[string]string{"jwt": ""}
 		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	// Create JWT
-	tokenString, err := s.createJWT(identity, jwtType)
+	// Create JWT (also get claims used)
+	tokenString, claims, err := s.createJWT(identity, jwtType)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error creating JWT: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	// Attach structured identity and claims for test inspection
+	reqInfo.Identity = map[string]string{
+		"provider":     string(identity.Provider),
+		"identifier":   identity.Identifier,
+		"accountID":    identity.AccountID,
+		"region":       identity.Region,
+		"resourceType": identity.ResourceType,
+	}
+	// Copy claims map[string]interface{} to plain map (already map[string]interface{})
+	reqInfo.Claims = make(map[string]interface{}, len(claims))
+	for k, v := range claims {
+		// Only include JSON-serializable simple values for clarity
+		reqInfo.Claims[k] = v
+	}
+
+	s.requestLog = append(s.requestLog, reqInfo)
 
 	response := map[string]string{"jwt": tokenString}
 	w.Header().Set("Content-Type", "application/json")
@@ -362,26 +423,35 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 // createJWT generates a JWT for the given identity
-func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (string, error) {
+func (s *Server) createJWT(identity *models.CloudIdentity, jwtType string) (string, jwt.MapClaims, error) {
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.Identifier: %s =====", identity.Identifier)
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.AccountID: %s =====", identity.AccountID)
+	debugLog("===== GO TEST SERVER: Creating JWT with identity.Provider: %s =====", identity.Provider)
+	debugLog("===== GO TEST SERVER: Setting JWT sub claim to: %s =====", identity.Identifier)
+
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":          identity.Identifier,
-		"provider":     identity.Provider,
-		"accountID":    identity.AccountID,
-		"region":       identity.Region,
-		"resourceType": identity.ResourceType,
-		"jwtType":      jwtType,
-		"iat":          now.Unix(),
-		"exp":          now.Add(s.config.TokenExpiry).Unix(),
+		"sub":                 identity.Identifier,
+		"provider":            identity.Provider,
+		"accountID":           identity.AccountID,
+		"region":              identity.Region,
+		"resourceType":        identity.ResourceType,
+		"jwtType":             jwtType,
+		"createdByTestServer": true,
+		"iat":                 now.Unix(),
+		"exp":                 now.Add(s.config.TokenExpiry).Unix(),
 	}
 
-	// Add any additional properties
+	// Add any additional properties, but never override above claims
 	for key, value := range identity.AdditionalClaims {
-		claims[key] = value
+		if _, ok := claims[key]; !ok {
+			claims[key] = value
+		}
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	return token.SignedString(s.privateKey)
+	signed, err := token.SignedString(s.privateKey)
+	return signed, claims, err
 }
 
 // handlePublicKey returns the server's public key

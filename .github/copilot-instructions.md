@@ -132,6 +132,11 @@ Use the same output file name (test_output.log) every time so that you don't lit
 ### Errors
 - go errors should be tested with errors.Is(). String matching is only okay for external system errors.
 
+## Backawards compatibility
+
+There are no current users of this library. No users of the production server. 
+Breaking changes are allowed.
+
 ## Key Principles
 
 1. **Real cloud provider functionality is the only thing that matters**

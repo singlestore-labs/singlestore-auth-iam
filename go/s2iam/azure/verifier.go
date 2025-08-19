@@ -235,6 +235,13 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 		}
 	}
 
+	// NOTE: We intentionally do NOT fall back to headers like X-Azure-Location because
+	// they are not part of the signed token and would allow an attacker
+	// spoof region. If region cannot be derived from signed claims
+	// we leave it empty; higher layers may optionally acquire location from the
+	// instance metadata service separately (and perform their own binding) but
+	// the verifier must only trust cryptographically bound data.
+
 	// Prepare additional claims
 	additionalClaims := make(map[string]string)
 	for k, v := range claims {

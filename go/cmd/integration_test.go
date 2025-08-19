@@ -20,6 +20,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// toString safely converts interface{} to string for comparison purposes.
+func toString(val interface{}) string {
+	if val == nil {
+		return ""
+	}
+	switch v := val.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
 // Define a struct for parsing the server info JSON
 type ServerInfo struct {
 	ServerInfo struct {
@@ -221,12 +236,53 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 	resp, err := http.Get(endpoints["requests"])
 	require.NoError(t, err)
 
-	var requests []interface{}
+	var requests []map[string]interface{}
 	err = json.NewDecoder(resp.Body).Decode(&requests)
 	require.NoError(t, err)
 
 	// Should have at least one request from the client
 	assert.GreaterOrEqual(t, len(requests), 1)
+
+	// Strict identity vs claim comparison: create CloudIdentity from claims and compare whole struct
+	for _, req := range requests {
+		claims, ok := req["claims"].(map[string]interface{})
+		identityMap, ok2 := req["identity"].(map[string]interface{})
+		if !ok || !ok2 {
+			t.Fatalf("Request missing claims or identity: %+v", req)
+		}
+
+		// Build CloudIdentity from claims
+		claimIdentity := struct {
+			Provider     string
+			Identifier   string
+			AccountID    string
+			Region       string
+			ResourceType string
+		}{
+			Provider:     toString(claims["provider"]),
+			Identifier:   toString(claims["sub"]),
+			AccountID:    toString(claims["accountID"]),
+			Region:       toString(claims["region"]),
+			ResourceType: toString(claims["resourceType"]),
+		}
+
+		// Build CloudIdentity from identity map
+		actualIdentity := struct {
+			Provider     string
+			Identifier   string
+			AccountID    string
+			Region       string
+			ResourceType string
+		}{
+			Provider:     toString(identityMap["provider"]),
+			Identifier:   toString(identityMap["identifier"]),
+			AccountID:    toString(identityMap["accountID"]),
+			Region:       toString(identityMap["region"]),
+			ResourceType: toString(identityMap["resourceType"]),
+		}
+
+		assert.Equal(t, actualIdentity, claimIdentity, "CloudIdentity mismatch: claim=%+v identity=%+v", claimIdentity, actualIdentity)
+	}
 }
 
 // TestIntegration_ServerOnly tests just the server functionality

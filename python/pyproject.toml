@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "singlestore-auth-iam"
+description = "SingleStore IAM authentication library for cloud providers"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "../LICENSE"}
+authors = [
+    {name = "SingleStore Labs"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "boto3>=1.26.0",
+    "google-auth>=2.15.0",
+    "google-auth-oauthlib>=0.8.0",
+    "azure-identity>=1.12.0",
+    "requests>=2.28.0",
+    "PyJWT>=2.6.0",
+    "cryptography>=3.4.8",
+    "aiohttp>=3.8.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "types-requests>=2.28.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/singlestore-labs/singlestore-auth-iam"
+Repository = "https://github.com/singlestore-labs/singlestore-auth-iam"
+Issues = "https://github.com/singlestore-labs/singlestore-auth-iam/issues"
+
+[tool.hatch.version]
+path = "src/s2iam/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "../LICENSE",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/s2iam"]
+sources = ["src"]
+artifacts = [
+    "../LICENSE",
+]
+
+[tool.black]
+line-length = 120
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.flake8]
+max-line-length = 120
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+]
+markers = [
+    "integration: marks tests as integration tests that require cloud environment",
+    "aws: marks tests as AWS-specific",
+    "gcp: marks tests as GCP-specific", 
+    "azure: marks tests as Azure-specific",
+    "cloud_validation: marks tests as automated cloud validation tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src/s2iam"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

@@ -13,22 +13,24 @@ This service is not yet available. This library may be updated before the servic
 
 ## Overview
 
-The `singlestore-auth-iam` library discovers the IAM role from a cloud provider (AWS, GCP, Azure) and
-makes a request that allows the SingleStore auth server to verify the IAM role. In return, the SingleStore
-auth server provides a JWT that can be used for:
+The `singlestore-auth-iam` library provides a seamless way to authenticate with SingleStore services using cloud provider IAM credentials. It automatically discovers your cloud environment (AWS, GCP, Azure) and obtains JWTs for:
 
-- Access to a [SingleStore Helios](https://www.singlestore.com/product-overview/) database
-- Making call to the [Management API](https://docs.singlestore.com/cloud/user-and-workspace-administration/management-api/)
+- **Database Access**: Connect to [SingleStore Helios](https://www.singlestore.com/product-overview/) databases
+- **Management API**: Make calls to the [SingleStore Management API](https://docs.singlestore.com/cloud/user-and-workspace-administration/management-api/)
 
-## Features
+### Key Features
 
-- Go library for JWT authentication
-- Support for AWS, GCP, and Azure cloud providers
-- Command-line tool for fetching and providing the JWT for other commands
-- Role assumption capabilities (assume different roles/service accounts before requesting the JWT)
+- **Multi-language support**: Go and Python libraries with identical functionality
+- **Automatic detection**: Discovers cloud provider and obtains credentials automatically  
+- **Role assumption**: Assume different roles/service accounts for enhanced security
+- **Command-line tool**: Standalone CLI for scripts and CI/CD pipelines
 
 ### Future Plans
-- Multi-language support: Python, Java, Node.js, and C++ (coming soon)
+- Additional language support: Java, Node.js, and C++ (coming soon)
+
+## Current Status
+
+This service is not yet available. This library may be updated before the service becomes available.
 
 ## Installation
 
@@ -39,179 +41,115 @@ To install the Go library:
 go get github.com/singlestore-labs/singlestore-auth-iam/go
 ```
 
-To install the command:
+### Python
+
+To install the Python library:
 ```bash
-go install github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam@latest
+pip install singlestore-auth-iam
+```
+
+Or from source:
+```bash
+cd python
+pip install -e .
 ```
 
 ## Usage
 
 ### Go Library
 
-Example usage in Go:
-
 ```go
-package main
+import "github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 
-import (
-    "context"
-    "fmt"
-    "log"
-    "github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
-)
+// Get JWT for database access
+jwt, err := s2iam.GetDatabaseJWT(ctx, "workspace-group-id")
 
-func main() {
-    ctx := context.Background()
-    
-    // Get JWT for database access
-    jwt, err := s2iam.GetDatabaseJWT(ctx, "workspace-group-id")
-    if err != nil {
-        log.Fatalf("Error getting database JWT: %v", err)
-    }
-    fmt.Println("Database JWT:", jwt)
-    
-    // Get JWT for API access
-    apiJWT, err := s2iam.GetAPIJWT(ctx)
-    if err != nil {
-        log.Fatalf("Error getting API JWT: %v", err)
-    }
-    fmt.Println("API JWT:", apiJWT)
-    
-    // Using options
-    customJWT, err := s2iam.GetDatabaseJWT(
-        ctx,
-        "workspace-group-id",
-        s2iam.WithExternalServerURL("https://custom-authsvc.singlestore.com/auth/iam"),
-        s2iam.WithGCPAudience("custom-audience"),
-    )
-    if err != nil {
-        log.Fatalf("Error getting custom JWT: %v", err)
-    }
-    fmt.Println("Custom JWT:", customJWT)
-    
-    // Assume a different role before getting a JWT
-    // For AWS, provide a role ARN
-    assumedRoleJWT, err := s2iam.GetDatabaseJWT(
-        ctx,
-        "workspace-group-id",
-        s2iam.WithAssumeRole("arn:aws:iam::123456789012:role/RoleToAssume"),
-    )
-    if err != nil {
-        log.Fatalf("Error getting JWT with assumed role: %v", err)
-    }
-    fmt.Println("JWT with assumed role:", assumedRoleJWT)
-}
+// Get JWT for API access
+apiJWT, err := s2iam.GetAPIJWT(ctx)
 ```
 
-### Role Assumption
+**[📖 Full Go Documentation →](go/README.md)**
 
-The library supports assuming different roles/identities before requesting a JWT. This is useful when your application needs to request JWTs with permissions granted to a different role than the one it's running under.
+### Python Library
 
-- **AWS**: Provide a role ARN to assume a different IAM role
-- **GCP**: Provide a service account email to impersonate that service account
-- **Azure**: Provide a managed identity client ID to use a specific managed identity
+```python
+import asyncio
+import s2iam
 
-Example with role assumption:
+# Get JWT for database access
+jwt = await s2iam.get_jwt_database("workspace-group-id")
 
-```go
-// AWS role assumption
-awsJWT, err := s2iam.GetDatabaseJWT(
-    ctx,
-    "workspace-group-id",
-    s2iam.WithAssumeRole("arn:aws:iam::123456789012:role/RoleToAssume"),
-)
-
-// GCP service account impersonation
-gcpJWT, err := s2iam.GetDatabaseJWT(
-    ctx,
-    "workspace-group-id",
-    s2iam.WithAssumeRole("service-account@project-id.iam.gserviceaccount.com"),
-)
-
-// Azure managed identity selection
-azureJWT, err := s2iam.GetDatabaseJWT(
-    ctx,
-    "workspace-group-id",
-    s2iam.WithAssumeRole("12345678-1234-1234-1234-123456789012"),
-)
+# Get JWT for API access
+api_jwt = await s2iam.get_jwt_api()
 ```
 
-### S2IAM Command Line Tools
+**[📖 Full Python Documentation →](python/README.md)**
 
-The `s2iam` command is a standalone client that obtains JWT tokens from the SingleStore authentication service.
+### Command Line Tool
 
-#### Basic Usage
+#### Installation
 
-Get a database JWT for a workspace:
 ```bash
+go install github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam@latest
+```
+
+#### Usage
+
+```bash
+# Get database JWT
 s2iam --workspace-group-id=my-workspace
-```
 
-Get an API JWT:
-```bash
+# Get API JWT
 s2iam --jwt-type=api
-```
 
-#### Environment Variable Output
-
-To set the results in environment variables for use in scripting:
-
-```bash
-# Set up environment variables
+# Use with environment variables for scripting
 eval $(s2iam --env-status=STATUS --env-name=TOKEN --workspace-group-id=my-workspace)
-
-# Use the token
 echo $TOKEN
-# Check status (0 = success, 1 = error)
-echo $STATUS
 ```
 
-#### Advanced Options
+#### Advanced Usage
 
-Use a specific provider and role:
 ```bash
 # AWS with assumed role
 s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole
 
-# GCP with custom audience
-s2iam --provider=gcp --gcp-audience=https://myapp.example.com
+# GCP with service account impersonation
+s2iam --provider=gcp --assume-role=service-account@project-id.iam.gserviceaccount.com
 
 # Azure with managed identity
 s2iam --provider=azure --assume-role=00000000-0000-0000-0000-000000000000
-```
 
-Use a custom authentication server:
-```bash
+# Custom auth server
 s2iam --server-url=https://auth.example.com/auth/iam/:jwtType
-```
 
-Enable verbose logging:
-```bash
+# Verbose logging
 s2iam --verbose --workspace-group-id=my-workspace
 ```
 
-#### Options
+#### Command Options
 
 - `--jwt-type`: JWT type ('database' or 'api', default: 'database')
 - `--workspace-group-id`: Workspace group ID (required for database JWT)
-- `--gcp-audience`: GCP audience for identity token
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
-- `--timeout`: Timeout for operations (default: 10s)
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
 - `--verbose`: Enable verbose logging
-- `--force-detect`: Force provider detection even if provider is specified
+- `--timeout`: Timeout for operations (default: 10s)
 
-## Cloud Provider Detection
+## Supported Cloud Providers
 
-The library automatically detects the cloud provider by checking environment variables and by
-reaching out to cloud metadata services.
+- **AWS**: EC2 instances, Lambda functions, IAM roles, and role assumption
+- **GCP**: Compute Engine, Cloud Functions, service accounts, and impersonation  
+- **Azure**: Virtual Machines, Container Instances, managed identities
 
-- AWS: Checks for `AWS_EXECUTION_ENV`
-- GCP: Checks for `GCE_METADATA_HOST`
-- Azure: Checks for `AZURE_ENV`
+The libraries automatically detect the cloud provider and obtain appropriate credentials from metadata services.
+
+## Documentation
+
+- **[Go Library Documentation](go/README.md)** - Complete Go API reference and examples
+- **[Python Library Documentation](python/README.md)** - Complete Python API reference and examples
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
