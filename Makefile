@@ -1,5 +1,3 @@
-# SingleStore Auth IAM Makefile
-# Local development and cloud testing (when run on cloud VMs)
 
 .PHONY: help test test-local test-go-local test-python-local on-remote-test on-remote-test-go on-remote-test-python check-cloud-env check-host clean install install-go install-python lint lint-go lint-python format format-go format-python ssh-copy-to-remote ssh-run-remote-tests ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-cleanup-remote launch-remote launch-remote-go launch-remote-python launch-remote-go-only launch-remote-python-only launch-all-go launch-all-python
 
