@@ -158,7 +158,10 @@ class AzureClient(CloudProviderClient):
                 timeout=aiohttp.ClientTimeout(total=self.AZURE_IDENTITY_TEST_TIMEOUT)
             ) as session:
                 async with session.get(
-                    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/",  # noqa: E501
+                    (
+                        "http://169.254.169.254/metadata/identity/oauth2/token"
+                        "?api-version=2018-02-01&resource=https://management.azure.com/"
+                    ),
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status != 200:
@@ -277,9 +280,7 @@ class AzureClient(CloudProviderClient):
         if client_id:
             params["client_id"] = client_id
 
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.AZURE_TOKEN_HTTP_TIMEOUT)
-        ) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.AZURE_TOKEN_HTTP_TIMEOUT)) as session:
             async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
                 if response.status == 200:
                     data = await response.json()

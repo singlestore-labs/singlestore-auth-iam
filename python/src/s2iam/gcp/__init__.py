@@ -80,12 +80,11 @@ class GCPClient(CloudProviderClient):
                 self._log(f"Metadata service error for {url}: {last_error}")
 
         # If neither URL worked, propagate a clear error
-        raise Exception(
-            (
-                "Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach "
-                "metadata endpoints)"
-            ) + (f": {last_error}" if last_error else "")
+        msg = (
+            "Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and "
+            "cannot reach metadata endpoints)"
         )
+        raise Exception(msg + (f": {last_error}" if last_error else ""))
 
     async def _verify_metadata_access(self) -> None:
         """Verify we can access identity-related metadata."""
@@ -95,10 +94,12 @@ class GCPClient(CloudProviderClient):
                 hosts = []
                 if os.environ.get("GCE_METADATA_HOST"):
                     hosts.append(os.environ["GCE_METADATA_HOST"])  # e.g., metadata.google.internal or IP
-                hosts.extend([
-                    "metadata.google.internal",
-                    "169.254.169.254",
-                ])
+                hosts.extend(
+                    [
+                        "metadata.google.internal",
+                        "169.254.169.254",
+                    ]
+                )
                 last_status = None
                 async with aiohttp.ClientSession(
                     timeout=aiohttp.ClientTimeout(total=self.GCP_DETECT_IDENTITY_TIMEOUT)

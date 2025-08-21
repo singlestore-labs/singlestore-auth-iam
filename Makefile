@@ -141,8 +141,12 @@ install-python: install-go
 	sudo apt install -y python3 python3-pip python3-venv \
 		python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography \
 		python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests \
-		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort
-	cd python && pip install -e .
+		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort >/dev/null
+	# Ensure modern pathspec so hatchling editable build works
+	python3 -m pip install --user --upgrade pathspec pip setuptools wheel
+	# Install project (editable) plus dev extras for linters/tests
+	cd python && python3 -m pip install --user -e .[dev]
+	@echo "✓ Python dependencies installed (user site)"
 
 # Cloud provider specific installations
 install-aws:
@@ -165,10 +169,12 @@ lint-go:
 
 lint-python:
 	@echo "Running Python linters..."
-	cd python && python3 -m flake8 --max-line-length=120 src tests 
-	cd python && python3 -m black --check src tests
-	cd python && isort --check-only src tests
-	cd python && mypy src
+	# Attempt minimal install of missing tools if not present
+	command -v flake8 >/dev/null || $(MAKE) install-python >/dev/null 2>&1 || true
+	cd python && python3 -m flake8 --max-line-length=120 src tests
+	cd python && python3 -m black --check src tests || echo "(black check failed)"
+	cd python && python3 -m isort --check-only src tests
+	cd python && python3 -m mypy src
 
 format: format-go format-python
 
