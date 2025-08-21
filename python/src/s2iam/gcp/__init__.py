@@ -4,8 +4,6 @@ Google Cloud Platform provider client implementation.
 
 import asyncio
 import os
-import urllib.error
-import urllib.request
 from typing import Any, Optional
 
 import aiohttp
@@ -83,12 +81,10 @@ class GCPClient(CloudProviderClient):
 
         # If neither URL worked, propagate a clear error
         raise Exception(
-            "Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata endpoints)"
-            + (f": {last_error}" if last_error else "")
-        )
-
-        raise Exception(
-            "Not running on GCP: no environment variable, metadata service, or default credentials detected"
+            (
+                "Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach "
+                "metadata endpoints)"
+            ) + (f": {last_error}" if last_error else "")
         )
 
     async def _verify_metadata_access(self) -> None:
