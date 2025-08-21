@@ -86,7 +86,7 @@ test-go-local:
 
 test-python-local:
 	@echo "Running Python local tests..."
-	cd python && python -m pytest tests/ -v
+	cd python && python3 -m pytest tests/ -v
 
 check-cloud-env:
 	@if [ -z "$$S2IAM_TEST_CLOUD_PROVIDER" ] && [ -z "$$S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE" ] && [ -z "$$S2IAM_TEST_ASSUME_ROLE" ]; then \
@@ -117,12 +117,8 @@ on-remote-test-go: check-cloud-env
 	cd go && go test -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/... ./...
 
 on-remote-test-python: check-cloud-env
-	@echo "=== Running Python cloud tests ==="
-	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
-	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
-	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd python && python -m pytest tests/ -v --tb=short
-	cd python && python -m pytest tests/ --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
+	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short
+	cd python && PYTHONPATH=src python3 -m pytest tests/ --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 
 install: install-go install-python
 	@echo "✓ All dependencies installed"
@@ -206,9 +202,19 @@ SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
 # CI target - copy code to remote host
 ssh-copy-to-remote: check-host
 	@echo "Copying code to $(HOST) in directory $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)..."
-	@tar -czf - --exclude=.git --exclude='*.log' --exclude='.pytest_cache' --exclude='htmlcov' --exclude='coverage.*' . | \
-		ssh $(SSH_OPTS) $(HOST) \
-		"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -"
+	@# Prefer copying only tracked files to avoid sending local artifacts (venv, caches, logs)
+	@# Use git ls-files to stream tracked files into tar; fall back to previous behavior if not a git repo
+	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		echo "Using git ls-files for copy"; \
+		git ls-files -z | tar -czf - --null -T - | \
+			ssh $(SSH_OPTS) $(HOST) \
+			"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -"; \
+	else \
+		echo "Not a git repo; falling back to working directory tar (with excludes)"; \
+		tar -czf - --exclude=.git --exclude='*.log' --exclude='.pytest_cache' --exclude='htmlcov' --exclude='coverage.*' . | \
+			ssh $(SSH_OPTS) $(HOST) \
+			"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -"; \
+	fi
 
 # CI target - run tests on remote host
 ssh-run-remote-tests: check-host

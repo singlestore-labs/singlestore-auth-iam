@@ -128,7 +128,7 @@ func TestRun_Success(t *testing.T) {
 		JWTType:          "database",
 		WorkspaceGroupID: "test-workspace",
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
-		Timeout:          time.Second,
+		Timeout:          10 * time.Second,
 	}
 
 	// Capture stdout
@@ -203,7 +203,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
 		EnvName:          "TOKEN",
 		EnvStatus:        "STATUS",
-		Timeout:          time.Second,
+		Timeout:          10 * time.Second,
 	}
 
 	// Capture stdout

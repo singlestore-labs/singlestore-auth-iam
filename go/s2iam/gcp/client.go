@@ -22,6 +22,12 @@ const (
 
 	// Default audience for identity tokens
 	defaultAudience = "https://authsvc.singlestore.com"
+
+	// Timeouts for GCP operations
+	gcpDetectIdentityProbeTimeout = 2 * time.Second
+	gcpDetectMetadataTimeout      = 3 * time.Second
+	gcpImpersonationHTTPTimeout   = 10 * time.Second
+	gcpMetadataTokenHTTPTimeout   = 5 * time.Second
 )
 
 // GCPClient implements the CloudProviderClient interface for GCP
@@ -69,7 +75,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		}
 
 		// Verify we can actually get identity information
-		testCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		testCtx, cancel := context.WithTimeout(ctx, gcpDetectIdentityProbeTimeout)
 		defer cancel()
 
 		// Try to access identity-related metadata
@@ -81,7 +87,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		}
 
 		req.Header.Set("Metadata-Flavor", "Google")
-		client := &http.Client{Timeout: 2 * time.Second}
+		client := &http.Client{Timeout: gcpDetectIdentityProbeTimeout}
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			if resp != nil {
@@ -109,7 +115,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: gcpDetectMetadataTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		if c.logger != nil {
@@ -180,7 +186,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		req.Header.Set("Authorization", "Bearer "+selfToken)
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: 10 * time.Second}
+		client := &http.Client{Timeout: gcpImpersonationHTTPTimeout}
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, nil, errors.Errorf("failed to impersonate service account: %w", err)
@@ -247,7 +253,7 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 	}
 	req.Header.Set("Metadata-Flavor", "Google") // Correct header for GCP metadata service
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: gcpMetadataTokenHTTPTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", errors.Errorf("failed to contact GCP metadata service: %w", err)
