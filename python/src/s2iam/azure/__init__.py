@@ -23,6 +23,11 @@ from ..models import (
 class AzureClient(CloudProviderClient):
     """Azure implementation of CloudProviderClient."""
 
+    # Default timeouts (seconds), kept modest for CI parity with Go implementation
+    AZURE_METADATA_TIMEOUT = 3.0
+    AZURE_IDENTITY_TEST_TIMEOUT = 2.0
+    AZURE_TOKEN_HTTP_TIMEOUT = 5.0
+
     def __init__(self, logger: Optional[Logger] = None):
         self._logger = logger
         self._detected = False
