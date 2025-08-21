@@ -200,21 +200,12 @@ SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
 
 # SSH operations (low-level operations for copying code and running tests)
 # CI target - copy code to remote host
+# Copy only tracked files to avoid sending local artifacts (venv, caches, logs)
 ssh-copy-to-remote: check-host
 	@echo "Copying code to $(HOST) in directory $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)..."
-	@# Prefer copying only tracked files to avoid sending local artifacts (venv, caches, logs)
-	@# Use git ls-files to stream tracked files into tar; fall back to previous behavior if not a git repo
-	@if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-		echo "Using git ls-files for copy"; \
-		git ls-files -z | tar -czf - --null -T - | \
-			ssh $(SSH_OPTS) $(HOST) \
-			"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -"; \
-	else \
-		echo "Not a git repo; falling back to working directory tar (with excludes)"; \
-		tar -czf - --exclude=.git --exclude='*.log' --exclude='.pytest_cache' --exclude='htmlcov' --exclude='coverage.*' . | \
-			ssh $(SSH_OPTS) $(HOST) \
-			"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -"; \
-	fi
+	git ls-files -z | tar -czf - --null -T - | \
+		ssh $(SSH_OPTS) $(HOST) \
+		"mkdir -p $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && tar xzf -";
 
 # CI target - run tests on remote host
 ssh-run-remote-tests: check-host
