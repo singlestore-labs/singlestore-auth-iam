@@ -34,7 +34,7 @@ class AzureClient(CloudProviderClient):
         self._managed_identity_id: Optional[str] = None
         self._identity: Optional[CloudIdentity] = None
         self._assume_role_requested = False
-    
+
     def _log(self, message: str) -> None:
         """Log a message if logger is available."""
         if self._logger:
