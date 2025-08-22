@@ -184,7 +184,8 @@ format-go:
 
 format-python:
 	@echo "Formatting Python code..."
-	cd python && python3 -m black src/ tests/ || echo "black not available, skipping"
+	cd python && python3 -m black src/ tests/ 
+	cd python && python3 -m isort src tests
 
 # Clean targets
 clean:
