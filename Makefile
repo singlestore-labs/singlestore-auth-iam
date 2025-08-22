@@ -170,11 +170,10 @@ lint-go:
 lint-python:
 	@echo "Running Python linters..."
 	# Attempt minimal install of missing tools if not present
-	command -v flake8 >/dev/null || $(MAKE) install-python >/dev/null 2>&1 || true
-	cd python && python3 -m flake8 --max-line-length=120 src tests
-	cd python && python3 -m black --check src tests || echo "(black check failed)"
-	cd python && python3 -m isort --check-only src tests
 	cd python && python3 -m mypy src
+	cd python && python3 -m flake8 --max-line-length=120 src tests
+	cd python && python3 -m black --check src tests
+	cd python && python3 -m isort --check-only src tests
 
 format: format-go format-python
 

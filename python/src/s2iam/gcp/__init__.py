@@ -181,16 +181,29 @@ class GCPClient(CloudProviderClient):
 
     async def _get_identity_token(self, audience: str) -> str:
         """Get identity token from metadata service."""
-        url = f"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience={audience}&format=full"  # noqa: E501
-
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
-        ) as session:
-            async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
-                if response.status == 200:
-                    return await response.text()
-                else:
-                    raise Exception(f"Failed to get identity token: {response.status}")
+        host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        path = "/computeMetadata/v1/instance/service-accounts/default/identity" f"?audience={audience}&format=full"
+        url = f"http://{host}{path}"
+        if self._logger and os.environ.get("S2IAM_DEBUGGING") == "true":
+            self._log(f"Fetching identity token from {url}")
+        timeout = aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    body = (await response.text())[:160]
+                    raise Exception(
+                        "identity token request failed host=" + f"{host} status={response.status} body_snip={body!r}"
+                    )
+        except asyncio.TimeoutError:
+            raise Exception(
+                "identity token request timeout host=" + f"{host} total_timeout={self.GCP_METADATA_TOKEN_HTTP_TIMEOUT}s"
+            )
+        except aiohttp.ClientConnectorError as e:
+            raise Exception(f"identity token connect error host={host} err={e}")
+        except Exception as e:
+            raise Exception("identity token request error host=" + f"{host} err={type(e).__name__}: {e}")
 
     async def _get_impersonated_token(self, audience: str) -> str:
         """Get token through service account impersonation."""
@@ -223,28 +236,22 @@ class GCPClient(CloudProviderClient):
 
     async def _get_project_info(self) -> dict[str, str]:
         """Get project information from metadata."""
-        info = {}
-
+        info: dict[str, str] = {}
+        host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        base = f"http://{host}/computeMetadata/v1/project"
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
         ) as session:
-            # Get project ID
+            # Project ID
             try:
-                async with session.get(
-                    "http://metadata.google.internal/computeMetadata/v1/project/project-id",
-                    headers={"Metadata-Flavor": "Google"},
-                ) as response:
+                async with session.get(f"{base}/project-id", headers={"Metadata-Flavor": "Google"}) as response:
                     if response.status == 200:
                         info["projectId"] = await response.text()
             except Exception as e:
                 self._log(f"Failed to get project ID: {e}")
-
-            # Get project number
+            # Project number
             try:
-                async with session.get(
-                    "http://metadata.google.internal/computeMetadata/v1/project/numeric-project-id",
-                    headers={"Metadata-Flavor": "Google"},
-                ) as response:
+                async with session.get(f"{base}/numeric-project-id", headers={"Metadata-Flavor": "Google"}) as response:
                     if response.status == 200:
                         info["projectNumber"] = await response.text()
             except Exception as e:
@@ -254,35 +261,34 @@ class GCPClient(CloudProviderClient):
 
     async def _get_service_account(self) -> str:
         """Get default service account email."""
+        host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        url = f"http://{host}/computeMetadata/v1/instance/service-accounts/default/email"
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
         ) as session:
-            async with session.get(
-                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
-                headers={"Metadata-Flavor": "Google"},
-            ) as response:
-                if response.status == 200:
-                    text_value = await response.text()
-                    return str(text_value)
-                else:
-                    return "unknown"
+            try:
+                async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
+                    if response.status == 200:
+                        text_value = await response.text()
+                        return str(text_value)
+            except Exception as e:
+                self._log(f"Failed to get service account email: {e}")
+        return "unknown"
 
     async def _get_zone(self) -> str:
         """Get zone information."""
-        try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
-            ) as session:
-                async with session.get(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/zone",
-                    headers={"Metadata-Flavor": "Google"},
-                ) as response:
+        host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        url = f"http://{host}/computeMetadata/v1/instance/zone"
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
+        ) as session:
+            try:
+                async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
                     if response.status == 200:
                         zone_path = await response.text()
-                        # Extract zone from path like "projects/123/zones/us-central1-a"
                         return zone_path.split("/")[-1] if "/" in zone_path else zone_path
-        except Exception as e:
-            self._log(f"Failed to get zone: {e}")
+            except Exception as e:
+                self._log(f"Failed to get zone: {e}")
 
         return ""
 
