@@ -181,29 +181,48 @@ class GCPClient(CloudProviderClient):
 
     async def _get_identity_token(self, audience: str) -> str:
         """Get identity token from metadata service."""
-        host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        primary_host = os.environ.get("GCE_METADATA_HOST", "metadata.google.internal")
+        fallback_host = "169.254.169.254"
+        hosts: list[str] = [primary_host]
+        if fallback_host != primary_host:
+            hosts.append(fallback_host)
+
+        # Keep total close to Go's 5s timeout: split budget across attempts
+        total_budget = self.GCP_METADATA_TOKEN_HTTP_TIMEOUT
+        per_attempt = max(1.0, total_budget / len(hosts))
+        deadline = asyncio.get_event_loop().time() + total_budget
+        errors: list[str] = []
         path = "/computeMetadata/v1/instance/service-accounts/default/identity" f"?audience={audience}&format=full"
-        url = f"http://{host}{path}"
-        if self._logger and os.environ.get("S2IAM_DEBUGGING") == "true":
-            self._log(f"Fetching identity token from {url}")
-        timeout = aiohttp.ClientTimeout(total=self.GCP_METADATA_TOKEN_HTTP_TIMEOUT)
-        try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    body = (await response.text())[:160]
-                    raise Exception(
-                        "identity token request failed host=" + f"{host} status={response.status} body_snip={body!r}"
-                    )
-        except asyncio.TimeoutError:
-            raise Exception(
-                "identity token request timeout host=" + f"{host} total_timeout={self.GCP_METADATA_TOKEN_HTTP_TIMEOUT}s"
-            )
-        except aiohttp.ClientConnectorError as e:
-            raise Exception(f"identity token connect error host={host} err={e}")
-        except Exception as e:
-            raise Exception("identity token request error host=" + f"{host} err={type(e).__name__}: {e}")
+
+        for idx, host in enumerate(hosts):
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                break
+            # Do not exceed remaining time; cap attempt timeout by per_attempt
+            attempt_timeout = min(per_attempt, remaining)
+            url = f"http://{host}{path}"
+            if self._logger and os.environ.get("S2IAM_DEBUGGING") == "true":
+                self._log(
+                    "Fetching identity token attempt="
+                    f"{idx+1}/{len(hosts)} host={host} timeout={attempt_timeout:.2f}s url={url}"
+                )
+            try:
+                timeout = aiohttp.ClientTimeout(total=attempt_timeout)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url, headers={"Metadata-Flavor": "Google"}) as response:
+                        if response.status == 200:
+                            return await response.text()
+                        body = (await response.text())[:120]
+                        errors.append(f"host={host} status={response.status} body_snip={body!r}")
+            except asyncio.TimeoutError:
+                errors.append(f"host={host} timeout after {attempt_timeout:.2f}s")
+            except aiohttp.ClientConnectorError as e:
+                errors.append(f"host={host} connect err={e}")
+            except Exception as e:  # pragma: no cover - generic safety
+                errors.append(f"host={host} err={type(e).__name__}:{e}")
+
+        # If we reach here, all attempts failed
+        raise Exception("identity token failed: " + "; ".join(errors))
 
     async def _get_impersonated_token(self, audience: str) -> str:
         """Get token through service account impersonation."""
