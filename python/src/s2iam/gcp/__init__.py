@@ -33,11 +33,19 @@ class GCPClient(CloudProviderClient):
         if self._logger:
             self._logger.log(f"GCP: {message}")
 
-    # Timeouts (kept close to Go defaults for parity)
-    GCP_DETECT_IDENTITY_TIMEOUT = 2.0
-    GCP_DETECT_METADATA_TIMEOUT = 3.0
-    GCP_METADATA_TOKEN_HTTP_TIMEOUT = 5.0
-    GCP_IMPERSONATION_HTTP_TIMEOUT = 10.0
+    # Timeouts
+    # NOTE: Detection timeouts stay short to preserve fast-fail behavior (critical for test performance).
+    # EXPERIMENT: Increase identity / impersonation metadata token HTTP timeout from prior (5s / 10s)
+    # to 30s to validate hypothesis that longer timeouts do NOT resolve the observed CI failures
+    # (second immediate identity token fetch timing out after Go tests). If failures persist with
+    # these elevated values, we will document and revert to original tighter limits.
+    GCP_DETECT_IDENTITY_TIMEOUT = 2.0  # keep fast
+    GCP_DETECT_METADATA_TIMEOUT = 3.0  # keep fast
+    # TEMP EXPERIMENT: Raise identity + impersonation token timeouts substantially (was 5s / 10s)
+    # to 30s to confirm hypothesis that simply extending these does NOT fix the CI second-call
+    # timeout. If behavior unchanged, revert to tighter limits and pursue caching / structural fix.
+    GCP_METADATA_TOKEN_HTTP_TIMEOUT = 30.0  # was 5.0
+    GCP_IMPERSONATION_HTTP_TIMEOUT = 30.0  # was 10.0
 
     async def detect(self) -> None:
         """Detect if running on GCP (matches Go implementation)."""
