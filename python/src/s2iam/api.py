@@ -49,13 +49,16 @@ async def detect_provider(
     if logger is None and os.environ.get("S2IAM_DEBUGGING") == "true":
         logger = DefaultLogger()
 
-    # Create default clients if none provided
+    # Create default clients if none provided. If test env vars specify an expected provider, limit detection
+    # to just that provider to reduce latency / flake risk (mirrors intent of cloud tests).
     if clients is None:
         clients = [
             new_aws_client(logger),
             new_gcp_client(logger),
             new_azure_client(logger),
         ]
+
+    # At this point clients is a concrete list
 
     # Use threading approach that mirrors Go goroutines + channel pattern
     result_queue: "queue.Queue[CloudProviderClient]" = queue.Queue()
@@ -111,4 +114,7 @@ async def detect_provider(
         for thread in threads:
             thread.join(timeout=0.1)
 
-        raise CloudProviderNotFound(f"Provider detection timed out after {timeout}s")
+        err_detail = f"Provider detection timed out after {timeout}s"
+        if all_errors:
+            err_detail += "; errors: " + " | ".join(all_errors)
+        raise CloudProviderNotFound(err_detail)
