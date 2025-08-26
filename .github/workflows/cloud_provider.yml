@@ -43,11 +43,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     environment: cloud-VMs
-
     strategy:
       matrix:
-        # Self-hosted runner setup for cloud provider testing.
-        # See main branch for host values; use FQDNs/IPs and per-cloud usernames.
         include:
           - name: aws-positive
             username: ubuntu
@@ -64,7 +61,7 @@ jobs:
             hostname: 52.186.98.155
             secret: AZURE_POSITIVE_KEY
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
-          - name: azure-negateive
+          - name: azure-negative
             username: azureuser
             hostname: 74.235.105.73
             secret: AZURE_NEGATIVE_KEY
@@ -81,9 +78,11 @@ jobs:
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=gcp"
 
     env:
-      HOST: ${{ matrix.username }}@${{ matrix.hostname }}
-      ENV_VARS: ${{ matrix.env_vars }}
-      UNIQUE_DIR: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.name }}
+      TEST_USERNAME: ${{ matrix.username }}
+      TEST_HOSTNAME: ${{ matrix.hostname }}
+      SSH_KEY_SECRET: ${{ matrix.secret }}
+      UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}
+      EXTRA_ENV: ${{ matrix.env_vars }}
 
     steps:
     - name: Checkout repository
@@ -92,27 +91,33 @@ jobs:
     - name: Setup SSH key
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets[matrix.secret] }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
+        chmod 600 ~/.ssh/key
+        ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
+        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
 
-    - name: Test SSH connection
+    - name: Run remote tests via Make (copy, run, download, cleanup)
+      env:
+        HOST: ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}
+        ENV_VARS: ${{ env.EXTRA_ENV }}
+        UNIQUE_DIR: ${{ env.UNIQUE_DIR }}
       run: |
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ env.HOST }} \
-          "echo 'SSH connection successful to ${{ env.HOST }}'"
-
-    - name: Run cloud provider tests using Makefile
-      run: |
-        # Run both Go and Python tests sequentially on the same machine
-        # to avoid overloading the cloud VMs
+        set -euox pipefail
         make ssh-copy-to-remote
-        make ssh-run-remote-tests TEST_TARGET="on-remote-test"
+        make ssh-run-remote-tests TEST_TARGET=on-remote-test
         make ssh-download-coverage
+        ls -la go-coverage.out python-coverage.xml
+
+    - name: Display coverage summaries
+      run: |
+        echo "=== Go Coverage (first lines) ==="; head -2 go-coverage.out || true
+        echo "=== Python Coverage (first lines) ==="; head -10 python-coverage.xml || true
 
     - name: Upload Go coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
       with:
-        files: ./go-coverage-*.out
+        files: ./go-coverage.out
         flags: go,${{ matrix.name }}
         fail_ci_if_error: true
         name: ${{ matrix.name }}-go-coverage
@@ -122,19 +127,23 @@ jobs:
     - name: Upload Python coverage to Codecov
       uses: codecov/codecov-action@v5.4.3
       with:
-        files: ./python-coverage-*.xml
+        files: ./python-coverage.xml
         flags: python,${{ matrix.name }}
         fail_ci_if_error: true
         name: ${{ matrix.name }}-python-coverage
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-    - name: Cleanup remote directory
+    - name: Clean up remote directory (Make)
       if: always()
+      env:
+        HOST: ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}
+        UNIQUE_DIR: ${{ env.UNIQUE_DIR }}
       run: |
+        set -e
         make ssh-cleanup-remote
 
     - name: Cleanup SSH key
       if: always()
       run: |
-        rm -f ~/.ssh/id_rsa
+        rm -f ~/.ssh/key

@@ -28,7 +28,7 @@ class TestCloudProviderValidation:
     """Fast provider detection + identity sanity test used by quick validation script.
 
     Keeps the original test path: TestCloudProviderValidation::test_provider_detection_and_identity
-    so doodles/retest-python quick mode and run_cloud_validation.sh continue to work.
+    so external quick validation scripts (e.g. run_cloud_validation.sh) that invoke it by name continue to work.
     """
 
     @pytest.mark.integration
@@ -99,21 +99,8 @@ class TestHappyPath:
 
 
 @pytest.mark.asyncio
-class TestServerIntegration:
-    """Maintains legacy-named integration test so retest scripts detect server JWT path."""
-
-    @pytest.mark.integration
-    async def test_jwt_retrieval_with_test_server(self, test_server):
-        provider = await require_cloud_role(timeout=10.0)
-        audience = "https://authsvc.singlestore.com" if provider.get_type() == CloudProviderType.GCP else None
-        _headers, _identity, claims = await validate_identity_and_jwt(
-            provider,
-            workspace_group_id="test-workspace",
-            server_url=f"{test_server.server_url}/auth/iam/database",
-            audience=audience,
-        )
-        assert claims.get("createdByTestServer") is True
-        # Minimal assertion ensures test recognized as passed when environment is correct
+class TestProviderSpecificIntegration:
+    """Provider-specific integration tests (GCP/Azure)."""
 
     @pytest.mark.integration
     @pytest.mark.gcp

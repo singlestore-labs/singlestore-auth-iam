@@ -23,9 +23,6 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
@@ -53,7 +50,7 @@ setup_environment() {
     if command -v go >/dev/null 2>&1; then
         print_status "go found: $(go version)"
     else
-        print_warning "go not found on PATH in this session; if Python tests build the Go test server, they may fail"
+        print_error "go not found on PATH (required for building test server)"; exit 1
     fi
     
     # Check if we should use system packages (when USE_SYSTEM_PACKAGES=1)
@@ -63,12 +60,12 @@ setup_environment() {
         # Check if required system packages are available
         if python3 -c "import aiohttp, pytest" 2>/dev/null; then
             print_success "System packages available - using system Python environment"
-            # Still need to install our package in development mode
-            python3 -m pip install -e . --user --break-system-packages 2>/dev/null || python3 -m pip install -e . --user
+            python3 -m pip install -e . --user --break-system-packages
             print_success "Environment setup complete (using system packages)"
             return 0
         else
-            print_warning "Required system packages not available, falling back to virtual environment"
+            print_error "Required system packages not available (aiohttp, pytest). Aborting."
+            exit 1
         fi
     fi
     

@@ -13,10 +13,13 @@ from typing import Any, Dict, Optional, Tuple
 import pytest
 
 import s2iam
+from s2iam.api import DETECT_PROVIDER_DEFAULT_TIMEOUT
 from s2iam.models import CloudProviderClient
 
+TEST_DETECT_TIMEOUT = DETECT_PROVIDER_DEFAULT_TIMEOUT  # mirror library default
 
-async def expect_cloud_provider_detected(timeout: float = 5.0) -> CloudProviderClient:
+
+async def expect_cloud_provider_detected(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProviderClient:
     """
     Detect cloud provider and skip test if none found.
     If S2IAM_TEST_CLOUD_PROVIDER, S2IAM_TEST_ASSUME_ROLE, or S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE is set,
@@ -41,7 +44,7 @@ async def expect_cloud_provider_detected(timeout: float = 5.0) -> CloudProviderC
         pytest.skip("cloud provider detected no identity")
 
 
-async def require_cloud_role(timeout: float = 5.0) -> CloudProviderClient:
+async def require_cloud_role(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProviderClient:
     """
     Require cloud provider with working role/identity (not just detection).
     This is for tests that need to actually use the cloud identity, not just detect the provider.

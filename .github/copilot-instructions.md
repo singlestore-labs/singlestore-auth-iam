@@ -23,6 +23,15 @@ jwt = await s2iam.get_jwt_api()
 
 ## Testing Philosophy
 
+### Fail-fast rule
+
+- Do not mask, swallow, or downgrade any failure
+- Remove all uses of || true, conditional fallbacks, and warning-only branches.
+- Treat coverage download, cleanup, and verification steps as mandatory; any failure exits non‑zero immediately.
+- Do not aggregate errors; stop at first failing command.
+- Preserve and surface the original failing command’s output (no quiet suppression).
+- No “warn” or “optional” wording—only success or hard failure.
+
 ### Performance Requirements
 - **Tests should fail CSP detection quickly** so tests run fast in CI
 - **Production might want quick failure, might not** - we certainly want quick success

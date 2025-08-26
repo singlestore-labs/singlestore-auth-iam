@@ -23,11 +23,6 @@ from ..models import (
 class AzureClient(CloudProviderClient):
     """Azure implementation of CloudProviderClient."""
 
-    # Default timeouts (seconds), kept modest for CI parity with Go implementation
-    AZURE_METADATA_TIMEOUT = 3.0
-    AZURE_IDENTITY_TEST_TIMEOUT = 2.0
-    AZURE_TOKEN_HTTP_TIMEOUT = 5.0
-
     def __init__(self, logger: Optional[Logger] = None):
         self._logger = logger
         self._detected = False
@@ -59,9 +54,7 @@ class AzureClient(CloudProviderClient):
 
         # Try to access Azure metadata service
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.AZURE_METADATA_TIMEOUT)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 async with session.get(
                     "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
                     headers={"Metadata": "true"},
@@ -112,9 +105,9 @@ class AzureClient(CloudProviderClient):
     async def _test_managed_identity_token(self) -> None:
         """Test if managed identity token is available (similar to Go implementation)."""
         try:
-            # Test token request to management API with short timeout for fast failure
+            # Test token request to management API with very short timeout for fast failure
             async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.AZURE_IDENTITY_TEST_TIMEOUT)
+                timeout=aiohttp.ClientTimeout(total=1)  # 1 second timeout for fast CI
             ) as session:
                 async with session.get(
                     "http://169.254.169.254/metadata/identity/oauth2/token",
@@ -154,14 +147,9 @@ class AzureClient(CloudProviderClient):
     async def _verify_identity_access(self) -> None:
         """Verify we can access Azure identity services."""
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.AZURE_IDENTITY_TEST_TIMEOUT)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                 async with session.get(
-                    (
-                        "http://169.254.169.254/metadata/identity/oauth2/token"
-                        "?api-version=2018-02-01&resource=https://management.azure.com/"
-                    ),
+                    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/",  # noqa: E501
                     headers={"Metadata": "true"},
                 ) as response:
                     if response.status != 200:
@@ -280,7 +268,7 @@ class AzureClient(CloudProviderClient):
         if client_id:
             params["client_id"] = client_id
 
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.AZURE_TOKEN_HTTP_TIMEOUT)) as session:
+        async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -293,9 +281,7 @@ class AzureClient(CloudProviderClient):
     async def _get_instance_metadata(self) -> dict[str, Any]:
         """Get Azure instance metadata."""
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.AZURE_METADATA_TIMEOUT)
-            ) as session:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
                     "http://169.254.169.254/metadata/instance?api-version=2018-02-01",
                     headers={"Metadata": "true"},

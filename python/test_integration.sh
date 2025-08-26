@@ -40,28 +40,8 @@ fi
 echo "Running unit tests..."
 python -m pytest tests/test_models.py -v
 
-# Run integration tests (these require cloud environment)
-echo "Running integration tests..."
-python -m pytest tests/test_integration.py -v -m "not aws and not gcp and not azure" || {
-    echo "Some integration tests failed, but this might be expected in certain environments"
-    exit_code=$?
-}
+# Run integration tests (cloud provider expectations enforced by test code skips/fails)
+echo "Running full integration test suite..."
+python -m pytest tests/test_integration.py -v
 
-# Run provider-specific tests if we can detect the provider
-if [ -n "${AWS_REGION:-}" ] || [ -n "${AWS_EXECUTION_ENV:-}" ]; then
-    echo "Running AWS-specific tests..."
-    python -m pytest tests/test_integration.py -v -m aws || true
-elif [ -n "${GCE_METADATA_HOST:-}" ] || [ -n "${GOOGLE_CLOUD_PROJECT:-}" ]; then
-    echo "Running GCP-specific tests..."
-    python -m pytest tests/test_integration.py -v -m gcp || true
-elif [ -n "${AZURE_CLIENT_ID:-}" ] || [ -n "${MSI_ENDPOINT:-}" ]; then
-    echo "Running Azure-specific tests..."
-    python -m pytest tests/test_integration.py -v -m azure || true
-else
-    echo "No specific cloud provider detected, running general integration tests"
-fi
-
-echo "Python tests completed!"
-
-# Exit with the code from integration tests if they failed
-exit ${exit_code:-0}
+echo "Python tests completed successfully."

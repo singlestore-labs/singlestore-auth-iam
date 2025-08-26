@@ -39,5 +39,6 @@ jobs:
           name: base-coverage
           files: ./go/coverage.out
           flags: base
+
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

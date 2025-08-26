@@ -2,10 +2,6 @@
 JWT functionality for SingleStore authentication.
 """
 
-import asyncio
-import os
-import socket
-import time
 from typing import Any, Optional
 
 import aiohttp
@@ -66,6 +62,8 @@ async def get_jwt(
     headers, identity = await provider.get_identity_headers(additional_params)
 
     # Prepare server URL, allow override via environment variable
+    import os
+
     env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
     if server_url is None:
         if env_server_url:
@@ -73,116 +71,51 @@ async def get_jwt(
         else:
             server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
 
-    # Log request if logger available (aligned with Go: no JSON body sent, identity conveyed via headers only)
+    # Prepare request body
+    request_data = {
+        "provider": identity.provider.value,
+        "identity": {
+            "identifier": identity.identifier,
+            "account_id": identity.account_id,
+            "region": identity.region,
+            "resource_type": identity.resource_type,
+            "additional_claims": identity.additional_claims,
+        },
+    }
+
+    if workspace_group_id:
+        request_data["workspace_group_id"] = workspace_group_id
+
+    # Log request if logger available
     if logger:
-        logger.log(
-            "Requesting JWT (type="
-            f"{jwt_type.value}) from {server_url} provider={identity.provider.value} "
-            f"workspace_group_id={workspace_group_id or '<none>'}"
-        )
+        logger.log(f"Requesting JWT from {server_url} for provider {identity.provider.value}")
 
-    connector = None
-    if os.environ.get("S2IAM_FORCE_IPV4") == "1":  # optional mitigation for IPv6 stalls
-        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+    # Make JWT request
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+        async with session.post(
+            server_url,
+            headers={
+                **headers,
+                "Content-Type": "application/json",
+            },
+            json=request_data,
+        ) as response:
+            if response.status == 200:
+                response_data = await response.json()
+                jwt_value = response_data.get("jwt")
+                if not isinstance(jwt_value, str) or not jwt_value:
+                    raise Exception("No JWT in response")
 
-    start = time.monotonic()
+                if logger:
+                    logger.log("Successfully obtained JWT")
 
-    # Lightweight phase tracing (only adds small overhead). Captures which phase we reached
-    # so timeout/connect errors are more actionable without deep instrumentation.
-    phase: str = "init"
-    phases: list[str] = []
-
-    trace = aiohttp.TraceConfig()
-
-    from aiohttp import ClientSession
-    from aiohttp.tracing import (
-        TraceConnectionCreateEndParams,
-        TraceConnectionCreateStartParams,
-        TraceRequestEndParams,
-        TraceRequestStartParams,
-    )
-
-    @trace.on_request_start.append
-    async def _on_request_start(
-        session: ClientSession,
-        ctx: Any,
-        params: TraceRequestStartParams,
-    ) -> None:  # type: ignore[unused-ignore]
-        nonlocal phase
-        phase = "request_start"
-        phases.append(phase)
-
-    @trace.on_connection_create_start.append
-    async def _on_conn_start(
-        session: ClientSession,
-        ctx: Any,
-        params: TraceConnectionCreateStartParams,
-    ) -> None:  # type: ignore[unused-ignore]
-        nonlocal phase
-        phase = "connect_start"
-        phases.append(phase)
-
-    @trace.on_connection_create_end.append
-    async def _on_conn_end(
-        session: ClientSession,
-        ctx: Any,
-        params: TraceConnectionCreateEndParams,
-    ) -> None:  # type: ignore[unused-ignore]
-        nonlocal phase
-        phase = "connect_end"
-        phases.append(phase)
-
-    @trace.on_request_end.append
-    async def _on_request_end(
-        session: ClientSession,
-        ctx: Any,
-        params: TraceRequestEndParams,
-    ) -> None:  # type: ignore[unused-ignore]
-        nonlocal phase
-        phase = "request_end"
-        phases.append(phase)
-
-    try:
-        async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=timeout),
-            connector=connector,
-            trace_configs=[trace],
-        ) as session:
-            async with session.post(
-                server_url,
-                headers={
-                    **headers,
-                    "Content-Type": "application/json",
-                },
-                # No body (parity with Go implementation)
-                data=None,
-            ) as response:
-                elapsed = (time.monotonic() - start) * 1000.0
-                if response.status == 200:
-                    # Expect JSON with {"jwt": "..."}
-                    response_data = await response.json()
-                    jwt_value = response_data.get("jwt")
-                    if not isinstance(jwt_value, str) or not jwt_value:
-                        raise Exception("No JWT in response")
-                    if logger and os.environ.get("S2IAM_DEBUGGING") == "true":
-                        logger.log(f"JWT obtained in {elapsed:.1f}ms")
-                    return jwt_value
+                return jwt_value
+            else:
                 error_text = await response.text()
-                raise Exception(
-                    "JWT request failed status="
-                    f"{response.status} elapsed_ms={elapsed:.1f} phase={phase} body_snip={error_text[:160]!r}"
-                )
-    except asyncio.TimeoutError:
-        raise Exception(
-            "JWT request timeout after "
-            f"{timeout}s (elapsed_ms={(time.monotonic()-start)*1000.0:.1f} last_phase={phase} phases={phases})"
-        )
+                raise Exception(f"JWT request failed with status {response.status}: {error_text}")
 
 
-# Legacy function name for compatibility
-async def get_jwt_token(*args: Any, **kwargs: Any) -> str:
-    """Legacy alias for get_jwt."""
-    return await get_jwt(*args, **kwargs)
+# Single canonical JWT API: get_jwt (+ convenience wrappers below).
 
 
 # Convenience functions for specific JWT types
