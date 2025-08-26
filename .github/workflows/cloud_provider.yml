@@ -78,11 +78,12 @@ jobs:
             env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=gcp"
 
     env:
-      TEST_USERNAME: ${{ matrix.username }}
       TEST_HOSTNAME: ${{ matrix.hostname }}
       SSH_KEY_SECRET: ${{ matrix.secret }}
       UNIQUE_DIR: test-${{ github.run_id }}-${{ github.run_attempt }}
       EXTRA_ENV: ${{ matrix.env_vars }}
+      SSH_OPTS: "-i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+      HOST: ${{ matrix.username }}@${{ matrix.hostname }}
 
     steps:
     - name: Checkout repository
@@ -93,13 +94,11 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
         chmod 600 ~/.ssh/key
-        ssh-keyscan -H ${{ env.TEST_HOSTNAME }} >> ~/.ssh/known_hosts
-        ssh -i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-          ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }} "echo 'SSH connection successful'"
+        ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
+        ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
 
     - name: Run remote tests via Make (copy, run, download, cleanup)
       env:
-        HOST: ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}
         ENV_VARS: ${{ env.EXTRA_ENV }}
         UNIQUE_DIR: ${{ env.UNIQUE_DIR }}
       run: |
@@ -137,7 +136,6 @@ jobs:
     - name: Clean up remote directory (Make)
       if: always()
       env:
-        HOST: ${{ env.TEST_USERNAME }}@${{ env.TEST_HOSTNAME }}
         UNIQUE_DIR: ${{ env.UNIQUE_DIR }}
       run: |
         set -e
