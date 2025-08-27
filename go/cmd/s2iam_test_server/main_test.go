@@ -67,7 +67,6 @@ func TestServer_PublicKey(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 
-	// Now that the server returns PEM format, this check should pass
 	pemData := w.Body.String()
 	assert.True(t, strings.Contains(pemData, "BEGIN RSA PUBLIC KEY"), "Response should contain PEM header")
 	assert.True(t, strings.Contains(pemData, "END RSA PUBLIC KEY"), "Response should contain PEM footer")
@@ -160,33 +159,6 @@ func TestParseFlags(t *testing.T) {
 	assert.False(t, config.ReturnError)
 	assert.False(t, config.ReturnEmptyJWT)
 	assert.False(t, config.FailVerification)
-}
-
-// TestHandlePublicKey_PEM tests the handlePublicKey function but expects PEM format
-// This test should be added once the server is updated to output PEM format
-func TestHandlePublicKey_PEM(t *testing.T) {
-	t.Skip("Server does not yet output keys in PEM format")
-
-	// Create server with a valid key size
-	config := Config{
-		Port:    8080,
-		KeySize: 2048,
-	}
-
-	srv, err := NewServer(config)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest("GET", "/info/public-key", nil)
-	w := httptest.NewRecorder()
-
-	srv.handlePublicKey(w, req)
-
-	resp := w.Result()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
-
-	// When the server supports PEM format, this check would work
-	assert.True(t, strings.Contains(w.Body.String(), "BEGIN PUBLIC KEY"))
 }
 
 func TestServer_KeyPairMatches(t *testing.T) {

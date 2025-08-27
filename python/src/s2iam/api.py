@@ -17,6 +17,9 @@ from .models import (
     Logger,
 )
 
+DETECT_PROVIDER_DEFAULT_TIMEOUT: float = 5.0
+"""Default timeout (seconds) for provider detection (mirrors Go implementation)."""
+
 
 class DefaultLogger:
     """Default logger implementation."""
@@ -27,7 +30,7 @@ class DefaultLogger:
 
 
 async def detect_provider(
-    timeout: float = 5.0,
+    timeout: float = DETECT_PROVIDER_DEFAULT_TIMEOUT,
     logger: Optional[Logger] = None,
     clients: Optional[list[CloudProviderClient]] = None,
 ) -> CloudProviderClient:

@@ -12,7 +12,7 @@ import s2iam
 from s2iam import CloudProviderType, JWTType
 
 from .test_server_utils import GoTestServerManager
-from .testhelp import expect_cloud_provider_detected, require_cloud_role
+from .testhelp import TEST_DETECT_TIMEOUT, expect_cloud_provider_detected, require_cloud_role
 
 
 @pytest.fixture(scope="session")
@@ -31,7 +31,7 @@ class TestCloudProviderDetection:
     async def test_detect_provider_success(self):
         """Test that provider detection works in a cloud environment."""
         # Use helper function that matches Go testhelp.ExpectCloudProviderDetected
-        provider = await expect_cloud_provider_detected(timeout=10.0)
+        provider = await expect_cloud_provider_detected(timeout=TEST_DETECT_TIMEOUT)
 
         assert provider is not None
         assert provider.get_type() in [
@@ -47,7 +47,7 @@ class TestCloudProviderDetection:
 
         try:
             # This test requires cloud role - skip if in no-role environment
-            provider = await require_cloud_role(timeout=10.0)
+            provider = await require_cloud_role(timeout=TEST_DETECT_TIMEOUT)
             headers, identity = await provider.get_identity_headers()
 
             assert headers is not None
@@ -87,7 +87,7 @@ class TestJWTIntegration:
         """Test JWT request against the Go test server."""
         try:
             # Use helper function that requires working cloud role
-            provider = await require_cloud_role(timeout=10.0)
+            provider = await require_cloud_role(timeout=TEST_DETECT_TIMEOUT)
 
             # Get JWT using test server
             jwt = await s2iam.get_jwt(
@@ -119,7 +119,7 @@ class TestJWTIntegration:
 
         try:
             # This test requires cloud role - skip if in no-role environment
-            provider = await require_cloud_role(timeout=10.0)
+            provider = await require_cloud_role(timeout=TEST_DETECT_TIMEOUT)
 
             for jwt_type in [JWTType.DATABASE_ACCESS, JWTType.API_GATEWAY_ACCESS]:
                 jwt = await s2iam.get_jwt(
@@ -150,7 +150,7 @@ class TestProviderSpecific:
     async def test_aws_assume_role(self):
         """Test AWS role assumption if running on AWS."""
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            provider = await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
 
             if provider.get_type() != CloudProviderType.AWS:
                 pytest.skip("Not running on AWS")
@@ -176,7 +176,7 @@ class TestProviderSpecific:
     async def test_gcp_service_account_impersonation(self):
         """Test GCP service account impersonation if running on GCP."""
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            provider = await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
 
             if provider.get_type() != CloudProviderType.GCP:
                 pytest.skip("Not running on GCP")
@@ -202,7 +202,7 @@ class TestProviderSpecific:
     async def test_azure_managed_identity(self):
         """Test Azure managed identity if running on Azure."""
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            provider = await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
 
             if provider.get_type() != CloudProviderType.AZURE:
                 pytest.skip("Not running on Azure")
@@ -240,7 +240,7 @@ class TestErrorHandling:
     async def test_invalid_jwt_server_url(self):
         """Test handling of invalid JWT server URLs."""
         try:
-            provider = await s2iam.detect_provider(timeout=10.0)
+            provider = await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
 
             with pytest.raises(Exception):  # Should raise some kind of network error
                 await s2iam.get_jwt(

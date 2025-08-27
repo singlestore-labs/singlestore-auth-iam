@@ -24,6 +24,10 @@ const (
 	// Azure constants
 	azureAPIVersion     = "2018-02-01"
 	azureResourceServer = "https://management.azure.com/"
+
+	// Timing constants
+	azureRateLimitBaseDelay  = 100 * time.Millisecond
+	azureRateLimitMaxRetries = 3
 )
 
 // AzureClient implements the CloudProviderClient interface for Azure
@@ -123,8 +127,8 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	tokenURL := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
 
 	// Retry loop for rate limiting (HTTP 429)
-	maxRetries := 3
-	baseDelay := 100 * time.Millisecond
+	maxRetries := azureRateLimitMaxRetries
+	baseDelay := azureRateLimitBaseDelay
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)

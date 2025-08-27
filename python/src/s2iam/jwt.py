@@ -115,10 +115,7 @@ async def get_jwt(
                 raise Exception(f"JWT request failed with status {response.status}: {error_text}")
 
 
-# Legacy function name for compatibility
-async def get_jwt_token(*args: Any, **kwargs: Any) -> str:
-    """Legacy alias for get_jwt."""
-    return await get_jwt(*args, **kwargs)
+# Single canonical JWT API: get_jwt (+ convenience wrappers below).
 
 
 # Convenience functions for specific JWT types

@@ -14,7 +14,7 @@ import s2iam
 from s2iam import CloudProviderType
 
 from .test_server_utils import GoTestServerManager
-from .testhelp import expect_cloud_provider_detected, validate_identity_and_jwt
+from .testhelp import TEST_DETECT_TIMEOUT, expect_cloud_provider_detected, validate_identity_and_jwt
 
 
 @pytest.mark.asyncio
@@ -23,70 +23,40 @@ class TestFastPathDetection:
 
     async def test_fastpath_detection(self):
         """Test that fast-path detection produces same results as full detection."""
-        # Skip on NO_ROLE hosts since we need working cloud provider detection
         if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE"):
             pytest.skip("test requires working cloud role - skipped on no-role hosts")
 
-        # Skip if not in a cloud environment - this should work on both role and no-role hosts
-        normal_provider = await expect_cloud_provider_detected(timeout=10.0)
+        normal_provider = await expect_cloud_provider_detected(timeout=TEST_DETECT_TIMEOUT)
         provider_type = normal_provider.get_type()
-
         print(f"Detected provider: {provider_type.value}")
 
-        # Determine what environment variables should enable fast-path detection
-        env_vars_to_set = {}
-
+        # Decide env vars enabling fast-path
         if provider_type == CloudProviderType.AWS:
-            # For AWS, set AWS environment variables that trigger fast-path detection
-            env_vars_to_set = {
-                "AWS_EXECUTION_ENV": "AWS_EC2",  # Generic indicator we're on AWS
-            }
-
-            # Try to get region from existing environment
+            env_vars_to_set = {"AWS_EXECUTION_ENV": "AWS_EC2"}
             region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
             if region:
                 env_vars_to_set["AWS_REGION"] = region
-
         elif provider_type == CloudProviderType.GCP:
-            # For GCP, set GCE_METADATA_HOST to trigger fast-path
-            env_vars_to_set = {
-                "GCE_METADATA_HOST": "metadata.google.internal",
-            }
-
+            env_vars_to_set = {"GCE_METADATA_HOST": "metadata.google.internal"}
         elif provider_type == CloudProviderType.AZURE:
-            # For Azure, set AZURE_ENV to trigger fast-path
-            env_vars_to_set = {
-                "AZURE_ENV": "AzureCloud",
-            }
-
+            env_vars_to_set = {"AZURE_ENV": "AzureCloud"}
         else:
             pytest.fail(f"Unknown provider type: {provider_type}")
 
-        # Test fast-path detection with environment variables set
+        # Fast-path detection under env vars
         with patch.dict(os.environ, env_vars_to_set):
-            for key, value in env_vars_to_set.items():
-                print(f"Set {key}={value} for fast-path detection")
-
-            # Now test fast-path detection
-            fastpath_provider = await s2iam.detect_provider(
-                timeout=5.0
-            )  # Shorter timeout since fast-path should be quick
-
-            # Verify both detections give the same provider type
+            for k, v in env_vars_to_set.items():
+                print(f"Set {k}={v} for fast-path detection")
+            fastpath_provider = await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT / 3)
             assert (
                 normal_provider.get_type() == fastpath_provider.get_type()
             ), "Fast-path detection should give same provider type as normal detection"
-
             print(f"Fast-path detection test passed for {provider_type.value}")
             print(f"Normal detection provider: {normal_provider.get_type().value}")
             print(f"Fast-path detection provider: {fastpath_provider.get_type().value}")
-
-            # Skip header testing on NO_ROLE hosts where get_identity_headers is expected to fail
             if os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE"):
                 print("Skipping header testing on NO_ROLE host")
                 return
-
-            # Test that both providers work equivalently
             await self._test_equivalent_functionality(normal_provider, fastpath_provider)
 
     async def _test_equivalent_functionality(self, normal_provider, fastpath_provider):
