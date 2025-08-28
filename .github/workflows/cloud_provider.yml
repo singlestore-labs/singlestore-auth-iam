@@ -114,7 +114,7 @@ jobs:
         echo "=== Python Coverage (first lines) ==="; head -10 python-coverage.xml || true
 
     - name: Upload Go coverage to Codecov
-      uses: codecov/codecov-action@v5.4.3
+      uses: codecov/codecov-action@v5.5.0
       with:
         files: ./go-coverage.out
         flags: go,${{ matrix.name }}
@@ -124,7 +124,7 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Upload Python coverage to Codecov
-      uses: codecov/codecov-action@v5.4.3
+      uses: codecov/codecov-action@v5.5.0
       with:
         files: ./python-coverage.xml
         flags: python,${{ matrix.name }}

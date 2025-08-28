@@ -33,7 +33,7 @@ jobs:
           head -2 go/coverage.out
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5.4.3
+        uses: codecov/codecov-action@v5.5.0
         with:
           fail_ci_if_error: true
           name: base-coverage
