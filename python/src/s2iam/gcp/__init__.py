@@ -114,7 +114,8 @@ class GCPClient(CloudProviderClient):
         cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         if cred_path and os.path.isfile(cred_path):
             try:  # noqa: BLE001
-                content = open(cred_path, "r", encoding="utf-8").read(4096)
+                with open(cred_path, "r", encoding="utf-8") as f:
+                    content = f.read(4096)
                 if '"type"' in content and '"external_account"' in content:
                     self._log("FastDetect: external_account credentials present")
                     self._detected = True
