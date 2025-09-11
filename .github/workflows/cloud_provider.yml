@@ -13,7 +13,7 @@ permissions:
 # Assuming Ubuntu environment on AWS EC2, GCP Compute Engine, or Azure VM.
 #
 # Base system setup:
-# copy over the Makefile and "make install"
+# copy over the Makefile and "make dev-setup"
 #
 # AWS EC2 setup:
 # sudo snap install aws-cli --classic
