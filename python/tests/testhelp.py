@@ -98,16 +98,16 @@ async def validate_identity_and_jwt(
     headers, identity = await provider.get_identity_headers(additional_params)
 
     # Request JWT via convenience function (database JWT selected for richer validation)
-    jwt_token = await s2iam.get_jwt_database(
+    token = await s2iam.get_jwt_database(
         workspace_group_id=workspace_group_id,
         server_url=server_url,
         provider=provider,
         additional_params=additional_params,
     )
-    assert jwt_token and jwt_token.count(".") == 2, "JWT structure invalid"
+    assert token and token.count(".") == 2, "JWT structure invalid"
 
     # Decode payload (test server signature not verified here)
-    parts = jwt_token.split(".")
+    parts = token.split(".")
     payload_b64 = parts[1] + "=" * (4 - len(parts[1]) % 4)
     try:
         claims: Dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload_b64))

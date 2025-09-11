@@ -47,7 +47,7 @@ The server will start on port 8080 by default. Once it's fully ready to accept r
 - **Parameters**: 
   - `workspaceGroupID` (query parameter)
   - `jwtType` (path parameter): Type of JWT to generate (e.g., "database", "api")
-- **Response**: JSON object with a `jwt` field containing the generated JWT token
+- **Response**: JSON object with a `jwt` field containing the generated JWT
   ```json
   {
     "jwt": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -323,9 +323,9 @@ When testing authentication, use the appropriate headers for each cloud provider
 - `X-Ms-Identity-Provider`: Should be "azure"
 - `Authorization`: Bearer token with Azure access token
 
-## JWT Token Structure
+## JWT Structure
 
-The generated JWT tokens contain the following claims:
+The generated JWT contain the following claims:
 - `sub`: Cloud provider identifier
 - `provider`: Cloud provider name (aws, gcp, azure)
 - `accountID`: Account/project ID

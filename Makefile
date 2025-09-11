@@ -74,6 +74,7 @@ test: test-local
 	@echo "✓ All local tests completed"
 
 test-local: test-go-local test-python-local
+	! git grep -i 'jwt[ _]token'
 	@echo "✓ All local tests passed"
 
 test-go-local:

@@ -17,7 +17,7 @@ class CloudProviderType(Enum):
 
 
 class JWTType(Enum):
-    """JWT token types."""
+    """JWT types."""
 
     DATABASE_ACCESS = "database"
     API_GATEWAY_ACCESS = "api"

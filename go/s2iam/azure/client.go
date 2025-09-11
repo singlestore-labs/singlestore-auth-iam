@@ -361,7 +361,7 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	return headers, identity, nil
 }
 
-// getIdentityFromToken parses the JWT token to extract identity information
+// getIdentityFromToken parses the JWT to extract identity information
 func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString string) (*models.CloudIdentity, error) {
 	// Parse the token without validation to extract claims
 	parts := strings.Split(tokenString, ".")
