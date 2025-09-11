@@ -23,11 +23,10 @@ const (
 	// Default audience for identity tokens
 	defaultAudience = "https://authsvc.singlestore.com"
 
-	// Timeouts for GCP operations
-	gcpDetectIdentityProbeTimeout = 2 * time.Second
-	gcpDetectMetadataTimeout      = 3 * time.Second
-	gcpImpersonationHTTPTimeout   = 10 * time.Second
-	gcpMetadataTokenHTTPTimeout   = 5 * time.Second
+	// Standardized HTTP timeouts (keep small for fast tests)
+	gcpDetectTimeout           = 3 * time.Second
+	gcpImpersonationTimeout    = 10 * time.Second
+	gcpMetadataIdentityTimeout = 5 * time.Second
 )
 
 // GCPClient implements the CloudProviderClient interface for GCP
@@ -50,6 +49,32 @@ func (c *GCPClient) copy() *GCPClient {
 	}
 }
 
+// FastDetect performs in-process detection without network I/O.
+func (c *GCPClient) FastDetect() error {
+	// External account credential file indicates workload identity configuration
+	if credPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credPath != "" {
+		if data, err := os.ReadFile(credPath); err == nil && strings.Contains(string(data), "\"type\":\"external_account\"") {
+			c.mu.Lock()
+			c.detected = true
+			c.mu.Unlock()
+			if c.logger != nil {
+				c.logger.Logf("GCP FastDetect - Detected external_account credentials")
+			}
+			return nil
+		}
+	}
+	if os.Getenv("GCE_METADATA_HOST") != "" {
+		c.mu.Lock()
+		c.detected = true
+		c.mu.Unlock()
+		if c.logger != nil {
+			c.logger.Logf("GCP FastDetect - GCE_METADATA_HOST set")
+		}
+		return nil
+	}
+	return errors.WithStack(models.ErrNoCloudProviderDetected)
+}
+
 // NewClient returns a new GCP client instance
 func NewClient(logger models.Logger) models.CloudProviderClient {
 	return &GCPClient{
@@ -57,7 +82,9 @@ func NewClient(logger models.Logger) models.CloudProviderClient {
 	}
 }
 
-// Detect tests if we are executing within GCP
+// Detect performs network-inclusive detection. It assumes FastDetect may have
+// already set c.detected via purely local signals (external_account file or env).
+// If c.detected is true on entry we return immediately to avoid duplicate logic.
 func (c *GCPClient) Detect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -67,41 +94,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 		return nil
 	}
 
-	// Check GCP environment variable (fast check first)
-	if os.Getenv("GCE_METADATA_HOST") != "" {
-		c.detected = true
-		if c.logger != nil {
-			c.logger.Logf("GCP Detection - Found GCE_METADATA_HOST environment variable")
-		}
-
-		// Verify we can actually get identity information
-		testCtx, cancel := context.WithTimeout(ctx, gcpDetectIdentityProbeTimeout)
-		defer cancel()
-
-		// Try to access identity-related metadata
-		req, err := http.NewRequestWithContext(testCtx, http.MethodGet,
-			gcpMetadataURL+"instance/service-accounts/default/", nil)
-		if err != nil {
-			c.detected = false
-			return errors.WithStack(models.ErrProviderDetectedNoIdentity)
-		}
-
-		req.Header.Set("Metadata-Flavor", "Google")
-		client := &http.Client{Timeout: gcpDetectIdentityProbeTimeout}
-		resp, err := client.Do(req)
-		if err != nil || resp.StatusCode != http.StatusOK {
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-			if c.logger != nil {
-				c.logger.Logf("GCP Detection - Metadata service available but no identity access")
-			}
-			return errors.WithStack(models.ErrProviderDetectedNoIdentity)
-		}
-		_ = resp.Body.Close()
-
-		return nil
-	}
+	// At this point FastDetect failed; proceed with metadata probing.
 
 	// Try to access the GCP metadata service
 	if c.logger != nil {
@@ -115,7 +108,7 @@ func (c *GCPClient) Detect(ctx context.Context) error {
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
-	client := &http.Client{Timeout: gcpDetectMetadataTimeout}
+	client := &http.Client{Timeout: gcpDetectTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		if c.logger != nil {
@@ -186,7 +179,7 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		req.Header.Set("Authorization", "Bearer "+selfToken)
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: gcpImpersonationHTTPTimeout}
+		client := &http.Client{Timeout: gcpImpersonationTimeout}
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, nil, errors.Errorf("failed to impersonate service account: %w", err)
@@ -253,7 +246,7 @@ func (c *GCPClient) getIDToken(ctx context.Context, audience string) (string, er
 	}
 	req.Header.Set("Metadata-Flavor", "Google") // Correct header for GCP metadata service
 
-	client := &http.Client{Timeout: gcpMetadataTokenHTTPTimeout}
+	client := &http.Client{Timeout: gcpMetadataIdentityTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", errors.Errorf("failed to contact GCP metadata service: %w", err)

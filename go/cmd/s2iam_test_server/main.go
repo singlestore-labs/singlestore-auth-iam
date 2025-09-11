@@ -38,6 +38,15 @@ type Config struct {
 	Timeout          time.Duration
 }
 
+// Standardized timeouts (avoid magic numbers)
+const (
+	serverShutdownTimeout   = 5 * time.Second
+	serverClientTimeout     = 5 * time.Second
+	serverProbeTotalTimeout = 5 * time.Second
+	serverProbeInterval     = 100 * time.Millisecond
+	serverProbeReqTimeout   = 500 * time.Millisecond
+)
+
 // Server holds the test server state
 type Server struct {
 	config     Config
@@ -223,17 +232,17 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 
 		log.Printf("Shutting down server...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 		defer cancel()
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
 	// Wait for the server to be ready by checking the health endpoint
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: serverClientTimeout}
 	healthURL := fmt.Sprintf("http://localhost:%d/health", actualPort)
 
 	// Retry loop to ensure server is ready
-	probeCtx, probeCancel := context.WithTimeout(ctx, 5*time.Second)
+	probeCtx, probeCancel := context.WithTimeout(ctx, serverProbeTotalTimeout)
 	defer probeCancel()
 
 	for {
@@ -249,7 +258,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return fmt.Errorf("timeout waiting for server to be ready")
 		default:
 			// Try to hit the health endpoint
-			reqCtx, reqCancel := context.WithTimeout(probeCtx, 500*time.Millisecond)
+			reqCtx, reqCancel := context.WithTimeout(probeCtx, serverProbeReqTimeout)
 			req, _ := http.NewRequestWithContext(reqCtx, "GET", healthURL, nil)
 			resp, err := client.Do(req)
 			reqCancel()
@@ -264,7 +273,7 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 
 			// Wait before trying again
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(serverProbeInterval)
 		}
 	}
 ServerReady:

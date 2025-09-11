@@ -20,6 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	healthCheckMaxRetries       = 5
+	healthCheckInitialBackoffMs = 500 // base backoff in milliseconds; multiplies by (i+1)
+	serverInfoTimeoutSeconds    = 10  // baseline timeout for local / fast environments
+	healthCheckTimeoutSeconds   = 10
+	httpClientTimeoutSeconds    = 5
+)
+
 // toString safely converts interface{} to string for comparison purposes.
 func toString(val interface{}) string {
 	if val == nil {
@@ -93,78 +101,90 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		}
 	}
 
-	// Read server output to find the JSON info
+	// Read server output to find the JSON info (robust brace-count parser)
 	scanner := bufio.NewScanner(serverOutput)
 	var serverInfo ServerInfo
 	infoFound := make(chan bool, 1)
-
 	go func() {
 		var jsonData strings.Builder
-		var jsonStarted bool
-
+		braceDepth := 0
+		collecting := false
 		for scanner.Scan() {
 			line := scanner.Text()
 			t.Logf("Server: %s", line)
-
-			// Look for the start of the JSON data
-			if !jsonStarted && strings.Contains(line, "{") {
-				jsonStarted = true
-				jsonData.WriteString(line)
-			} else if jsonStarted {
-				jsonData.WriteString(line)
-
-				// Check if this could be the end of the JSON
-				if strings.Contains(line, "}") {
-					// Try to parse what we have, being more lenient with JSON structure
-					jsonStr := jsonData.String()
-					jsonStr = strings.Join(strings.Fields(jsonStr), "")
-
-					// Try to find valid JSON even if there's other text in the output
-					startIdx := strings.Index(jsonStr, "{")
-					endIdx := strings.LastIndex(jsonStr, "}")
-					if startIdx >= 0 && endIdx > startIdx {
-						validJson := jsonStr[startIdx : endIdx+1]
-						if err := json.Unmarshal([]byte(validJson), &serverInfo); err == nil {
-							if serverInfo.ServerInfo.Port > 0 {
-								infoFound <- true
-								break
-							}
+			// Append lines once we see the first '{'
+			if !collecting {
+				if idx := strings.Index(line, "{"); idx >= 0 {
+					collecting = true
+					braceDepth += strings.Count(line[idx:], "{") - strings.Count(line[idx:], "}")
+					jsonData.WriteString(line[idx:])
+					jsonData.WriteString("\n")
+					if braceDepth == 0 { // Single line JSON
+						attempt := strings.TrimSpace(jsonData.String())
+						_ = json.Unmarshal([]byte(attempt), &serverInfo)
+						if serverInfo.ServerInfo.Port > 0 {
+							infoFound <- true
+							return
 						}
 					}
+					continue
 				}
+				continue
+			}
+			// Already collecting
+			braceDepth += strings.Count(line, "{") - strings.Count(line, "}")
+			jsonData.WriteString(line)
+			jsonData.WriteString("\n")
+			if braceDepth <= 0 { // Potentially complete
+				attempt := strings.TrimSpace(jsonData.String())
+				attempt = strings.Join(strings.Fields(attempt), "") // remove whitespace
+				if err := json.Unmarshal([]byte(attempt), &serverInfo); err == nil {
+					if serverInfo.ServerInfo.Port > 0 {
+						infoFound <- true
+						return
+					}
+				}
+				// Reset if parse failed (avoid unbounded growth)
+				jsonData.Reset()
+				collecting = false
+				braceDepth = 0
 			}
 		}
 	}()
 
-	// Wait for the server info to be found or timeout
+	// Allow longer startup under real cloud (coverage + network variability)
+	timeoutSeconds := serverInfoTimeoutSeconds
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" {
+		// Prefer reliability over latency in cloud-positive runs
+		if timeoutSeconds < 30 {
+			timeoutSeconds = 30
+		}
+	}
 	select {
 	case <-infoFound:
 		t.Logf("Server started on port %d", serverInfo.ServerInfo.Port)
-	case <-time.After(10 * time.Second):
+	case <-time.After(time.Duration(timeoutSeconds) * time.Second):
 		cleanup()
 		return 0, nil, nil, fmt.Errorf("timed out waiting for server info")
 	}
 
 	// Wait for server to respond to health checks with a timeout
 	healthURL := serverInfo.ServerInfo.Endpoints["health"]
-	healthCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	healthCtx, cancel := context.WithTimeout(context.Background(), healthCheckTimeoutSeconds*time.Second)
 	defer cancel()
 
 	// Use a client with timeout for health checks
-	httpClient := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	httpClient := &http.Client{Timeout: httpClientTimeoutSeconds * time.Second}
 
 	// Retry loop with backoff for health checks
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
+	for i := 0; i < healthCheckMaxRetries; i++ {
 		resp, err := httpClient.Get(healthURL)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			_ = resp.Body.Close()
 			return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
 		}
 		if err != nil {
-			t.Logf("Health check failed: %v (retry %d/%d)", err, i+1, maxRetries)
+			t.Logf("Health check failed: %v (retry %d/%d)", err, i+1, healthCheckMaxRetries)
 		}
 
 		// Check if context has been canceled
@@ -172,13 +192,13 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		case <-healthCtx.Done():
 			cleanup()
 			return 0, nil, nil, fmt.Errorf("server failed to respond to health checks: %v", healthCtx.Err())
-		case <-time.After(500 * time.Millisecond * time.Duration(i+1)): // Increasing backoff
+		case <-time.After(time.Duration(healthCheckInitialBackoffMs) * time.Millisecond * time.Duration(i+1)): // Increasing backoff
 			continue
 		}
 	}
 
 	cleanup()
-	return 0, nil, nil, fmt.Errorf("server failed to respond to health checks after %d attempts", maxRetries)
+	return 0, nil, nil, fmt.Errorf("server failed to respond to health checks after %d attempts", healthCheckMaxRetries)
 }
 
 // TestIntegration_ServerAndClient tests the test server and client working together

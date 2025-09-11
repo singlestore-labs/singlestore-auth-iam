@@ -47,9 +47,23 @@ class CloudProviderClient(ABC):
     """Abstract base class for cloud provider clients."""
 
     @abstractmethod
+    async def fast_detect(self) -> None:
+        """Attempt a zero/near-zero latency detection using only local state.
+
+        This MUST NOT perform any network I/O. It should only inspect environment
+        variables and local filesystem paths explicitly referenced by env vars.
+
+        On success, the implementation should set its internal detected flag and
+        return. On failure (no positive indicators) it should raise an exception
+        (type/value unimportant – caller treats any exception as "not detected").
+        """
+        ...
+
+    @abstractmethod
     async def detect(self) -> None:
         """
-        Test if we are executing within this cloud provider.
+        Test if we are executing within this cloud provider. fast_detect must
+        be called first.
 
         Raises:
             Exception: If provider is not detected or unavailable
