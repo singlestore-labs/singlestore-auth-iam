@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -21,11 +20,7 @@ import (
 )
 
 const (
-	healthCheckMaxRetries       = 5
-	healthCheckInitialBackoffMs = 500 // base backoff in milliseconds; multiplies by (i+1)
-	serverInfoTimeoutSeconds    = 10  // baseline timeout for local / fast environments
-	healthCheckTimeoutSeconds   = 10
-	httpClientTimeoutSeconds    = 5
+	serverInfoTimeoutSeconds = 10 // baseline timeout for local / fast environments
 )
 
 // toString safely converts interface{} to string for comparison purposes.
@@ -54,151 +49,61 @@ type ServerInfo struct {
 
 // startServerWithRandomPort starts a server with a random port and returns the port and endpoints
 func startServerWithRandomPort(t *testing.T, binary string, args []string) (int, map[string]string, func(), error) {
-	// Start test server with port 0 to use a random port
-	allArgs := append([]string{"--port", "0"}, args...)
+	infoFile := filepath.Join(t.TempDir(), "server-info.json")
+	allArgs := append([]string{"--port", "0", "--info-file", infoFile}, args...)
 	serverCmd := exec.Command(binary, allArgs...)
-
-	// Set up proper pipes for Windows compatibility
-	serverCmd.Stderr = os.Stderr // Send errors to test output
-
-	// Capture server output to get the JSON info
-	serverOutput, err := serverCmd.StdoutPipe()
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to get server stdout: %w", err)
-	}
-
-	// Start the process
+	serverCmd.Stderr = os.Stderr
+	// Discard stdout entirely (we don't rely on it now)
+	serverCmd.Stdout = nil
 	if err := serverCmd.Start(); err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to start server: %w", err)
 	}
 
-	// Prepare a robust cleanup function
 	cleanup := func() {
-		// First try graceful termination
 		if runtime.GOOS == "windows" {
-			// Windows-specific process termination using taskkill
-			// This is more reliable than Process.Kill() on Windows
 			_ = exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(serverCmd.Process.Pid)).Run()
 		} else {
-			// On Unix systems, send SIGTERM first for graceful shutdown
 			_ = serverCmd.Process.Signal(syscall.SIGTERM)
-
-			// Give it a moment to terminate gracefully
 			done := make(chan struct{})
-			go func() {
-				_ = serverCmd.Wait()
-				close(done)
-			}()
-
-			// If it doesn't exit gracefully within a timeout, force kill it
+			go func() { _ = serverCmd.Wait(); close(done) }()
 			select {
 			case <-done:
-				// Process exited cleanly
 			case <-time.After(2 * time.Second):
-				// Force kill if it doesn't exit
 				_ = serverCmd.Process.Kill()
 			}
 		}
 	}
 
-	// Read server output to find the JSON info (robust brace-count parser)
-	scanner := bufio.NewScanner(serverOutput)
+	deadline := time.Now().Add(time.Duration(serverInfoTimeoutSeconds) * time.Second)
+	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" && serverInfoTimeoutSeconds < 30 {
+		deadline = time.Now().Add(30 * time.Second)
+	}
+
 	var serverInfo ServerInfo
-	infoFound := make(chan bool, 1)
-	go func() {
-		var jsonData strings.Builder
-		braceDepth := 0
-		collecting := false
-		for scanner.Scan() {
-			line := scanner.Text()
-			t.Logf("Server: %s", line)
-			// Append lines once we see the first '{'
-			if !collecting {
-				if idx := strings.Index(line, "{"); idx >= 0 {
-					collecting = true
-					braceDepth += strings.Count(line[idx:], "{") - strings.Count(line[idx:], "}")
-					jsonData.WriteString(line[idx:])
-					jsonData.WriteString("\n")
-					if braceDepth == 0 { // Single line JSON
-						attempt := strings.TrimSpace(jsonData.String())
-						_ = json.Unmarshal([]byte(attempt), &serverInfo)
-						if serverInfo.ServerInfo.Port > 0 {
-							infoFound <- true
-							return
-						}
-					}
-					continue
-				}
-				continue
-			}
-			// Already collecting
-			braceDepth += strings.Count(line, "{") - strings.Count(line, "}")
-			jsonData.WriteString(line)
-			jsonData.WriteString("\n")
-			if braceDepth <= 0 { // Potentially complete
-				attempt := strings.TrimSpace(jsonData.String())
-				attempt = strings.Join(strings.Fields(attempt), "") // remove whitespace
-				if err := json.Unmarshal([]byte(attempt), &serverInfo); err == nil {
-					if serverInfo.ServerInfo.Port > 0 {
-						infoFound <- true
-						return
-					}
-				}
-				// Reset if parse failed (avoid unbounded growth)
-				jsonData.Reset()
-				collecting = false
-				braceDepth = 0
+	for {
+		data, err := os.ReadFile(infoFile)
+		if err == nil {
+			if jsonErr := json.Unmarshal(data, &serverInfo); jsonErr == nil && serverInfo.ServerInfo.Port > 0 {
+				break
 			}
 		}
-	}()
-
-	// Allow longer startup under real cloud (coverage + network variability)
-	timeoutSeconds := serverInfoTimeoutSeconds
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" {
-		// Prefer reliability over latency in cloud-positive runs
-		if timeoutSeconds < 30 {
-			timeoutSeconds = 30
-		}
-	}
-	select {
-	case <-infoFound:
-		t.Logf("Server started on port %d", serverInfo.ServerInfo.Port)
-	case <-time.After(time.Duration(timeoutSeconds) * time.Second):
-		cleanup()
-		return 0, nil, nil, fmt.Errorf("timed out waiting for server info")
-	}
-
-	// Wait for server to respond to health checks with a timeout
-	healthURL := serverInfo.ServerInfo.Endpoints["health"]
-	healthCtx, cancel := context.WithTimeout(context.Background(), healthCheckTimeoutSeconds*time.Second)
-	defer cancel()
-
-	// Use a client with timeout for health checks
-	httpClient := &http.Client{Timeout: httpClientTimeoutSeconds * time.Second}
-
-	// Retry loop with backoff for health checks
-	for i := 0; i < healthCheckMaxRetries; i++ {
-		resp, err := httpClient.Get(healthURL)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			_ = resp.Body.Close()
-			return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
-		}
-		if err != nil {
-			t.Logf("Health check failed: %v (retry %d/%d)", err, i+1, healthCheckMaxRetries)
-		}
-
-		// Check if context has been canceled
-		select {
-		case <-healthCtx.Done():
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			cleanup()
-			return 0, nil, nil, fmt.Errorf("server failed to respond to health checks: %v", healthCtx.Err())
-		case <-time.After(time.Duration(healthCheckInitialBackoffMs) * time.Millisecond * time.Duration(i+1)): // Increasing backoff
-			continue
+			return 0, nil, nil, fmt.Errorf("failed reading info file: %w", err)
 		}
+		if time.Now().After(deadline) {
+			cleanup()
+			return 0, nil, nil, fmt.Errorf("timed out waiting for info file")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+	if serverInfo.ServerInfo.Port <= 0 {
+		cleanup()
+		return 0, nil, nil, fmt.Errorf("invalid port in info file")
+	}
+	t.Logf("Server started on port %d (info file)", serverInfo.ServerInfo.Port)
 
-	cleanup()
-	return 0, nil, nil, fmt.Errorf("server failed to respond to health checks after %d attempts", healthCheckMaxRetries)
+	return serverInfo.ServerInfo.Port, serverInfo.ServerInfo.Endpoints, cleanup, nil
 }
 
 // TestIntegration_ServerAndClient tests the test server and client working together

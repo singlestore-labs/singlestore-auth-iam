@@ -9,10 +9,12 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,6 +38,8 @@ type Config struct {
 	AllowedAudiences []string
 	Verbose          bool
 	Timeout          time.Duration
+	InfoFile         string // Path to atomically written server info
+	ShutdownOnStdin  bool   // Graceful shutdown when stdin closes
 }
 
 // Standardized timeouts (avoid magic numbers)
@@ -122,6 +126,8 @@ func parseFlags() Config {
 	flag.StringVar(&allowedAudiencesStr, "allowed-audiences", "https://authsvc.singlestore.com", "Comma-separated list of allowed audiences")
 	flag.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
 	flag.DurationVar(&config.Timeout, "timeout", 0, "Auto-shutdown timeout (0 = no timeout)")
+	flag.StringVar(&config.InfoFile, "info-file", "", "Write server info JSON atomically to this file")
+	flag.BoolVar(&config.ShutdownOnStdin, "shutdown-on-stdin-close", false, "Shutdown when stdin closes (for test cleanup)")
 
 	flag.Parse()
 
@@ -169,6 +175,41 @@ type logger struct{}
 
 func (logger) Logf(format string, args ...any) {
 	log.Printf("[verifier] "+format, args...)
+}
+
+// writeAtomic writes data to filename atomically via temp file + rename.
+func writeAtomic(filename string, data []byte, perm os.FileMode) (err error) {
+	if filename == "" {
+		return fmt.Errorf("empty filename")
+	}
+	dir := filepath.Dir(filename)
+	base := filepath.Base(filename)
+	var tmp *os.File
+	tmp, err = os.CreateTemp(dir, base+".tmp-*")
+	if err != nil {
+		return
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if err != nil { // only cleanup on failure
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if _, err = tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return
+	}
+	// fsync omitted (tests only); atomic rename ensures visibility boundary
+	if err = tmp.Close(); err != nil {
+		return
+	}
+	if perm != 0 {
+		if err = os.Chmod(tmpName, perm); err != nil {
+			return
+		}
+	}
+	err = os.Rename(tmpName, filename)
+	return
 }
 
 // Run starts the test server
@@ -278,10 +319,12 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 ServerReady:
 
-	// Output server info in JSON format for easy parsing by tests
+	// Build server info
 	serverInfo := map[string]interface{}{
 		"server_info": map[string]interface{}{
-			"port": actualPort,
+			"port":       actualPort,
+			"pid":        os.Getpid(),
+			"started_at": time.Now().UTC().Format(time.RFC3339Nano),
 			"endpoints": map[string]string{
 				"auth":       fmt.Sprintf("http://localhost:%d/auth/iam/:jwtType", actualPort),
 				"public_key": fmt.Sprintf("http://localhost:%d/info/public-key", actualPort),
@@ -297,13 +340,34 @@ ServerReady:
 			},
 		},
 	}
-
-	// Output as JSON
 	jsonInfo, err := json.MarshalIndent(serverInfo, "", "  ")
 	if err != nil {
-		log.Fatalf("Warning: Failed to marshal server info to JSON: %v", err)
-	} else {
+		return fmt.Errorf("failed to marshal server info: %w", err)
+	}
+	if s.config.InfoFile == "" { // Only emit to stdout when no file requested
 		fmt.Println(string(jsonInfo))
+	} else {
+		if err := writeAtomic(s.config.InfoFile, jsonInfo, 0o644); err != nil {
+			return fmt.Errorf("write info file: %w", err)
+		}
+		log.Printf("info file written: %s", s.config.InfoFile)
+	}
+	// Optional stdin watcher
+	if s.config.ShutdownOnStdin {
+		// Consume all stdin until EOF (or read error) then trigger shutdown.
+		// Using io.Copy with a large internal buffer avoids pathological byte-by-byte reads
+		// if input is accidentally written to stdin.
+		go func() {
+			_, err := io.Copy(io.Discard, os.Stdin)
+			if err != nil && err != io.EOF {
+				log.Printf("stdin copy error: %v; shutting down", err)
+			} else {
+				log.Printf("stdin closed; shutting down")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+			defer cancel()
+			_ = httpServer.Shutdown(ctx)
+		}()
 	}
 
 	// Wait for the server to complete (or error)
