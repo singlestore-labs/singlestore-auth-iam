@@ -2,10 +2,10 @@
 Shared test utilities for managing the Go test server.
 """
 
+import json
 import logging
 import os
 import subprocess
-import json
 import time
 from typing import Optional
 

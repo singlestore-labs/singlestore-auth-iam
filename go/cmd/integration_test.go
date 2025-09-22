@@ -74,12 +74,19 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		}
 	}
 
+	// Establish deadline for server startup. In cloud test environments (positive, no-role, or assume-role)
+	// the VM may be under higher load; allow a longer window. Keep local fast.
 	deadline := time.Now().Add(time.Duration(serverInfoTimeoutSeconds) * time.Second)
-	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" && serverInfoTimeoutSeconds < 30 {
-		deadline = time.Now().Add(30 * time.Second)
+	if serverInfoTimeoutSeconds < 30 {
+		if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" ||
+			os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" ||
+			os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "" {
+			deadline = time.Now().Add(30 * time.Second)
+		}
 	}
 
 	var serverInfo ServerInfo
+	startPoll := time.Now()
 	for {
 		data, err := os.ReadFile(infoFile)
 		if err == nil {
@@ -93,7 +100,9 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		}
 		if time.Now().After(deadline) {
 			cleanup()
-			return 0, nil, nil, fmt.Errorf("timed out waiting for info file")
+			elapsed := time.Since(startPoll).Truncate(10 * time.Millisecond)
+			contextStr := "local"
+			return 0, nil, nil, fmt.Errorf("timed out (%s) waiting for test server startup info file (%s)", elapsed, infoFile)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

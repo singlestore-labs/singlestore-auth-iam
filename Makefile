@@ -13,7 +13,10 @@ UNIQUE_DIR := dev-$(shell echo $$(( ( $(shell date +%s) / 60 ) % 3 + 1 )))
 endif
 export UNIQUE_DIR
 
-.PHONY: help test test-local test-go-local test-python-local on-remote-test on-remote-test-go on-remote-test-python check-cloud-env check-host clean dev-setup dev-setup-common dev-setup-go dev-setup-python lint lint-go lint-python format format-go format-python ssh-copy-to-remote ssh-run-remote-tests ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-cleanup-remote
+.PHONY: help test test-local test-go-local test-python-local on-remote-test on-remote-test-go on-remote-test-python check-cloud-env check-host clean \
+ dev-setup-ubuntu dev-setup-macos \
+ dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python \
+ dev-setup-common lint lint-go lint-python format format-go format-python ssh-copy-to-remote ssh-run-remote-tests ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-cleanup-remote
 
 # Default target
 help:
@@ -42,9 +45,12 @@ help:
 	@echo "    make ssh-cleanup-remote                 Clean up remote directory on HOST"
 	@echo ""
 	@echo "Development Setup:"
-	@echo "  make dev-setup                            Full development setup (Go + Python tooling)"
-	@echo "  make dev-setup-go                         Go development tooling (modules + linters)"
-	@echo "  make dev-setup-python                     Python development tooling (system + pip dev deps)"
+	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python)"
+	@echo "  make dev-setup-ubuntu-go                  Ubuntu/Debian Go toolchain + linters"
+	@echo "  make dev-setup-ubuntu-python              Ubuntu/Debian Python tooling + deps"
+	@echo "  make dev-setup-macos                      Full dev setup macOS (Go + Python)"
+	@echo "  make dev-setup-macos-go                   macOS Go toolchain + linters"
+	@echo "  make dev-setup-macos-python               macOS Python tooling + deps"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint                                 Run all linters"
@@ -119,25 +125,38 @@ on-remote-test-python: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
 	# Add src to PYTHONPATH so tests can import s2iam without installation
-	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short
-	cd python && PYTHONPATH=src python3 -m pytest tests/ --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
+	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 
-dev-setup: dev-setup-go dev-setup-python
-	@echo "✓ Full development environment ready"
+dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python
+	@echo "✓ Full Ubuntu/Debian development environment ready"
+
+dev-setup-macos: dev-setup-macos-go dev-setup-macos-python
+	@echo "✓ Full macOS development environment ready"
 
 dev-setup-common:
 	sudo apt update
-	sudo snap install go --classic
+	sudo snap install go --classic || sudo apt install -y golang
 	cd go && go mod download
 
-dev-setup-go: dev-setup-common 
+dev-setup-ubuntu-go: dev-setup-common
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	mkdir -p $$HOME/bin
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.0.2
-	@echo "✓ Go development environment ready"
+	@echo "✓ Ubuntu Go development environment ready"
 
-dev-setup-python: dev-setup-common 
+dev-setup-macos-go:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	brew install go golangci-lint
+	cd go && go mod download
+	go install mvdan.cc/gofumpt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
+	@echo "✓ macOS Go development environment ready"
+
+dev-setup-ubuntu-python: dev-setup-common
 	sudo apt update
 	sudo apt install -y python3 python3-pip python3-venv \
 		python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography \
@@ -145,18 +164,29 @@ dev-setup-python: dev-setup-common
 		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort
 	@echo "Installing editable package with dev extras (pip) ..."
 	cd python && pip install -e .[dev]
-	@echo "✓ Python development environment ready (no virtualenv)"
+	@echo "✓ Ubuntu Python development environment ready (no virtualenv)"
 
-# Cloud provider specific installations
-install-aws:
-	@echo "Installing AWS CLI..."
+dev-setup-macos-python:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	brew install python3 pipx 
+	python3 -m pip install --upgrade pip
+	pipx ensurepath
+	python3 -m pip install --upgrade \
+		black isort flake8 mypy pytest pytest-cov pytest-asyncio aiohttp boto3 google-auth pyjwt cryptography requests google-auth-oauthlib
+	cd python && pip3 install -e .[dev]
+	@echo "✓ macOS Python development environment ready"
+
+dev-setup-aws:
 	sudo snap install aws-cli --classic
 
-install-azure:
+dev-setup-azure:
 	@echo "Installing Azure CLI..."
 	curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-install-gcp:
+dev-setup-gcp:
 	@echo "GCP dependencies installed via python3-google-auth and python3-google-auth-oauthlib"
 
 lint: lint-go lint-python

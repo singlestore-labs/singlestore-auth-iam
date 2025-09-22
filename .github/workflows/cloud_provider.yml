@@ -12,8 +12,8 @@ permissions:
 # Self-hosted cloud test hosts for cloud provider testing.
 # Assuming Ubuntu environment on AWS EC2, GCP Compute Engine, or Azure VM.
 #
-# Base system setup:
-# copy over the Makefile and "make dev-setup"
+# Base system setup (Ubuntu hosts expected):
+# copy over the Makefile and run: make dev-setup-ubuntu
 #
 # AWS EC2 setup:
 # sudo snap install aws-cli --classic

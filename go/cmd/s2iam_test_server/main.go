@@ -187,7 +187,7 @@ func writeAtomic(filename string, data []byte, perm os.FileMode) (err error) {
 	var tmp *os.File
 	tmp, err = os.CreateTemp(dir, base+".tmp-*")
 	if err != nil {
-		return
+		return err
 	}
 	tmpName := tmp.Name()
 	defer func() {
@@ -197,19 +197,19 @@ func writeAtomic(filename string, data []byte, perm os.FileMode) (err error) {
 	}()
 	if _, err = tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		return
+		return err
 	}
 	// fsync omitted (tests only); atomic rename ensures visibility boundary
 	if err = tmp.Close(); err != nil {
-		return
+		return err
 	}
 	if perm != 0 {
 		if err = os.Chmod(tmpName, perm); err != nil {
-			return
+			return err
 		}
 	}
 	err = os.Rename(tmpName, filename)
-	return
+	return err
 }
 
 // Run starts the test server
