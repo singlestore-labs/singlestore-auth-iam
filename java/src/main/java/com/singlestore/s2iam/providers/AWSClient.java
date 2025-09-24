@@ -1,20 +1,180 @@
 package com.singlestore.s2iam.providers;
 
 import com.singlestore.s2iam.*;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
+import software.amazon.awssdk.services.sts.model.AssumeRoleResponse;
+import software.amazon.awssdk.services.sts.model.GetCallerIdentityRequest;
+import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
 
 public class AWSClient extends AbstractBaseClient {
-    public AWSClient(Logger logger) { super(logger, null); }
-    private AWSClient(Logger logger, String assumed) { super(logger, assumed); }
+  private static final String METADATA_BASE =
+      System.getenv().getOrDefault("S2IAM_AWS_METADATA_BASE", "http://169.254.169.254");
+  private volatile StsClient sts;
+  private AwsCredentialsProvider baseProvider;
 
-    @Override
-    protected CloudProviderClient newInstance(Logger logger, String assumedRole) { return new AWSClient(logger, assumedRole); }
+  public AWSClient(Logger logger) {
+    super(logger, null);
+  }
 
-    @Override
-    public CloudProviderType getType() { return CloudProviderType.aws; }
+  private AWSClient(Logger logger, String assumed) {
+    super(logger, assumed);
+  }
 
-    @Override
-    public Exception detect() {
-        // TODO: implement real AWS metadata probing
-        return new IllegalStateException("no cloud provider detected (aws stub)" );
+  @Override
+  protected CloudProviderClient newInstance(Logger logger, String assumedRole) {
+    return new AWSClient(logger, assumedRole);
+  }
+
+  @Override
+  public CloudProviderType getType() {
+    return CloudProviderType.aws;
+  }
+
+  @Override
+  public Exception detect() {
+    // Fast env detection: common AWS env vars
+    String[] envs = {
+      "AWS_WEB_IDENTITY_TOKEN_FILE",
+      "AWS_ROLE_ARN",
+      "AWS_EXECUTION_ENV",
+      "AWS_REGION",
+      "AWS_DEFAULT_REGION",
+      "AWS_LAMBDA_FUNCTION_NAME"
+    };
+    for (String e : envs) if (System.getenv(e) != null && !System.getenv(e).isEmpty()) return null;
+
+    // Metadata probing (IMDSv2 token then fallback)
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    try {
+      HttpRequest tokenReq =
+          HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/api/token"))
+              .timeout(Duration.ofSeconds(2))
+              .header("X-aws-ec2-metadata-token-ttl-seconds", "60")
+              .method("PUT", HttpRequest.BodyPublishers.noBody())
+              .build();
+      HttpResponse<String> tokenResp = client.send(tokenReq, HttpResponse.BodyHandlers.ofString());
+      if (tokenResp.statusCode() == 200) return null;
+    } catch (Exception ignored) {
     }
+    try {
+      HttpRequest req =
+          HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/meta-data/"))
+              .timeout(Duration.ofSeconds(2))
+              .GET()
+              .build();
+      HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
+      if (resp.statusCode() == 200) return null;
+    } catch (IOException | InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return e;
+    }
+    return new IllegalStateException("not running on AWS");
+  }
+
+  @Override
+  public Exception fastDetect() {
+    // Mirror env-based fast detection (no network)
+    String[] envs = {
+      "AWS_WEB_IDENTITY_TOKEN_FILE",
+      "AWS_ROLE_ARN",
+      "AWS_EXECUTION_ENV",
+      "AWS_REGION",
+      "AWS_DEFAULT_REGION",
+      "AWS_LAMBDA_FUNCTION_NAME"
+    };
+    for (String e : envs) if (System.getenv(e) != null && !System.getenv(e).isEmpty()) return null;
+    return new IllegalStateException("fast detect: not aws");
+  }
+
+  @Override
+  public IdentityHeadersResult getIdentityHeaders(Map<String, String> additionalParams) {
+    try {
+      ensureSTS();
+      GetCallerIdentityResponse who =
+          sts.getCallerIdentity(GetCallerIdentityRequest.builder().build());
+      AwsCredentials baseCreds = baseProvider.resolveCredentials();
+      Map<String, String> headers = new HashMap<>();
+      headers.put("X-AWS-Access-Key-ID", baseCreds.accessKeyId());
+      if (baseCreds.secretAccessKey() != null)
+        headers.put("X-AWS-Secret-Access-Key", baseCreds.secretAccessKey());
+
+      String arnOverride = null;
+      // Attempt role assumption if requested
+      if (assumedRole != null && !assumedRole.isEmpty()) {
+        AssumeRoleResponse assume =
+            sts.assumeRole(
+                AssumeRoleRequest.builder()
+                    .roleArn(assumedRole)
+                    .roleSessionName("S2IAM-Session" + System.currentTimeMillis())
+                    .durationSeconds(900)
+                    .build());
+        headers.put("X-AWS-Access-Key-ID", assume.credentials().accessKeyId());
+        headers.put("X-AWS-Secret-Access-Key", assume.credentials().secretAccessKey());
+        headers.put("X-AWS-Session-Token", assume.credentials().sessionToken());
+        // Use requested role ARN for identity consistency with expectations
+        arnOverride = assumedRole;
+      } else if (System.getenv("AWS_SESSION_TOKEN") != null) {
+        headers.put("X-AWS-Session-Token", System.getenv("AWS_SESSION_TOKEN"));
+      }
+
+      String arn = arnOverride != null ? arnOverride : who.arn();
+      String account = who.account();
+      String region = deriveRegion(arn);
+      String resourceType = deriveResourceTypeDetailed(arn);
+      Map<String, String> extra = new HashMap<>();
+      extra.put("account", account);
+      if (who.userId() != null && !who.userId().isEmpty()) extra.put("userId", who.userId());
+      CloudIdentity identity =
+          new CloudIdentity(CloudProviderType.aws, arn, account, region, resourceType, extra);
+      return new IdentityHeadersResult(headers, identity, null);
+    } catch (Exception e) {
+      return new IdentityHeadersResult(null, null, e);
+    }
+  }
+
+  private void ensureSTS() {
+    if (sts != null) return;
+    synchronized (this) {
+      if (sts == null) {
+        String region =
+            System.getenv()
+                .getOrDefault(
+                    "AWS_REGION", System.getenv().getOrDefault("AWS_DEFAULT_REGION", "us-east-1"));
+        baseProvider = DefaultCredentialsProvider.create();
+        sts =
+            StsClient.builder().region(Region.of(region)).credentialsProvider(baseProvider).build();
+      }
+    }
+  }
+
+  private static String deriveRegion(String arn) {
+    String[] parts = arn.split(":");
+    return parts.length > 3 ? parts[3] : "";
+  }
+
+  private static String deriveResourceTypeDetailed(String arn) {
+    if (arn.contains(":instance/")) return "ec2";
+    if (arn.contains(":assumed-role/")) return "sts-assumed-role";
+    if (arn.contains(":role/")) return "iam-role";
+    if (arn.contains(":user/")) return "iam-user";
+    if (arn.contains(":lambda:")) return "lambda";
+    if (arn.contains(":task/")) return "ecs-task";
+    if (arn.contains(":cluster/")) return "ecs-cluster";
+    if (arn.contains(":function:")) return "lambda";
+    if (arn.contains(":iam::")) return "iam";
+    return "aws";
+  }
 }
