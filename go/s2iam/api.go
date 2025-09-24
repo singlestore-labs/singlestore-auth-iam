@@ -151,7 +151,14 @@ func detectProviderImpl(ctx context.Context, options detectProviderOptions) (Clo
 		}
 	}
 
-	// Set up timeout context
+	// First attempt fast in-process detection (no network). Return immediately on success.
+	for _, client := range options.clients {
+		if err := client.FastDetect(); err == nil {
+			return client, nil
+		}
+	}
+
+	// Set up timeout context for full detection
 	var cancel func()
 	if options.timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, options.timeout)

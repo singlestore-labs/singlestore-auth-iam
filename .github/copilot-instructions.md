@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a **cloud provider authentication library** that only really works when running on actual cloud service providers (AWS, GCP, Azure). The library detects the current cloud environment and provides JWT tokens for database and API access using cloud provider identities.
+This is a **cloud provider authentication library** that only really works when running on actual cloud service providers (AWS, GCP, Azure). The library detects the current cloud environment and provides JWTs for database and API access using cloud provider identities.
 
 **Key Point:** This is not a typical library that can be fully tested locally - it requires real cloud metadata services to function properly.
 
