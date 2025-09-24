@@ -15,8 +15,12 @@ export UNIQUE_DIR
 
 .PHONY: help test test-local test-go-local test-python-local on-remote-test on-remote-test-go on-remote-test-python check-cloud-env check-host clean \
  dev-setup-ubuntu dev-setup-macos \
- dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python \
- dev-setup-common lint lint-go lint-python format format-go format-python ssh-copy-to-remote ssh-run-remote-tests ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-cleanup-remote
+ dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python dev-setup-java-ubuntu \
+ dev-setup-common \
+ lint lint-go lint-python format format-go format-python \
+ ssh-copy-to-remote ssh-run-remote-tests \
+ ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python \
+ ssh-cleanup-remote
 
 # Default target
 help:
@@ -44,6 +48,7 @@ help:
 	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python)"
 	@echo "  make dev-setup-ubuntu-go                  Ubuntu/Debian Go toolchain + linters"
 	@echo "  make dev-setup-ubuntu-python              Ubuntu/Debian Python tooling + deps"
+	@echo "  make dev-setup-ubuntu-java               Java development tooling (OpenJDK + Maven deps)"
 	@echo "  make dev-setup-macos                      Full dev setup macOS (Go + Python)"
 	@echo "  make dev-setup-macos-go                   macOS Go toolchain + linters"
 	@echo "  make dev-setup-macos-python               macOS Python tooling + deps"
@@ -122,7 +127,7 @@ on-remote-test-python: check-cloud-env
 	# Add src to PYTHONPATH so tests can import s2iam without installation
 	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 
-dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python
+dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-ubuntu-java
 	@echo "✓ Full Ubuntu/Debian development environment ready"
 
 dev-setup-macos: dev-setup-macos-go dev-setup-macos-python
@@ -160,6 +165,14 @@ dev-setup-ubuntu-python: dev-setup-common
 	@echo "Installing editable package with dev extras (pip) ..."
 	cd python && pip install -e .[dev]
 	@echo "✓ Ubuntu Python development environment ready (no virtualenv)"
+
+dev-setup-ubuntu-java:
+	@echo "Installing Java toolchain (OpenJDK 11 + Maven)..."
+	sudo apt update
+	sudo apt install -y openjdk-11-jdk maven
+	@echo "Priming Maven dependency cache (offline build support)..."
+	cd java && mvn -q -DskipTests dependency:go-offline || { echo "Maven dependency prefetch failed"; exit 1; }
+	@echo "✓ Java development environment ready"
 
 dev-setup-macos-python:
 	@if ! command -v brew >/dev/null 2>&1; then \
