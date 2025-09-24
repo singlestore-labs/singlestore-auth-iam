@@ -13,6 +13,20 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
 )
 
+const (
+	fastDetectTestTimeout       = 1 * time.Second
+	fastDetectComparisonTimeout = 5 * time.Second
+	fullDetectBaselineTimeout   = 10 * time.Second
+	fastDetectMaxExpected       = 1500 * time.Millisecond
+)
+
+// isCloudTestEnv returns true if running under a real cloud test environment (role or no-role)
+func isCloudTestEnv() bool {
+	return os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" ||
+		os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" ||
+		os.Getenv("S2IAM_TEST_ASSUME_ROLE") != ""
+}
+
 // TestFastPathDetection tests that fast-path detection using environment variables
 // produces the same results as full detection
 func TestFastPathDetection(t *testing.T) {
@@ -27,7 +41,7 @@ func TestFastPathDetection(t *testing.T) {
 	// First, do normal detection to get the baseline
 	normalClient, err := s2iam.DetectProvider(context.Background(),
 		s2iam.WithLogger(t),
-		s2iam.WithTimeout(time.Second*10))
+		s2iam.WithTimeout(fullDetectBaselineTimeout))
 	require.NoError(t, err, "Normal detection should succeed")
 
 	providerType := normalClient.GetType()
@@ -75,7 +89,7 @@ func TestFastPathDetection(t *testing.T) {
 	// Now test fast-path detection
 	fastPathClient, err := s2iam.DetectProvider(context.Background(),
 		s2iam.WithLogger(t),
-		s2iam.WithTimeout(time.Second*5)) // Shorter timeout since fast-path should be quick
+		s2iam.WithTimeout(fastDetectComparisonTimeout))
 
 	// On NO_ROLE hosts, fast-path detection might fail if it tries to access identity metadata
 	if os.Getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != "" && err != nil {
@@ -108,4 +122,84 @@ func TestFastPathDetection(t *testing.T) {
 
 	// Test that both clients work equivalently using shared test function
 	testHappyPath(t, fastPathClient)
+}
+
+// TestFastPathAWSIRSACancelledContext ensures that a cancelled context does not prevent
+// AWS IRSA fast-path detection (since FastDetect ignores context entirely).
+func TestFastPathAWSIRSACancelledContext(t *testing.T) {
+	if isCloudTestEnv() {
+		t.Skip("IRSA cancelled-context fast-path test is local-only")
+	}
+	// Provide AWS IRSA env indicators so FastDetect should succeed immediately.
+	f, err := os.CreateTemp(t.TempDir(), "irsa-token-*.txt")
+	require.NoError(t, err)
+	_, _ = f.WriteString("dummy-token")
+	_ = f.Close()
+	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", f.Name())
+	t.Setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/TestRole")
+
+	// Prepare already-cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	client, err := s2iam.DetectProvider(ctx, s2iam.WithLogger(t), s2iam.WithTimeout(fastDetectTestTimeout))
+	require.NoError(t, err, "Fast detection should succeed with cancelled context")
+	require.Equal(t, s2iam.ProviderAWS, client.GetType())
+	if elapsed := time.Since(start); elapsed > fastDetectMaxExpected {
+		t.Errorf("Cancelled-context fast-path took too long: %s", elapsed)
+	}
+}
+
+// TestFastPathGCPWorkloadIdentityCancelledContext ensures cancelled context doesn't block
+// GCP workload identity fast detection via external_account credential file.
+func TestFastPathGCPWorkloadIdentityCancelledContext(t *testing.T) {
+	if isCloudTestEnv() {
+		t.Skip("GCP workload identity cancelled-context fast-path test is local-only")
+	}
+	// Create temporary external_account credentials file
+	creds := `{"type":"external_account","audience":"//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider"}`
+	f, err := os.CreateTemp(t.TempDir(), "gcp-external-account-*.json")
+	require.NoError(t, err)
+	_, _ = f.WriteString(creds)
+	_ = f.Close()
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", f.Name())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	client, err := s2iam.DetectProvider(ctx, s2iam.WithLogger(t), s2iam.WithTimeout(fastDetectTestTimeout))
+	require.NoError(t, err, "Fast detection should succeed for GCP external_account with cancelled context")
+	require.Equal(t, s2iam.ProviderGCP, client.GetType())
+	if elapsed := time.Since(start); elapsed > fastDetectMaxExpected {
+		t.Errorf("GCP workload identity fast-path (cancelled ctx) took too long: %s", elapsed)
+	}
+}
+
+// TestFastPathAzureWorkloadIdentityCancelledContext ensures cancelled context doesn't block
+// Azure workload identity fast detection via federated token file.
+func TestFastPathAzureWorkloadIdentityCancelledContext(t *testing.T) {
+	if isCloudTestEnv() {
+		t.Skip("Azure workload identity cancelled-context fast-path test is local-only")
+	}
+	// Create temporary federated token file
+	f, err := os.CreateTemp(t.TempDir(), "azure-federated-token-*.txt")
+	require.NoError(t, err)
+	_, _ = f.WriteString("dummy-azure-federated-token")
+	_ = f.Close()
+	t.Setenv("AZURE_FEDERATED_TOKEN_FILE", f.Name())
+	t.Setenv("AZURE_CLIENT_ID", "00000000-0000-0000-0000-000000000000")
+	t.Setenv("AZURE_TENANT_ID", "11111111-1111-1111-1111-111111111111")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	client, err := s2iam.DetectProvider(ctx, s2iam.WithLogger(t), s2iam.WithTimeout(fastDetectTestTimeout))
+	require.NoError(t, err, "Fast detection should succeed for Azure workload identity with cancelled context")
+	require.Equal(t, s2iam.ProviderAzure, client.GetType())
+	if elapsed := time.Since(start); elapsed > fastDetectMaxExpected {
+		t.Errorf("Azure workload identity fast-path (cancelled ctx) took too long: %s", elapsed)
+	}
 }

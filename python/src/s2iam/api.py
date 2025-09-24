@@ -60,7 +60,21 @@ async def detect_provider(
             new_azure_client(logger),
         ]
 
-    # Use threading approach that mirrors Go goroutines + channel pattern
+    # Phase 1: fast_detect sequentially (purely local; must not do network I/O).
+    for c in clients:
+        try:
+            await c.fast_detect()
+            if logger:
+                logger.log(f"Fast detected provider: {c.get_type().value}")
+            return c
+        except Exception:
+            # Not detected via fast path; move to next provider.
+            continue
+
+    # Phase 2: full detection using threads (mirrors Go goroutines + first-winner channel).
+    # Invariants relied upon here: each client's detect() MUST raise on negative outcome; only a
+    # positively detected client (internal flag set) returns normally. This prevents selecting a
+    # provider that will later fail with ProviderNotDetected when building identity headers.
     result_queue: "queue.Queue[CloudProviderClient]" = queue.Queue()
     stop_event = threading.Event()
     all_errors: list[str] = []
@@ -107,11 +121,8 @@ async def detect_provider(
         return result
 
     except queue.Empty:
-        # Timeout occurred
+        # Timeout occurred; signal threads to stop and join briefly.
         stop_event.set()
-
-        # Wait a bit for threads to finish
         for thread in threads:
-            thread.join(timeout=0.1)
-
+            thread.join(timeout=0.05)
         raise CloudProviderNotFound(f"Provider detection timed out after {timeout}s")

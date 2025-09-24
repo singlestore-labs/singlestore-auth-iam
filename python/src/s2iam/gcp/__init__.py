@@ -4,9 +4,6 @@ Google Cloud Platform provider client implementation.
 
 import asyncio
 import os
-import socket
-import urllib.error
-import urllib.request
 from typing import Any, Optional
 
 import aiohttp
@@ -37,60 +34,101 @@ class GCPClient(CloudProviderClient):
             self._logger.log(f"GCP: {message}")
 
     async def detect(self) -> None:
-        """Detect if running on GCP (matches Go implementation)."""
-        self._log("Starting GCP detection")
-
-        # Fast path: Check if GCE_METADATA_HOST environment variable is set
-        if os.environ.get("GCE_METADATA_HOST"):
-            self._log("Found GCE_METADATA_HOST environment variable")
-            # When env var is set, we need to verify identity access (strict check)
-            try:
-                await self._verify_metadata_access()
-                self._log("GCP identity metadata access verified")
-                self._detected = True
-                return
-            except Exception:
-                self._log("Metadata service available but no identity access")
-                raise ProviderIdentityUnavailable("GCP metadata available but no identity access")
-
-        # Try to access GCP metadata service directly
-        self._log("Trying metadata service")
-        try:
-            # Use urllib with explicit timeout (matches Go's http.Client{Timeout: 3 * time.Second})
-            def sync_check() -> bool:
-                req = urllib.request.Request(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/id",
-                    headers={"Metadata-Flavor": "Google"},
-                )
-                # Set socket timeout to match Go implementation
-                socket.setdefaulttimeout(3.0)
-                try:
-                    with urllib.request.urlopen(req, timeout=3.0) as response:
-                        if response.status == 200:
-                            return True
-                        else:
-                            raise Exception(f"Metadata service returned status {response.status}")
-                finally:
-                    socket.setdefaulttimeout(None)  # Reset to default
-
-            # Run sync operation in executor to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, sync_check)
-
-            self._log("Successfully detected GCP environment")
-            self._detected = True
+        """Detect if running on GCP (full phase)."""
+        self._log("Starting GCP detection (full phase)")
+        if self._detected:
             return
 
-        except Exception as e:
-            error_msg = str(e) if str(e) else f"{type(e).__name__}"
-            self._log(f"Metadata service error: {error_msg}")
+        # IMPORTANT (future maintainer / future-me): Do NOT add retries here unless you can
+        # produce a reproducible, provider-side behavioral change that: (a) manifests as
+        # a transient failure on the very first metadata probe AND (b) becomes a success
+        # within <1s WITHOUT any configuration / environment change. Historical context:
+        # A GCP detection timeout once occurred and a retry loop was briefly added. Root
+        # cause analysis showed the failure was due to logic (raising before queue publish),
+        # not actual transient unavailability of the metadata endpoint. Adding retries
+        # masked the underlying bug and only injected latency + flakiness surface area.
+        #
+        # Why single attempt is correct for GCP:
+        # 1. GCP metadata service is either immediately reachable or definitively absent.
+        #    (Contrast: Azure IMDS managed identity can 429/throttle legitimately, hence
+        #    bounded exponential retry ONLY on Azure identity acquisition.)
+        # 2. Fast failing keeps cross‑provider race tight and test suite duration low.
+        # 3. Retries make real configuration errors (firewall / network namespace / wrong
+        #    cloud) slower to surface and harder to differentiate from genuine detection.
+        # 4. Every added retry path previously obscured a logic bug rather than fixing a
+        #    platform instability.
+        #
+        # If you believe you need a retry, first capture:
+        #   - exact wall clock timings
+        #   - packet trace or tcpdump showing SYN/SYN-ACK delay OR DNS resolution latency
+        #   - evidence that a second attempt (without any delay you inserted) would have
+        #     succeeded (e.g., manual immediate second curl succeeds while first failed)
+        # and document that evidence in a linked issue. Without that, DO NOT ADD RETRIES.
+        #
+        # This comment is intentionally dry and procedural to discourage casual edits.
+        # Removing it or ignoring its instructions without evidence is a regression.
+        # Single bounded metadata probe (no retry). GCP metadata is either reachable promptly
+        # or not present; retries add latency and can mask a real negative signal.
+        self._log("Trying metadata service (link-local IP, single attempt)")
+
+        # Use link-local IP (169.254.169.254) directly to avoid DNS resolution stalls that
+        # previously caused a thread to hang beyond the orchestrator timeout (leading to an
+        # Empty queue and overall detection timeout). Single attempt with explicit total timeout.
+        loop = asyncio.get_event_loop()
+        start = loop.time()
+        metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/id"
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
+                async with session.get(metadata_url, headers={"Metadata-Flavor": "Google"}) as response:  # noqa: S310
+                    if response.status != 200:
+                        raise Exception(f"metadata status {response.status}")
+            elapsed_ms = int((loop.time() - start) * 1000)
+            self._log(f"Detected GCP metadata (elapsed={elapsed_ms}ms)")
+            self._detected = True
+            return
+        except Exception as e:  # noqa: BLE001
+            elapsed_ms = int((loop.time() - start) * 1000)
+            msg = str(e) or type(e).__name__
+            lower = msg.lower()
+            if any(p in lower for p in ("name or service not known", "temporary failure", "not known")):
+                category = "dns"
+            elif any(p in lower for p in ("timed out", "timeout")):
+                category = "timeout"
+            elif any(p in lower for p in ("refused", "connection reset")):
+                category = "connect"
+            else:
+                category = "other"
+            self._log(f"Metadata probe failed (elapsed={elapsed_ms}ms category={category}): {msg}")
             raise Exception(
-                f"Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): {error_msg}"  # noqa: E501
+                "Not running on GCP: metadata service unavailable (single attempt to 169.254.169.254 failed): "
+                + f"{msg}"
             )
 
         raise Exception(
             "Not running on GCP: no environment variable, metadata service, or default credentials detected"
         )
+
+    async def fast_detect(self) -> None:
+        """Fast detection: env/file only, no network."""
+        # external_account credential file
+        cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if cred_path and os.path.isfile(cred_path):
+            try:  # noqa: BLE001
+                with open(cred_path, "r", encoding="utf-8") as f:
+                    content = f.read(4096)
+                if '"type"' in content and '"external_account"' in content:
+                    self._log("FastDetect: external_account credentials present")
+                    self._detected = True
+                    return
+            except Exception as e:  # noqa: BLE001
+                self._log(f"FastDetect: credential file read failed: {e}")
+
+        if os.environ.get("GCE_METADATA_HOST"):
+            # Do NOT verify network here; leave that to full detect
+            self._log("FastDetect: GCE_METADATA_HOST present")
+            self._detected = True
+            return
+        raise Exception("FastDetect: no GCP indicators")
 
     async def _verify_metadata_access(self) -> None:
         """Verify we can access identity-related metadata."""

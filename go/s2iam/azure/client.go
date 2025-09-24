@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,10 +25,6 @@ const (
 	// Azure constants
 	azureAPIVersion     = "2018-02-01"
 	azureResourceServer = "https://management.azure.com/"
-
-	// Timing constants
-	azureRateLimitBaseDelay  = 100 * time.Millisecond
-	azureRateLimitMaxRetries = 3
 )
 
 // AzureClient implements the CloudProviderClient interface for Azure
@@ -52,6 +49,21 @@ func (c *AzureClient) copy() *AzureClient {
 	}
 }
 
+// FastDetect performs in-process detection without network I/O.
+func (c *AzureClient) FastDetect() error {
+	if os.Getenv("AZURE_FEDERATED_TOKEN_FILE") != "" || (os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_TENANT_ID") != "") ||
+		os.Getenv("AZURE_ENV") != "" || os.Getenv("MSI_ENDPOINT") != "" || os.Getenv("IDENTITY_ENDPOINT") != "" {
+		c.mu.Lock()
+		c.detected = true
+		c.mu.Unlock()
+		if c.logger != nil {
+			c.logger.Logf("Azure FastDetect - Detected via environment variables")
+		}
+		return nil
+	}
+	return errors.WithStack(models.ErrNoCloudProviderDetected)
+}
+
 // NewClient returns a new Azure client instance
 func NewClient(logger models.Logger) models.CloudProviderClient {
 	return &AzureClient{
@@ -59,7 +71,9 @@ func NewClient(logger models.Logger) models.CloudProviderClient {
 	}
 }
 
-// Detect tests if we are executing within Azure and if a managed identity is available
+// Detect performs network-inclusive detection. It assumes FastDetect may have already
+// succeeded based on local workload identity / env indicators. If c.detected is true
+// upon entry, it returns immediately.
 func (c *AzureClient) Detect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -73,14 +87,7 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 		c.logger.Logf("Azure Detection - Starting detection")
 	}
 
-	// Fast path: Check Azure environment variable
-	if os.Getenv("AZURE_ENV") != "" {
-		if c.logger != nil {
-			c.logger.Logf("Azure Detection - Found AZURE_ENV environment variable")
-		}
-		c.detected = true
-		return nil
-	}
+	// Environment-only paths handled by FastDetect; continue with metadata probing.
 
 	// Try to access the Azure metadata service
 	if c.logger != nil {
@@ -126,80 +133,102 @@ func (c *AzureClient) Detect(ctx context.Context) error {
 	// Try to get a token to verify identity is available with retry for rate limiting
 	tokenURL := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
 
-	// Retry loop for rate limiting (HTTP 429)
-	maxRetries := azureRateLimitMaxRetries
-	baseDelay := azureRateLimitBaseDelay
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
-		if err != nil {
-			if c.logger != nil {
-				c.logger.Logf("Azure Detection - Failed to create token request: %v", err)
-			}
-			return errors.Errorf("failed to create Azure token request: %w", err)
+	// Single attempt token request (no retry loop; keep detection fast/deterministic)
+	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Logf("Azure Detection - Failed to create token request: %v", err)
 		}
-		tokenReq.Header.Set("Metadata", "true")
+		return errors.Errorf("failed to create Azure token request: %w", err)
+	}
+	tokenReq.Header.Set("Metadata", "true")
 
-		tokenResp, err := client.Do(tokenReq)
+	// Configurable exponential backoff: defaults tuned for robustness over minimal latency.
+	// Defaults: 6 attempts (50,100,200,400,800,1600ms delays) ~3.15s total delay ceiling + network time.
+	const (
+		defaultMIMaxAttempts = 6
+		defaultMIBaseBackoff = 50 * time.Millisecond
+	)
+	maxAttempts := defaultMIMaxAttempts
+	if v := os.Getenv("S2IAM_AZURE_MI_RETRIES"); v != "" { // allow increasing attempts in production
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 20 { // hard cap 20 to avoid runaway
+			maxAttempts = n
+		}
+	}
+	baseBackoff := defaultMIBaseBackoff
+	if v := os.Getenv("S2IAM_AZURE_MI_BACKOFF_MS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 5000 { // cap single backoff base to <5s
+			baseBackoff = time.Duration(n) * time.Millisecond
+		}
+	}
+
+	if c.logger != nil {
+		c.logger.Logf("Azure Detection - Managed identity token attempts=%d base_backoff_ms=%d", maxAttempts, baseBackoff/time.Millisecond)
+	}
+
+	var lastStatus int
+	for attempt := 0; attempt < maxAttempts; attempt++ { // exponential backoff for transient throttle
+		resp, err := client.Do(tokenReq)
 		if err != nil {
 			if c.logger != nil {
-				c.logger.Logf("Azure Detection - Token request failed: %v", err)
+				c.logger.Logf("Azure Detection - Token request error (attempt %d): %v", attempt+1, err)
 			}
 			return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: %s", err)
 		}
+		lastStatus = resp.StatusCode
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 
-		defer func() {
-			_ = tokenResp.Body.Close()
-		}()
-
-		// Success case
-		if tokenResp.StatusCode == http.StatusOK {
-			break
-		}
-
-		// Rate limiting case - retry with exponential backoff
-		if tokenResp.StatusCode == 429 && attempt < maxRetries {
-			delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff: 100ms, 200ms, 400ms
+		if resp.StatusCode == http.StatusOK {
+			// Success
+			c.detected = true
 			if c.logger != nil {
-				c.logger.Logf("Azure Detection - Rate limited (429), retrying in %v (attempt %d/%d)", delay, attempt+1, maxRetries+1)
+				c.logger.Logf("Azure Detection - Successfully detected Azure environment with managed identity")
 			}
-
-			select {
-			case <-time.After(delay):
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			return nil
 		}
 
-		// Handle other error cases
-		bodyBytes, _ := io.ReadAll(tokenResp.Body)
 		var errorResponse struct {
 			Error            string `json:"error"`
 			ErrorDescription string `json:"error_description"`
 		}
+		_ = json.Unmarshal(bodyBytes, &errorResponse)
 
-		if json.Unmarshal(bodyBytes, &errorResponse) == nil {
-			if errorResponse.Error == "invalid_request" && strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
-				if c.logger != nil {
-					c.logger.Logf("Azure Detection - No managed identity found")
-				}
-				return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: invalid token response")
+		if resp.StatusCode == http.StatusTooManyRequests { // 429 throttle
+			if c.logger != nil {
+				c.logger.Logf("Azure Detection - Throttled (429) on attempt %d/%d", attempt+1, maxAttempts)
 			}
+			if attempt < maxAttempts-1 { // schedule exponential backoff retry
+				delay := baseBackoff << attempt
+				if c.logger != nil {
+					c.logger.Logf("Azure Detection - Backing off %s before retry", delay)
+				}
+				select {
+				case <-ctx.Done():
+					return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity throttled: %v", ctx.Err())
+				case <-time.After(delay):
+					continue
+				}
+			}
+			return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity throttled (429)")
+		}
+
+		if errorResponse.Error == "invalid_request" && strings.Contains(errorResponse.ErrorDescription, "Identity not found") {
+			if c.logger != nil {
+				c.logger.Logf("Azure Detection - No managed identity found")
+			}
+			return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but no managed identity available: invalid token response")
 		}
 
 		if c.logger != nil {
-			c.logger.Logf("Azure Detection - Token request returned status %d", tokenResp.StatusCode)
+			c.logger.Logf("Azure Detection - Token request status %d", resp.StatusCode)
 		}
-		return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity check failed: %d", tokenResp.StatusCode)
+		// Non-success status: classify as provider detected, identity unavailable
+		return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity check failed: %d", resp.StatusCode)
 	}
 
-	// We've confirmed we're on Azure and have a managed identity
-	c.detected = true
-	if c.logger != nil {
-		c.logger.Logf("Azure Detection - Successfully detected Azure environment with managed identity")
-	}
-	return nil
+	// Loop exhausted without success
+	return models.ErrProviderDetectedNoIdentity.Errorf("Azure detected but managed identity unavailable (last status %d)", lastStatus)
 }
 
 // GetType returns the cloud provider type
@@ -332,7 +361,7 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	return headers, identity, nil
 }
 
-// getIdentityFromToken parses the JWT token to extract identity information
+// getIdentityFromToken parses the JWT to extract identity information
 func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString string) (*models.CloudIdentity, error) {
 	// Parse the token without validation to extract claims
 	parts := strings.Split(tokenString, ".")
