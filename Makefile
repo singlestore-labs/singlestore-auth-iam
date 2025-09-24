@@ -32,10 +32,6 @@ help:
 	@echo "  make on-remote-test-go                    Run Go cloud tests only"
 	@echo "  make on-remote-test-python                Run Python cloud tests only"
 	@echo ""
-	@echo "(Legacy launch-* convenience targets removed; use explicit sequence:)"
-	@echo "  make ssh-copy-to-remote && make ssh-run-remote-tests TEST_TARGET=on-remote-test && make ssh-download-coverage && make ssh-cleanup-remote"
-	@echo "  (Or specify on-remote-test-go / on-remote-test-python for single language)"
-	@echo ""
 	@echo "  SSH Operations (for advanced usage):"
 	@echo "    make ssh-copy-to-remote                 Copy code to remote HOST"
 	@echo "    make ssh-run-remote-tests               Run TEST_TARGET on remote HOST"
@@ -116,8 +112,7 @@ on-remote-test-go: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd go && go test -v --failfast ./...
-	cd go && go test -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/go/... ./...
+	cd go && go test -v -failfast -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/go/... ./...
 
 on-remote-test-python: check-cloud-env
 	@echo "=== Running Python cloud tests ==="
@@ -292,7 +287,5 @@ ssh-download-coverage-python: check-host
 ssh-cleanup-remote: check-host
 	@echo "Cleaning up remote directory on $(HOST)..."
 	ssh $(SSH_OPTS) $(HOST) "rm -rf $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)"
-
-## (Removed legacy launch-* targets; explicit sequence preferred for clarity and fail-fast)
 
 

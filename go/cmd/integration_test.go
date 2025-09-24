@@ -101,7 +101,6 @@ func startServerWithRandomPort(t *testing.T, binary string, args []string) (int,
 		if time.Now().After(deadline) {
 			cleanup()
 			elapsed := time.Since(startPoll).Truncate(10 * time.Millisecond)
-			contextStr := "local"
 			return 0, nil, nil, fmt.Errorf("timed out (%s) waiting for test server startup info file (%s)", elapsed, infoFile)
 		}
 		time.Sleep(100 * time.Millisecond)
