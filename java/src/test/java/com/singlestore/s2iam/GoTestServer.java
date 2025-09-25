@@ -54,11 +54,33 @@ class GoTestServer {
     if (!Files.exists(goDir.resolve("go.mod"))) {
       throw new IllegalStateException("go dir missing go.mod: " + goDir);
     }
-    // Build server binary
-    run(new ProcessBuilder("go", "build", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
-        .directory(goDir.toFile()));
+    // Attempt to free space on constrained hosts (NOOP if cache dirs absent)
+    try {
+      run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
+          .directory(goDir.toFile()));
+    } catch (Exception ignored) { /* best-effort */ }
+
+    // Build server binary with size-reducing flags (-s -w) and trimpath. Retry once if ENOSPC.
+    IllegalStateException firstFailure = null;
+    try {
+      run(new ProcessBuilder("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
+          .directory(goDir.toFile()));
+    } catch (IllegalStateException e) {
+      firstFailure = e;
+      if (e.getMessage() != null && e.getMessage().contains("no space left")) {
+        // Aggressive cleanup then force rebuild of all packages
+        try { run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
+            .directory(goDir.toFile())); } catch (Exception ignored) {}
+        run(new ProcessBuilder("go", "build", "-a", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
+            .directory(goDir.toFile()));
+      } else {
+        throw e; // Non-space issue: propagate immediately
+      }
+    }
     if (!Files.exists(goDir.resolve("s2iam_test_server"))) {
-      throw new IllegalStateException("build failed - no binary");
+      // Provide context from first failure if available
+      if (firstFailure != null) throw firstFailure;
+      throw new IllegalStateException("build failed - no binary (unknown reason)");
     }
     // Prepare info file path inside goDir (avoids needing temp outside repo for simplicity)
   // Use a unique temp info file per server instance to avoid cross-test contention
