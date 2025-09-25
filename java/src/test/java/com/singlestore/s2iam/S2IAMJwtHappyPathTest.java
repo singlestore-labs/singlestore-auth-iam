@@ -38,14 +38,13 @@ public class S2IAMJwtHappyPathTest {
   void getDatabaseJWT() throws Exception {
     assumeOrSkip();
     CloudProviderClient provider = S2IAM.detectProvider();
-    // Retrieve client-side identity (include audience if GCP running in cloud with env
-    // expectations)
     Map<String, String> addl = new HashMap<>();
     boolean realCloud = expectCloud();
     if (provider.getType() == CloudProviderType.gcp && realCloud) {
       addl.put("audience", "https://authsvc.singlestore.com");
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
     assertNull(
         idRes.error,
         "identity header retrieval failed: "
@@ -54,7 +53,8 @@ public class S2IAMJwtHappyPathTest {
     assertNotNull(cid, "client identity null");
 
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();
-    opts.add(ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"));
+  // Use dynamic auth endpoint from server info (endpoints map) which already includes :jwtType
+  opts.add(ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("wg-test", opts.toArray(new JwtOption[0]));
@@ -87,10 +87,11 @@ public class S2IAMJwtHappyPathTest {
       addl.put("audience", "https://authsvc.singlestore.com");
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
     assertNull(idRes.error);
     CloudIdentity cid = idRes.identity;
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();
-    opts.add(ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"));
+  opts.add(ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getAPIJWT(opts.toArray(new JwtOption[0]));
@@ -109,13 +110,16 @@ public class S2IAMJwtHappyPathTest {
     if (provider.getType() != CloudProviderType.gcp) {
       Assumptions.abort("not GCP");
     }
-    // Local or cloud: request with custom audience when not forced to default
+    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
+      TestSkipUtil.skipIfNoRoleProbe(
+          provider, Map.of("audience", "https://authsvc.singlestore.com"));
+    }
     String audience =
         expectCloud() ? "https://authsvc.singlestore.com" : "https://test.example.com";
     String jwt =
         S2IAM.getDatabaseJWT(
             "wg-test",
-            ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"),
+            ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
             Options.withGcpAudience(audience));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());

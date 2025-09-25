@@ -23,12 +23,21 @@ public class S2IAMJwtErrorCasesTest {
   }
 
   private String url() {
-    return base.getBaseURL() + "/auth/iam/:jwtType";
+    return base.getEndpoints().getOrDefault("auth", base.getBaseURL() + "/auth/iam/:jwtType");
   }
 
   @Test
   void serverReturnsEmptyJWT() throws Exception {
     assumeOrSkip();
+    CloudProviderClient provider = S2IAM.detectProvider();
+    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
+      if (provider.getType() == CloudProviderType.gcp) {
+        TestSkipUtil.skipIfNoRoleProbe(
+            provider, java.util.Map.of("audience", "https://authsvc.singlestore.com"));
+      } else {
+        TestSkipUtil.skipIfNoRoleProbe(provider);
+      }
+    }
     // Start dedicated server with flag --return-empty-jwt
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
@@ -42,6 +51,15 @@ public class S2IAMJwtErrorCasesTest {
   @Test
   void serverReturnsError() throws Exception {
     assumeOrSkip();
+    CloudProviderClient provider = S2IAM.detectProvider();
+    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
+      if (provider.getType() == CloudProviderType.gcp) {
+        TestSkipUtil.skipIfNoRoleProbe(
+            provider, java.util.Map.of("audience", "https://authsvc.singlestore.com"));
+      } else {
+        TestSkipUtil.skipIfNoRoleProbe(provider);
+      }
+    }
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();

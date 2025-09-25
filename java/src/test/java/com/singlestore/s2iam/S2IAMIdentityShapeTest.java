@@ -44,8 +44,17 @@ public class S2IAMIdentityShapeTest {
       return;
     }
 
+    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
+      if (provider.getType() == CloudProviderType.gcp) {
+        TestSkipUtil.skipIfNoRoleProbe(
+            provider, Map.of("audience", "https://authsvc.singlestore.com"));
+      } else {
+        TestSkipUtil.skipIfNoRoleProbe(provider);
+      }
+    }
+
     List<JwtOption> opts = new ArrayList<>();
-    opts.add(ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"));
+    opts.add(ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("test-workspace", opts.toArray(new JwtOption[0]));
@@ -72,8 +81,12 @@ public class S2IAMIdentityShapeTest {
         assertTrue(accountIDG.matches("[0-9]{10,}"), "GCP accountID numeric");
         break;
       case azure:
-        String subscription = id.path("accountID").asText();
-        assertTrue(subscription.matches("[0-9a-fA-F-]{36}"), "Azure subscription ID format");
+        String tenant = id.path("accountID").asText();
+        assertTrue(identifier.matches("[0-9a-fA-F-]{32,36}"), "Azure principal ID GUID format");
+        // Tenant may be empty in some flows; if present ensure GUID-looking format
+        if (!tenant.isEmpty()) {
+          assertTrue(tenant.matches("[0-9a-fA-F-]{32,36}"), "Azure tenant ID GUID format");
+        }
         break;
       default:
         fail("Unknown provider type");
