@@ -6,8 +6,7 @@ import java.util.Map;
 
 public class JwtOptions extends ProviderOptions {
   public enum JWTType {
-    database,
-    api
+    database, api
   }
 
   public JWTType jwtType;

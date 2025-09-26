@@ -10,13 +10,8 @@ public class CloudIdentity {
   private final String resourceType;
   private final Map<String, String> additionalClaims;
 
-  public CloudIdentity(
-      CloudProviderType provider,
-      String identifier,
-      String accountId,
-      String region,
-      String resourceType,
-      Map<String, String> additionalClaims) {
+  public CloudIdentity(CloudProviderType provider, String identifier, String accountId,
+      String region, String resourceType, Map<String, String> additionalClaims) {
     this.provider = provider;
     this.identifier = identifier;
     this.accountId = accountId;

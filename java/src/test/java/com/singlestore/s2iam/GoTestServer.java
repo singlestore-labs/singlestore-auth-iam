@@ -17,7 +17,10 @@ import java.util.concurrent.TimeUnit;
  * info JSON file written by the server.
  */
 
-/** Lightweight manager to build and run the Go test server for integration tests. */
+/**
+ * Lightweight manager to build and run the Go test server for integration
+ * tests.
+ */
 class GoTestServer {
   private Process process;
   private int port = -1;
@@ -29,62 +32,78 @@ class GoTestServer {
   GoTestServer(Path repoRoot, String... extraFlags) {
     this.goDir = resolveGoDir(repoRoot);
     this.flags = new ArrayList<>();
-    for (String f : extraFlags) flags.add(f);
+    for (String f : extraFlags)
+      flags.add(f);
   }
 
   private Path resolveGoDir(Path start) {
     // If passed path has go/ then use it, else walk up a few levels
     Path p = start.toAbsolutePath();
     for (int i = 0; i < 4; i++) {
-      if (Files.exists(p.resolve("go").resolve("go.mod"))) return p.resolve("go");
+      if (Files.exists(p.resolve("go").resolve("go.mod")))
+        return p.resolve("go");
       p = p.getParent();
-      if (p == null) break;
+      if (p == null)
+        break;
     }
     return start.resolve("go");
   }
 
-  int getPort() { return port; }
+  int getPort() {
+    return port;
+  }
 
-  String getBaseURL() { return "http://localhost:" + port; }
+  String getBaseURL() {
+    return "http://localhost:" + port;
+  }
 
-  Map<String, String> getEndpoints() { return endpoints; }
+  Map<String, String> getEndpoints() {
+    return endpoints;
+  }
 
   void start() throws Exception {
-    if (process != null) return;
+    if (process != null)
+      return;
     if (!Files.exists(goDir.resolve("go.mod"))) {
       throw new IllegalStateException("go dir missing go.mod: " + goDir);
     }
-    // Build server binary with size-reducing flags (-s -w) and trimpath. Retry once if ENOSPC or
-    // cache corruption (.partial leftover) is detected. Avoid unconditional 'go clean' because it
-    // slows builds and can introduce transient races creating partially-downloaded modules when
+    // Build server binary with size-reducing flags (-s -w) and trimpath. Retry once
+    // if ENOSPC or
+    // cache corruption (.partial leftover) is detected. Avoid unconditional 'go
+    // clean' because it
+    // slows builds and can introduce transient races creating partially-downloaded
+    // modules when
     // multiple servers build in quick succession.
     IllegalStateException firstFailure = null;
     try {
-      run(new ProcessBuilder("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
-          .directory(goDir.toFile()));
+      run(new ProcessBuilder("go", "build", "-trimpath", "-ldflags", "-s -w", "-o",
+          "s2iam_test_server", "./cmd/s2iam_test_server").directory(goDir.toFile()));
     } catch (IllegalStateException e) {
       firstFailure = e;
       String msg = e.getMessage() == null ? "" : e.getMessage();
       if (msg.contains("no space left") || msg.contains(".partial")) {
         // Targeted cleanup then force full rebuild of all packages
         try {
-          run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
-              .directory(goDir.toFile()));
-        } catch (Exception ignored) { }
-        run(new ProcessBuilder("go", "build", "-a", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
-            .directory(goDir.toFile()));
+          run(new ProcessBuilder("go", "clean", "-cache", "-modcache").directory(goDir.toFile()));
+        } catch (Exception ignored) {
+        }
+        run(new ProcessBuilder("go", "build", "-a", "-trimpath", "-ldflags", "-s -w", "-o",
+            "s2iam_test_server", "./cmd/s2iam_test_server").directory(goDir.toFile()));
       } else {
         throw e; // Non-space issue: propagate immediately
       }
     }
     if (!Files.exists(goDir.resolve("s2iam_test_server"))) {
       // Provide context from first failure if available
-      if (firstFailure != null) throw firstFailure;
+      if (firstFailure != null)
+        throw firstFailure;
       throw new IllegalStateException("build failed - no binary (unknown reason)");
     }
-    // Prepare info file path inside goDir (avoids needing temp outside repo for simplicity)
-  // Use a unique temp info file per server instance to avoid cross-test contention
-  infoFile = Files.createTempFile(goDir, "s2iam_test_server_info", ".json");
+    // Prepare info file path inside goDir (avoids needing temp outside repo for
+    // simplicity)
+    // Use a unique temp info file per server instance to avoid cross-test
+    // contention
+    infoFile = Files.createTempFile(goDir, "s2iam_test_server_info", ".json");
 
     List<String> cmd = new ArrayList<>();
     cmd.add("./s2iam_test_server");
@@ -104,24 +123,40 @@ class GoTestServer {
     pb.redirectError(ProcessBuilder.Redirect.INHERIT);
     process = pb.start();
 
-    // Poll info file for up to 5s (aligned with Go test helper baseline)
-    long deadline = System.currentTimeMillis() + Duration.ofSeconds(5).toMillis();
+    // Poll info file for up to 10s (cloud VMs can be a bit slower, especially under
+    // load)
+    long deadline = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
     Exception lastErr = null;
     while (System.currentTimeMillis() < deadline) {
       if (!process.isAlive()) {
         throw new IllegalStateException("server exited early before writing info file");
       }
       if (Files.exists(infoFile)) {
+        // Only attempt parse if file has non-zero size (avoid transient empty-file EOF)
+        try {
+          if (Files.size(infoFile) == 0) {
+            Thread.sleep(50);
+            continue;
+          }
+        } catch (IOException ignore) {
+        }
         try {
           parseInfo();
-          if (port > 0) return; // success
+          if (port > 0)
+            return; // success
         } catch (Exception e) {
-          lastErr = e;
+          String msg = e.getMessage() == null ? "" : e.getMessage();
+          if (msg.contains("No content to map due to end-of-input")) {
+            // transient; ignore
+          } else {
+            lastErr = e;
+          }
         }
       }
       Thread.sleep(100);
     }
-    throw new IllegalStateException("timeout waiting for server info file: " + (lastErr == null ? "unknown" : lastErr.getMessage()));
+    throw new IllegalStateException("timeout waiting for server info file: "
+        + (lastErr == null ? "unknown" : lastErr.getMessage()));
   }
 
   void stop() {
@@ -132,12 +167,14 @@ class GoTestServer {
       } catch (InterruptedException ignored) {
         Thread.currentThread().interrupt();
       }
-      if (process.isAlive()) process.destroyForcibly();
+      if (process.isAlive())
+        process.destroyForcibly();
     }
   }
 
   private void run(ProcessBuilder pb) throws Exception {
-    // Capture both stdout and stderr so failures surface original command output (fail-fast rule)
+    // Capture both stdout and stderr so failures surface original command output
+    // (fail-fast rule)
     pb.redirectErrorStream(true);
     Process p = pb.start();
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
@@ -156,7 +193,8 @@ class GoTestServer {
   }
 
   private void parseInfo() throws IOException {
-    if (infoFile == null) return;
+    if (infoFile == null)
+      return;
     ObjectMapper mapper = new ObjectMapper();
     try (Reader r = Files.newBufferedReader(infoFile)) {
       InfoFile info = mapper.readValue(r, InfoFile.class);
@@ -178,6 +216,6 @@ class GoTestServer {
   @JsonIgnoreProperties(ignoreUnknown = true)
   private static class ServerInfo {
     public int port;
-    public java.util.Map<String,String> endpoints;
+    public java.util.Map<String, String> endpoints;
   }
 }

@@ -17,8 +17,8 @@ import java.util.Base64;
 import org.junit.jupiter.api.*;
 
 /**
- * Parity: validates assume-role changes identity in JWT and server log (mirrors Go
- * TestGetDatabaseJWT_AssumeRole_Valid).
+ * Parity: validates assume-role changes identity in JWT and server log (mirrors
+ * Go TestGetDatabaseJWT_AssumeRole_Valid).
  */
 public class S2IAMJwtAssumeRoleParityTest {
   static GoTestServer server;
@@ -32,13 +32,15 @@ public class S2IAMJwtAssumeRoleParityTest {
 
   @AfterAll
   static void stop() {
-    if (server != null) server.stop();
+    if (server != null)
+      server.stop();
   }
 
   @Test
   void assumeRoleDatabaseJWT() throws Exception {
     String role = System.getenv("S2IAM_TEST_ASSUME_ROLE");
-    if (role == null || role.isEmpty()) Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set");
+    if (role == null || role.isEmpty())
+      Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set");
 
     CloudProviderClient base;
     try {
@@ -50,7 +52,8 @@ public class S2IAMJwtAssumeRoleParityTest {
 
     // Original identity + JWT
     List<JwtOption> opts = new ArrayList<>();
-    opts.add(ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"));
+    opts.add(ServerUrlOption.of(
+        server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (base.getType() == CloudProviderType.gcp)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String originalJwt = S2IAM.getDatabaseJWT("test-workspace", opts.toArray(new JwtOption[0]));
@@ -62,42 +65,42 @@ public class S2IAMJwtAssumeRoleParityTest {
     // Assume role path
     List<JwtOption> assumeOpts = new ArrayList<>(opts);
     assumeOpts.add(Options.withAssumeRole(role));
-    String assumedJwt =
-        S2IAM.getDatabaseJWT("test-workspace", assumeOpts.toArray(new JwtOption[0]));
+    String assumedJwt = S2IAM.getDatabaseJWT("test-workspace",
+        assumeOpts.toArray(new JwtOption[0]));
     String assumedSub = decodeSub(assumedJwt);
     JsonNode assumedReq = fetchLastRequest();
     String assumedIdentifier = assumedReq.path("identity").path("identifier").asText();
 
-    assertNotEquals(
-        originalIdentifier, assumedIdentifier, "identity should change when assuming role");
+    assertNotEquals(originalIdentifier, assumedIdentifier,
+        "identity should change when assuming role");
     assertEquals(assumedIdentifier, assumedSub, "assumed JWT sub mismatch");
     // Basic containment: role name portion should appear in assumed identity
     String roleNameFragment = role.contains("/") ? role.substring(role.lastIndexOf('/') + 1) : role;
-    assertTrue(
-        assumedIdentifier.contains(roleNameFragment),
+    assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
   }
 
   private static JsonNode fetchLastRequest() throws Exception {
     HttpClient c = HttpClient.newHttpClient();
-    HttpResponse<String> resp =
-        c.send(
-            HttpRequest.newBuilder(URI.create(server.getBaseURL() + "/info/requests"))
-                .GET()
-                .build(),
-            HttpResponse.BodyHandlers.ofString());
-    if (resp.statusCode() != 200) return null;
+    HttpResponse<String> resp = c.send(
+        HttpRequest.newBuilder(URI.create(server.getBaseURL() + "/info/requests")).GET().build(),
+        HttpResponse.BodyHandlers.ofString());
+    if (resp.statusCode() != 200)
+      return null;
     JsonNode arr = M.readTree(resp.body());
-    if (!arr.isArray() || arr.size() == 0) return null;
+    if (!arr.isArray() || arr.size() == 0)
+      return null;
     return arr.get(arr.size() - 1);
   }
 
   private static String decodeSub(String jwt) throws Exception {
     String[] parts = jwt.split("\\.");
-    if (parts.length < 2) return null;
+    if (parts.length < 2)
+      return null;
     String payload = parts[1];
     int rem = payload.length() % 4;
-    if (rem > 0) payload += "====".substring(rem);
+    if (rem > 0)
+      payload += "====".substring(rem);
     byte[] dec = Base64.getUrlDecoder().decode(payload);
     return M.readTree(dec).path("sub").asText();
   }

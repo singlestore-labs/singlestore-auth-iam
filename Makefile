@@ -18,7 +18,7 @@ export UNIQUE_DIR
  on-remote-test on-remote-test-go on-remote-test-python on-remote-test-java \
  check-cloud-env check-host clean \
  dev-setup-ubuntu dev-setup-macos \
- dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python dev-setup-java-ubuntu \
+ dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python dev-setup-ubuntu-java dev-setup-macos-java \
  dev-setup-common \
  lint lint-go lint-python lint-java \
  format format-go format-python format-java \
@@ -51,13 +51,14 @@ help:
 	@echo "    make ssh-cleanup-remote                 Clean up remote directory on HOST"
 	@echo ""
 	@echo "Development Setup:"
-	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python)"
+	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python + Java)"
 	@echo "  make dev-setup-ubuntu-go                  Ubuntu/Debian Go toolchain + linters"
 	@echo "  make dev-setup-ubuntu-python              Ubuntu/Debian Python tooling + deps"
-	@echo "  make dev-setup-ubuntu-java               Java development tooling (OpenJDK + Maven deps)"
-	@echo "  make dev-setup-macos                      Full dev setup macOS (Go + Python)"
+	@echo "  make dev-setup-ubuntu-java               Ubuntu/Debian Java development tooling (OpenJDK + Maven deps)"
+	@echo "  make dev-setup-macos                      Full dev setup macOS (Go + Python + Java)"
 	@echo "  make dev-setup-macos-go                   macOS Go toolchain + linters"
 	@echo "  make dev-setup-macos-python               macOS Python tooling + deps"
+	@echo "  make dev-setup-macos-java                 macOS Java development tooling (Temurin/OpenJDK + Maven deps)"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint                                 Run all linters"
@@ -89,8 +90,17 @@ help:
 test: test-local
 	@echo "✓ All local tests completed"
 
-test-local: test-local-go test-local-python test-local-java
+.PHONY: test-local-patterns
+test-local-patterns:
 	! git grep -i 'jwt[ _]token'
+	@violations=$$(git grep -n 'S2IAM_TEST_' -- 'go/s2iam' 'go/internal' 'python/src' 'java/src/main' 2>/dev/null | grep -v '_test.go' | grep -v '/testhelp/' || true); \
+	 if [ -n "$$violations" ]; then \
+	   echo 'ERROR: S2IAM_TEST_ variables found in library (non-test) source:'; \
+	   echo "$$violations"; \
+	   exit 1; \
+	 fi
+
+test-local: test-local-patterns test-local-go test-local-python test-local-java
 	@echo "✓ All local tests passed"
 
 test-local-go:
@@ -150,12 +160,12 @@ on-remote-test-java: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd java && mvn -q -DskipTests=false test jacoco:report
+	cd java && mvn -q -DskipTests=false test
 
 dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-ubuntu-java
 	@echo "✓ Full Ubuntu/Debian development environment ready"
 
-dev-setup-macos: dev-setup-macos-go dev-setup-macos-python
+dev-setup-macos: dev-setup-macos-go dev-setup-macos-python dev-setup-macos-java
 	@echo "✓ Full macOS development environment ready"
 
 dev-setup-common:
@@ -198,6 +208,19 @@ dev-setup-ubuntu-java:
 	@echo "Priming Maven dependency cache (offline build support)..."
 	cd java && mvn -q -DskipTests dependency:go-offline || { echo "Maven dependency prefetch failed"; exit 1; }
 	@echo "✓ Java development environment ready"
+
+dev-setup-macos-java:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	@echo "Installing Java toolchain (Temurin 11 + Maven + Spotless deps)..."
+	brew install openjdk@11 maven || { echo "Failed to install Java tooling"; exit 1; }
+	# Ensure JAVA_HOME is set for current shell usage note
+	@echo "Add to shell profile if not present: export JAVA_HOME=\`/usr/libexec/java_home -v 11\`"
+	@echo "Priming Maven dependency cache (offline build support)..."
+	cd java && mvn -q -DskipTests dependency:go-offline || { echo "Maven dependency prefetch failed"; exit 1; }
+	@echo "✓ macOS Java development environment ready"
 
 dev-setup-macos-python:
 	@if ! command -v brew >/dev/null 2>&1; then \
@@ -329,11 +352,9 @@ ssh-download-coverage-python: check-host
 	cp ./python-coverage-$$TIMESTAMP.xml python-coverage.xml
 
 ssh-download-coverage-java: check-host
-	@echo "Downloading Java coverage from $(HOST)..."
-	TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
-	scp $(SSH_OPTS) $(HOST):$(REMOTE_BASE_DIR)/$(UNIQUE_DIR)/java/target/site/jacoco/jacoco.xml ./java-coverage-$$TIMESTAMP.xml; \
-	if [ ! -s ./java-coverage-$$TIMESTAMP.xml ]; then echo "Java coverage file empty or missing"; exit 1; fi; \
-	cp ./java-coverage-$$TIMESTAMP.xml java-coverage.xml
+	@echo "Java coverage currently disabled (jacoco plugin removed); skipping download"
+	@# Create placeholder file to make downstream tooling (if any) deterministic
+	@echo '<coverage disabled="true" />' > java-coverage.xml
 
 # Generic function to cleanup remote directory
 # CI target - cleanup remote directory

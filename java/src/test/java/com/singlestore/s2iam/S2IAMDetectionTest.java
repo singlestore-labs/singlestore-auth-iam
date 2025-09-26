@@ -19,14 +19,13 @@ public class S2IAMDetectionTest {
         expectProvider = "aws"; // assume role only currently supported for AWS
       }
     }
-    if (expectProvider == null) expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE");
+    if (expectProvider == null)
+      expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE");
     try {
       CloudProviderClient client = S2IAM.detectProvider();
       assertNotNull(client, "provider should not be null when detected");
       if (expectProvider != null) {
-        assertEquals(
-            expectProvider.toLowerCase(),
-            client.getType().name().toLowerCase(),
+        assertEquals(expectProvider.toLowerCase(), client.getType().name().toLowerCase(),
             "detected provider mismatch");
       }
     } catch (NoCloudProviderDetectedException e) {

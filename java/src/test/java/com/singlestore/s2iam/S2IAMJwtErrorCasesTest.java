@@ -19,7 +19,8 @@ public class S2IAMJwtErrorCasesTest {
 
   @AfterEach
   void stop() {
-    if (base != null) base.stop();
+    if (base != null)
+      base.stop();
   }
 
   private String url() {
@@ -32,8 +33,8 @@ public class S2IAMJwtErrorCasesTest {
     CloudProviderClient provider = S2IAM.detectProvider();
     if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
       if (provider.getType() == CloudProviderType.gcp) {
-        TestSkipUtil.skipIfNoRoleProbe(
-            provider, java.util.Map.of("audience", "https://authsvc.singlestore.com"));
+        TestSkipUtil.skipIfNoRoleProbe(provider,
+            java.util.Map.of("audience", "https://authsvc.singlestore.com"));
       } else {
         TestSkipUtil.skipIfNoRoleProbe(provider);
       }
@@ -42,9 +43,8 @@ public class S2IAMJwtErrorCasesTest {
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
     base.start();
-    S2IAMException ex =
-        assertThrows(
-            S2IAMException.class, () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url())));
+    S2IAMException ex = assertThrows(S2IAMException.class,
+        () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url())));
     assertTrue(ex.getMessage().contains("empty"));
   }
 
@@ -54,8 +54,8 @@ public class S2IAMJwtErrorCasesTest {
     CloudProviderClient provider = S2IAM.detectProvider();
     if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
       if (provider.getType() == CloudProviderType.gcp) {
-        TestSkipUtil.skipIfNoRoleProbe(
-            provider, java.util.Map.of("audience", "https://authsvc.singlestore.com"));
+        TestSkipUtil.skipIfNoRoleProbe(provider,
+            java.util.Map.of("audience", "https://authsvc.singlestore.com"));
       } else {
         TestSkipUtil.skipIfNoRoleProbe(provider);
       }
@@ -63,8 +63,8 @@ public class S2IAMJwtErrorCasesTest {
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();
-    S2IAMException ex =
-        assertThrows(S2IAMException.class, () -> S2IAM.getAPIJWT(ServerUrlOption.of(url())));
+    S2IAMException ex = assertThrows(S2IAMException.class,
+        () -> S2IAM.getAPIJWT(ServerUrlOption.of(url())));
     assertTrue(ex.getMessage().contains("500"));
   }
 

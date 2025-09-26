@@ -42,32 +42,20 @@
                     <useSystemClassLoader>true</useSystemClassLoader>
                 </configuration>
             </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>report</id>
-                        <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+            <!-- JaCoCo disabled for now: current JaCoCo version lacks support for class file version 69 (Java 25).
+                 Re-enable once JaCoCo releases a build supporting this major version. -->
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
                 <version>2.43.0</version>
                 <configuration>
                     <java>
-                        <googleJavaFormat/>
+                        <!-- Use Eclipse JDT formatter to avoid google-java-format JDK internal API breakage on newer JDKs -->
+                        <eclipse>
+                            <file>${project.basedir}/.eclipse-java-formatter.xml</file>
+                        </eclipse>
+                        <removeUnusedImports/>
+                        <endWithNewline/>
                     </java>
                 </configuration>
             </plugin>

@@ -22,8 +22,8 @@ abstract class AbstractBaseClient implements CloudProviderClient {
 
   @Override
   public IdentityHeadersResult getIdentityHeaders(Map<String, String> additionalParams) {
-    return new IdentityHeadersResult(
-        null, null, new IllegalStateException("identity retrieval not implemented"));
+    return new IdentityHeadersResult(null, null,
+        new IllegalStateException("identity retrieval not implemented"));
   }
 
   @Override

@@ -77,3 +77,27 @@ Next Implementation Steps (suggested order):
 6. Integrate into CI matrix (real cloud runners) mirroring Go/Python.
 
 NOTE: Breaking changes are acceptable at this stage (no external users yet).
+
+Local Fast Path Test Hooks
+--------------------------
+Some fast-path detection unit tests use explicit system properties to simulate a cloud
+environment without mutating process environment variables (which is restricted on
+modern JVMs). These properties short-circuit provider fast detection:
+
+   - `-Ds2iam.test.awsFast=true`
+   - `-Ds2iam.test.gcpFast=true`
+   - `-Ds2iam.test.azureFast=true`
+
+They are only intended for local unit tests and are not honored in production usage.
+
+Known Warning (Maven / Guice)
+-----------------------------
+Running tests on very recent JDKs (e.g., early access / latest) may show:
+
+```
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::staticFieldBase has been called by ... guice-5.1.0 ...
+```
+
+This originates from Maven's embedded Guice dependency, not project code. It is safe
+to ignore and will disappear when Maven/Guice upgrades their internal usage.

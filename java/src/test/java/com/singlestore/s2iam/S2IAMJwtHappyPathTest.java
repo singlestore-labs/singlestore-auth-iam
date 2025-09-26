@@ -22,7 +22,8 @@ public class S2IAMJwtHappyPathTest {
 
   @BeforeAll
   static void startServer() throws Exception {
-    // Skip entirely if running in cloud provider detection only environments lacking local build
+    // Skip entirely if running in cloud provider detection only environments
+    // lacking local build
     // tools? assume go present.
     Path here = Path.of(".").toAbsolutePath();
     server = new GoTestServer(here);
@@ -31,7 +32,8 @@ public class S2IAMJwtHappyPathTest {
 
   @AfterAll
   static void stopServer() {
-    if (server != null) server.stop();
+    if (server != null)
+      server.stop();
   }
 
   @Test
@@ -45,16 +47,16 @@ public class S2IAMJwtHappyPathTest {
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
     TestSkipUtil.skipIfNoRole(provider, idRes);
-    assertNull(
-        idRes.error,
-        "identity header retrieval failed: "
-            + (idRes.error == null ? "" : idRes.error.getMessage()));
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
     CloudIdentity cid = idRes.identity;
     assertNotNull(cid, "client identity null");
 
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();
-  // Use dynamic auth endpoint from server info (endpoints map) which already includes :jwtType
-  opts.add(ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
+    // Use dynamic auth endpoint from server info (endpoints map) which already
+    // includes :jwtType
+    opts.add(ServerUrlOption.of(
+        server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("wg-test", opts.toArray(new JwtOption[0]));
@@ -66,9 +68,7 @@ public class S2IAMJwtHappyPathTest {
     JsonNode lastReq = fetchLastRequest();
     assertNotNull(lastReq, "server request log empty");
     JsonNode identity = lastReq.path("identity");
-    assertEquals(
-        cid.getIdentifier(),
-        identity.path("identifier").asText(),
+    assertEquals(cid.getIdentifier(), identity.path("identifier").asText(),
         "client/server identifier mismatch");
     assertEquals(cid.getProvider().name(), identity.path("provider").asText());
 
@@ -91,7 +91,8 @@ public class S2IAMJwtHappyPathTest {
     assertNull(idRes.error);
     CloudIdentity cid = idRes.identity;
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();
-  opts.add(ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
+    opts.add(ServerUrlOption.of(
+        server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getAPIJWT(opts.toArray(new JwtOption[0]));
@@ -111,35 +112,32 @@ public class S2IAMJwtHappyPathTest {
       Assumptions.abort("not GCP");
     }
     if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
-      TestSkipUtil.skipIfNoRoleProbe(
-          provider, Map.of("audience", "https://authsvc.singlestore.com"));
+      TestSkipUtil.skipIfNoRoleProbe(provider,
+          Map.of("audience", "https://authsvc.singlestore.com"));
     }
-    String audience =
-        expectCloud() ? "https://authsvc.singlestore.com" : "https://test.example.com";
-    String jwt =
-        S2IAM.getDatabaseJWT(
-            "wg-test",
-            ServerUrlOption.of(server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
-            Options.withGcpAudience(audience));
+    String audience = expectCloud()
+        ? "https://authsvc.singlestore.com"
+        : "https://test.example.com";
+    String jwt = S2IAM.getDatabaseJWT("wg-test",
+        ServerUrlOption.of(
+            server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
+        Options.withGcpAudience(audience));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
   }
 
   @Test
   void missingWorkspaceGroupId() {
-    S2IAMException ex =
-        assertThrows(
-            S2IAMException.class,
-            () ->
-                S2IAM.getDatabaseJWT(
-                    "", ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType")));
+    S2IAMException ex = assertThrows(S2IAMException.class, () -> S2IAM.getDatabaseJWT("",
+        ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType")));
     assertTrue(ex.getMessage().contains("workspaceGroupId"));
   }
 
   private void assumeOrSkip() throws Exception {
     boolean expectCloud = expectCloud();
     try {
-      // Quick detection attempt; if it fails and not expecting cloud, abort test via Assumptions
+      // Quick detection attempt; if it fails and not expecting cloud, abort test via
+      // Assumptions
       S2IAM.detectProvider();
     } catch (NoCloudProviderDetectedException e) {
       if (expectCloud) {
@@ -161,19 +159,23 @@ public class S2IAMJwtHappyPathTest {
     HttpClient c = HttpClient.newHttpClient();
     HttpRequest r = HttpRequest.newBuilder(URI.create(url)).GET().build();
     HttpResponse<String> resp = c.send(r, HttpResponse.BodyHandlers.ofString());
-    if (resp.statusCode() != 200) return null;
+    if (resp.statusCode() != 200)
+      return null;
     JsonNode arr = M.readTree(resp.body());
-    if (!arr.isArray() || arr.size() == 0) return null;
+    if (!arr.isArray() || arr.size() == 0)
+      return null;
     return arr.get(arr.size() - 1);
   }
 
   private String decodeSub(String jwt) throws Exception {
     String[] parts = jwt.split("\\.");
-    if (parts.length < 2) return null;
+    if (parts.length < 2)
+      return null;
     String payload = parts[1];
     // Pad base64url if needed
     int rem = payload.length() % 4;
-    if (rem > 0) payload += "====".substring(rem);
+    if (rem > 0)
+      payload += "====".substring(rem);
     byte[] decoded = Base64.getUrlDecoder().decode(payload);
     JsonNode node = M.readTree(decoded);
     return node.path("sub").asText();

@@ -4,7 +4,8 @@ import com.singlestore.s2iam.CloudProviderClient;
 import java.time.Duration;
 
 public final class Options {
-  private Options() {}
+  private Options() {
+  }
 
   public static JwtOption withServerUrl(String url) {
     return o -> o.serverUrl = url;
