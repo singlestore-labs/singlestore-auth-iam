@@ -54,23 +54,23 @@ class GoTestServer {
     if (!Files.exists(goDir.resolve("go.mod"))) {
       throw new IllegalStateException("go dir missing go.mod: " + goDir);
     }
-    // Attempt to free space on constrained hosts (NOOP if cache dirs absent)
-    try {
-      run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
-          .directory(goDir.toFile()));
-    } catch (Exception ignored) { /* best-effort */ }
-
-    // Build server binary with size-reducing flags (-s -w) and trimpath. Retry once if ENOSPC.
+    // Build server binary with size-reducing flags (-s -w) and trimpath. Retry once if ENOSPC or
+    // cache corruption (.partial leftover) is detected. Avoid unconditional 'go clean' because it
+    // slows builds and can introduce transient races creating partially-downloaded modules when
+    // multiple servers build in quick succession.
     IllegalStateException firstFailure = null;
     try {
       run(new ProcessBuilder("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
           .directory(goDir.toFile()));
     } catch (IllegalStateException e) {
       firstFailure = e;
-      if (e.getMessage() != null && e.getMessage().contains("no space left")) {
-        // Aggressive cleanup then force rebuild of all packages
-        try { run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
-            .directory(goDir.toFile())); } catch (Exception ignored) {}
+      String msg = e.getMessage() == null ? "" : e.getMessage();
+      if (msg.contains("no space left") || msg.contains(".partial")) {
+        // Targeted cleanup then force full rebuild of all packages
+        try {
+          run(new ProcessBuilder("go", "clean", "-cache", "-modcache")
+              .directory(goDir.toFile()));
+        } catch (Exception ignored) { }
         run(new ProcessBuilder("go", "build", "-a", "-trimpath", "-ldflags", "-s -w", "-o", "s2iam_test_server", "./cmd/s2iam_test_server")
             .directory(goDir.toFile()));
       } else {
