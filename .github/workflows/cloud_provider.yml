@@ -1,10 +1,10 @@
 name: Cloud Provider Tests
 
-on:
-  push:
-    branches: [ main ]
+on: 
   pull_request:
-    branches: [ "**" ]
+    branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read

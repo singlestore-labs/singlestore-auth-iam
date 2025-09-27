@@ -2,9 +2,9 @@ name: java
 
 on:
   push:
-    branches: [ main, addJava ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, addJava ]
+    branches: [ main ]
 
 jobs:
   build-test-coverage:
