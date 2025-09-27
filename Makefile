@@ -160,7 +160,9 @@ on-remote-test-java: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd java && mvn -q -DskipTests=false test
+	cd java && mvn -q -DskipTests=false verify
+	# Copy JaCoCo XML up one level for remote retrieval naming consistency
+	@if [ -f java/target/site/jacoco/jacoco.xml ]; then cp java/target/site/jacoco/jacoco.xml java-coverage.xml || true; fi
 
 dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-ubuntu-java
 	@echo "✓ Full Ubuntu/Debian development environment ready"
@@ -352,9 +354,11 @@ ssh-download-coverage-python: check-host
 	cp ./python-coverage-$$TIMESTAMP.xml python-coverage.xml
 
 ssh-download-coverage-java: check-host
-	@echo "Java coverage currently disabled (jacoco plugin removed); skipping download"
-	@# Create placeholder file to make downstream tooling (if any) deterministic
-	@echo '<coverage disabled="true" />' > java-coverage.xml
+	@echo "Downloading Java coverage from $(HOST)..."
+	TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
+	scp $(SSH_OPTS) $(HOST):$(REMOTE_BASE_DIR)/$(UNIQUE_DIR)/java/java-coverage.xml ./java-coverage-$$TIMESTAMP.xml || scp $(SSH_OPTS) $(HOST):$(REMOTE_BASE_DIR)/$(UNIQUE_DIR)/java/target/site/jacoco/jacoco.xml ./java-coverage-$$TIMESTAMP.xml; \
+	if [ ! -s ./java-coverage-$$TIMESTAMP.xml ]; then echo "Java coverage file empty or missing"; exit 1; fi; \
+	cp ./java-coverage-$$TIMESTAMP.xml java-coverage.xml
 
 # Generic function to cleanup remote directory
 # CI target - cleanup remote directory

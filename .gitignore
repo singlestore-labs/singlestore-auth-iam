@@ -157,11 +157,25 @@ Thumbs.db
 .temporary/
 
 # Notes and personal files
-notes
-*.local
 
 # local evelopment-specific copilot instructions 
 .github/copilot-dev-guide.md
 
 # Python-specific excludes
 python/LICENSE
+
+# === Project-specific ephemeral artifacts ===
+*-log
+
+# Coverage artifacts aggregated locally after remote download
+go-coverage.out
+python-coverage.xml
+java-coverage.xml
+
+# JaCoCo & Maven build outputs (Maven target/ already indirectly covered for python target but add explicit java target)
+java/target/
+
+# Prevent committing per-run timestamped coverage copies (pattern from Makefile downloads)
+go-coverage-*.out
+python-coverage-*.xml
+java-coverage-*.xml

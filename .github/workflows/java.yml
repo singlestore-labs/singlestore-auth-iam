@@ -1,0 +1,48 @@
+name: java
+
+on:
+  push:
+    branches: [ main, addJava ]
+  pull_request:
+    branches: [ main, addJava ]
+
+jobs:
+  build-test-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Lint / formatting check
+        run: make lint-java
+
+      - name: Run tests with coverage (mvn verify)
+        working-directory: java
+        run: mvn -q -DskipTests=false verify
+
+      - name: Show coverage summary
+        if: always()
+        run: |
+          if [ -f java/target/site/jacoco/index.html ]; then
+            echo "JaCoCo report generated"
+          fi
+          if [ -f java/target/site/jacoco/jacoco.xml ]; then
+            grep -q '<report' java/target/site/jacoco/jacoco.xml && echo "jacoco.xml present"
+          fi
+
+      - name: Upload Java coverage to Codecov
+        uses: codecov/codecov-action@v5.4.3
+        with:
+          files: java/target/site/jacoco/jacoco.xml
+          flags: java
+          fail_ci_if_error: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

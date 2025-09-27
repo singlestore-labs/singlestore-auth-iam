@@ -105,6 +105,8 @@ jobs:
         set -euox pipefail
         make ssh-copy-to-remote
         make ssh-run-remote-tests TEST_TARGET=on-remote-test
+        # Run Java cloud tests (separate target) – fail fast if they fail
+        make ssh-run-remote-tests TEST_TARGET=on-remote-test-java
         make ssh-download-coverage
         ls -la go-coverage.out python-coverage.xml
 
@@ -130,6 +132,16 @@ jobs:
         flags: python,${{ matrix.name }}
         fail_ci_if_error: true
         name: ${{ matrix.name }}-python-coverage
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload Java coverage to Codecov
+      uses: codecov/codecov-action@v5.4.3
+      with:
+        files: ./java-coverage.xml
+        flags: java,${{ matrix.name }}
+        fail_ci_if_error: true
+        name: ${{ matrix.name }}-java-coverage
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
