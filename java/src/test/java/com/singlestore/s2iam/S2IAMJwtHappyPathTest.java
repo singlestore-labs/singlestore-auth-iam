@@ -47,6 +47,7 @@ public class S2IAMJwtHappyPathTest {
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
     TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
     assertNull(idRes.error, "identity header retrieval failed: "
         + (idRes.error == null ? "" : idRes.error.getMessage()));
     CloudIdentity cid = idRes.identity;
@@ -88,6 +89,7 @@ public class S2IAMJwtHappyPathTest {
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
     TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
     assertNull(idRes.error);
     CloudIdentity cid = idRes.identity;
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();

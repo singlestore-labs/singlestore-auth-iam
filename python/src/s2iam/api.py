@@ -49,7 +49,9 @@ async def detect_provider(
     Raises:
         CloudProviderNotFound: If no provider can be detected
     """
-    # Set up logger if debugging is enabled
+    # Set up logger only if explicit debugging flag is set; production code must not branch
+    # on test harness-only environment variables. Rich diagnostics are instead
+    # surfaced via aggregated exception messages below.
     debugging = os.environ.get("S2IAM_DEBUGGING") == "true"
     if logger is None and debugging:
         logger = DefaultLogger()
@@ -151,4 +153,11 @@ async def detect_provider(
                 f"DETECT_COMPLETE status=timeout total_elapsed_ms={total_elapsed_ms} "
                 f"timeout_s={timeout} errors='{joined_errors}'"
             )
-        raise CloudProviderNotFound(f"Provider detection timed out after {timeout}s")
+        # Always include condensed error summaries in the exception to aid post‑mortem even when
+        # debugging/logger was not enabled at start (errors still collected).
+        joined_errors = " | ".join(all_errors)[:800] if all_errors else "<no-provider-errors>"
+        meta = (
+            f"timeout_s={timeout} total_elapsed_ms={total_elapsed_ms} "
+            f"providers={len(clients)} error_count={len(all_errors)}"
+        )
+        raise CloudProviderNotFound(f"Provider detection timed out: {meta} errors=[{joined_errors}]")

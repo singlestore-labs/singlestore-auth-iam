@@ -16,6 +16,8 @@ final class TestSkipUtil {
   }
 
   private static final String ENV_NO_ROLE = "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE";
+  private static final String ENV_EXPECT = "S2IAM_TEST_CLOUD_PROVIDER";
+  private static final String ENV_ASSUME = "S2IAM_TEST_ASSUME_ROLE";
 
   static void skipIfNoRole(CloudProviderClient provider,
       CloudProviderClient.IdentityHeadersResult res) {
@@ -44,6 +46,32 @@ final class TestSkipUtil {
         break;
       default :
         // future providers: fall through
+    }
+  }
+
+  /**
+   * Skip when running on an Azure host without managed identity (MI 400/403/404)
+   * in a job that is NOT explicitly a cloud test (no expectation env vars). This
+   * occurs on generic GitHub-hosted runners (Azure VM without MI). We treat this
+   * as equivalent to "no cloud provider detected" for identity-bearing tests.
+   * Real cloud test jobs always set one of the expectation env vars and therefore
+   * won't skip here; they should provision MI or use *_NO_ROLE env to trigger the
+   * other skip path.
+   */
+  static void skipIfAzureMIUnavailable(CloudProviderClient provider,
+      CloudProviderClient.IdentityHeadersResult res) {
+    if (provider.getType() != CloudProviderType.azure)
+      return;
+    if (System.getenv(ENV_EXPECT) != null || System.getenv(ENV_ASSUME) != null
+        || System.getenv(ENV_NO_ROLE) != null) {
+      return; // Cloud test run; let normal logic handle failures / skips
+    }
+    if (res == null || res.error == null)
+      return;
+    String msg = String.valueOf(res.error.getMessage());
+    if (containsAny(msg, "failed to get Azure MI token status=400",
+        "failed to get Azure MI token status=403", "failed to get Azure MI token status=404")) {
+      Assumptions.abort("Azure MI unavailable on shared runner (treat as no identity)");
     }
   }
 

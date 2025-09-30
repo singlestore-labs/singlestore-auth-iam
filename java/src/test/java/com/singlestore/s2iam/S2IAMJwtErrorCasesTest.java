@@ -39,6 +39,10 @@ public class S2IAMJwtErrorCasesTest {
         TestSkipUtil.skipIfNoRoleProbe(provider);
       }
     }
+    // For generic non-cloud CI runners (Azure host w/o MI) abort identity-bearing
+    // tests.
+    TestSkipUtil.skipIfAzureMIUnavailable(provider,
+        provider.getIdentityHeaders(java.util.Collections.emptyMap()));
     // Start dedicated server with flag --return-empty-jwt
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
@@ -60,6 +64,8 @@ public class S2IAMJwtErrorCasesTest {
         TestSkipUtil.skipIfNoRoleProbe(provider);
       }
     }
+    TestSkipUtil.skipIfAzureMIUnavailable(provider,
+        provider.getIdentityHeaders(java.util.Collections.emptyMap()));
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();
