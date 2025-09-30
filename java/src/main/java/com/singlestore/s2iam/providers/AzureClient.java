@@ -8,7 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
+// retained for interface but use Timeouts constants
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -38,14 +38,43 @@ public class AzureClient extends AbstractBaseClient {
     if (System.getenv("AZURE_FEDERATED_TOKEN_FILE") != null || System.getenv("MSI_ENDPOINT") != null
         || System.getenv("IDENTITY_ENDPOINT") != null)
       return null;
-    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
     try {
       HttpRequest req = HttpRequest
           .newBuilder(URI.create("http://169.254.169.254/metadata/instance?api-version=2021-02-01"))
-          .header("Metadata", "true").timeout(Duration.ofSeconds(2)).GET().build();
+          .header("Metadata", "true").timeout(Timeouts.DETECT).GET().build();
       HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
-      if (resp.statusCode() == 200)
-        return null;
+      if (resp.statusCode() == 200) {
+        // We are on an Azure instance (instance metadata reachable). Managed Identity
+        // endpoint availability is optional: NO_ROLE scenarios disable MI and return
+        // 400/403/404. Treat those as valid Azure detection (identity acquisition
+        // will later error / skip appropriately when headers are requested).
+        try {
+          HttpRequest miReq = HttpRequest.newBuilder(URI.create(
+              "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/"))
+              .header("Metadata", "true").timeout(Timeouts.DETECT).GET().build();
+          HttpResponse<Void> miResp = client.send(miReq, HttpResponse.BodyHandlers.discarding());
+          int sc = miResp.statusCode();
+          if (sc == 200) {
+            return null; // full Azure with MI
+          }
+          if (sc == 400 || sc == 403 || sc == 404) {
+            // Azure without usable MI (e.g., no system/user assigned identity). Still
+            // Azure.
+            return null;
+          }
+          // For other status codes (e.g., 500), conservatively still accept Azure
+          // presence
+          // since instance metadata responded OK. Identity calls will surface errors
+          // later.
+          return null;
+        } catch (IOException | InterruptedException e) {
+          Thread.currentThread().interrupt();
+          // Instance metadata was reachable; MI probe failed due to transient issue.
+          // Accept detection; identity retrieval will handle errors.
+          return null;
+        }
+      }
     } catch (IOException | InterruptedException e) {
       Thread.currentThread().interrupt();
       return e;
@@ -73,10 +102,10 @@ public class AzureClient extends AbstractBaseClient {
         "https://management.azure.com/");
     String url = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource="
         + resource;
-    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata", "true")
-          .timeout(Duration.ofSeconds(3)).GET().build();
+          .timeout(Timeouts.IDENTITY).GET().build();
       HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
       if (resp.statusCode() != 200 || resp.body().isEmpty()) {
         return new IdentityHeadersResult(null, null,
@@ -148,7 +177,7 @@ public class AzureClient extends AbstractBaseClient {
           HttpRequest instReq = HttpRequest
               .newBuilder(
                   URI.create("http://169.254.169.254/metadata/instance?api-version=2021-02-01"))
-              .header("Metadata", "true").timeout(Duration.ofSeconds(2)).GET().build();
+              .header("Metadata", "true").timeout(Timeouts.SECONDARY).GET().build();
           HttpResponse<String> instResp = client.send(instReq,
               HttpResponse.BodyHandlers.ofString());
           if (instResp.statusCode() == 200) {

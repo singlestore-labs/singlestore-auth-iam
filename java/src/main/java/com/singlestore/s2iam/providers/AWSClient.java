@@ -6,7 +6,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
+// use Timeouts constants
 import java.util.HashMap;
 import java.util.Map;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
@@ -51,10 +51,10 @@ public class AWSClient extends AbstractBaseClient {
       if (System.getenv(e) != null && !System.getenv(e).isEmpty())
         return null;
 
-    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
     try {
       HttpRequest tokenReq = HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/api/token"))
-          .timeout(Duration.ofSeconds(2)).header("X-aws-ec2-metadata-token-ttl-seconds", "60")
+          .timeout(Timeouts.DETECT).header("X-aws-ec2-metadata-token-ttl-seconds", "60")
           .method("PUT", HttpRequest.BodyPublishers.noBody()).build();
       HttpResponse<String> tokenResp = client.send(tokenReq, HttpResponse.BodyHandlers.ofString());
       if (tokenResp.statusCode() == 200)
@@ -63,7 +63,7 @@ public class AWSClient extends AbstractBaseClient {
     }
     try {
       HttpRequest req = HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/meta-data/"))
-          .timeout(Duration.ofSeconds(2)).GET().build();
+          .timeout(Timeouts.DETECT).GET().build();
       HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
       if (resp.statusCode() == 200)
         return null;

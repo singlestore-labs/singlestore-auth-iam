@@ -8,5 +8,5 @@ import java.util.List;
 public class ProviderOptions {
   public Logger logger;
   public List<CloudProviderClient> clients;
-  public Duration timeout = Duration.ofSeconds(5);
+  public Duration timeout = Duration.ofSeconds(15);
 }

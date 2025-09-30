@@ -6,6 +6,7 @@ import asyncio
 import os
 import queue
 import threading
+import time
 from typing import Optional
 
 from .aws import new_client as new_aws_client
@@ -49,7 +50,8 @@ async def detect_provider(
         CloudProviderNotFound: If no provider can be detected
     """
     # Set up logger if debugging is enabled
-    if logger is None and os.environ.get("S2IAM_DEBUGGING") == "true":
+    debugging = os.environ.get("S2IAM_DEBUGGING") == "true"
+    if logger is None and debugging:
         logger = DefaultLogger()
 
     # Create default clients if none provided
@@ -84,7 +86,9 @@ async def detect_provider(
         """Test a provider in a thread (like Go goroutine)."""
         if stop_event.is_set():
             return
-
+        thread_start = time.monotonic()
+        if logger and debugging:
+            logger.log(f"DETECT_THREAD_START provider={client.get_type().value} " f"timeout_s={timeout}")
         try:
             # Run the async detect() in this thread's event loop
             loop = asyncio.new_event_loop()
@@ -95,13 +99,19 @@ async def detect_provider(
                 if not stop_event.is_set():
                     result_queue.put(client)
                     stop_event.set()  # Signal other threads to stop
+                if logger and debugging:
+                    elapsed_ms = int((time.monotonic() - thread_start) * 1000)
+                    logger.log(f"DETECT_THREAD_SUCCESS provider={client.get_type().value} " f"elapsed_ms={elapsed_ms}")
             finally:
                 loop.close()
         except Exception as e:
             with errors_lock:
                 all_errors.append(f"Provider {client.get_type().value} detection failed: {e}")
             if logger:
-                logger.log(f"Provider {client.get_type().value} detection failed: {e}")
+                elapsed_ms = int((time.monotonic() - thread_start) * 1000)
+                logger.log(
+                    f"DETECT_THREAD_ERROR provider={client.get_type().value} " f"elapsed_ms={elapsed_ms} error={e}"
+                )
 
     # Start threads for each provider (like Go goroutines)
     threads = []
@@ -112,12 +122,20 @@ async def detect_provider(
         threads.append(thread)
 
     # Wait for first result or timeout (like Go select)
+    detection_start = time.monotonic()
     try:
         result: CloudProviderClient = result_queue.get(timeout=timeout)
         stop_event.set()  # Ensure all threads stop
+        total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
 
         if logger:
-            logger.log(f"Detected provider: {result.get_type().value}")
+            if debugging:
+                logger.log(
+                    f"DETECT_COMPLETE status=success provider={result.get_type().value} "
+                    f"total_elapsed_ms={total_elapsed_ms}"
+                )
+            else:
+                logger.log(f"Detected provider: {result.get_type().value}")
         return result
 
     except queue.Empty:
@@ -125,4 +143,12 @@ async def detect_provider(
         stop_event.set()
         for thread in threads:
             thread.join(timeout=0.05)
+        total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
+        if logger and debugging:
+            # Collate errors into single line (avoid multi-line spam); length guard.
+            joined_errors = " | ".join(all_errors)[:800]
+            logger.log(
+                f"DETECT_COMPLETE status=timeout total_elapsed_ms={total_elapsed_ms} "
+                f"timeout_s={timeout} errors='{joined_errors}'"
+            )
         raise CloudProviderNotFound(f"Provider detection timed out after {timeout}s")

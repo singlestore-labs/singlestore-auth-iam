@@ -135,7 +135,7 @@ ifndef HOST
 endif
 
 on-remote-completed: 
-	@echo "✓ All tests completed successfully"
+	@echo "ALL_TESTS_COMPLETED_OK"
 
 # Cloud test targets (designed to run ON cloud VMs)
 on-remote-test: check-cloud-env on-remote-test-java on-remote-test-go on-remote-test-python
@@ -325,7 +325,7 @@ ssh-run-remote-tests: check-host
 	ssh $(SSH_OPTS) $(HOST) \
 		"cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && env $(ENV_VARS) make $(TEST_TARGET) on-remote-completed" \
 		2>&1 | tee $(HOST)-log
-	@if grep -q "✓ All tests completed successfully" $(HOST)-log; then \
+	@if grep -q "ALL_TESTS_COMPLETED_OK" $(HOST)-log; then \
 		echo "✓ Remote tests passed on $(HOST)"; \
 	else \
 		echo "✗ Remote tests failed on $(HOST) - check $(HOST)-log"; \

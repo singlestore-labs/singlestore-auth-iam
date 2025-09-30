@@ -97,7 +97,7 @@ public final class S2IAM {
       }
     }
 
-    Duration timeout = po.timeout == null ? Duration.ofSeconds(5) : po.timeout;
+    Duration timeout = po.timeout == null ? Duration.ofSeconds(15) : po.timeout;
     if (debug && po.logger != null) {
       po.logger.logf("detectProvider: entering concurrent detect phase timeoutMs=%d",
           timeout.toMillis());
@@ -132,7 +132,13 @@ public final class S2IAM {
         Future<CloudProviderClient> f = cs.poll(remainingMs, TimeUnit.MILLISECONDS);
         if (f == null)
           break; // timeout
-        return f.get();
+        CloudProviderClient found = f.get();
+        // Cancel any still-running detection tasks to avoid waiting on other providers
+        for (Future<CloudProviderClient> other : futures) {
+          if (!other.isDone())
+            other.cancel(true);
+        }
+        return found;
       } catch (ExecutionException ee) {
         errors.add(ee.getCause());
         if (debug && po.logger != null) {

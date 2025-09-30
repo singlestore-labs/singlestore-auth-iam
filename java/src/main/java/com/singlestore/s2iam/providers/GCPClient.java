@@ -6,7 +6,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
+// use Timeouts constants
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -44,10 +44,12 @@ public class GCPClient extends AbstractBaseClient {
         "http://169.254.169.254/computeMetadata/v1/instance/id"};
     Exception firstErr = null;
     for (String ep : endpoints) {
-      HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+      // Use shorter detection timeout to ensure combined probes finish within global
+      // detect window.
+      HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
       try {
         HttpRequest req = HttpRequest.newBuilder(URI.create(ep)).header("Metadata-Flavor", "Google")
-            .timeout(Duration.ofSeconds(3)).GET().build();
+            .timeout(Timeouts.DETECT).GET().build();
         long start = System.nanoTime();
         HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
         long durMs = (System.nanoTime() - start) / 1_000_000L;
@@ -105,12 +107,12 @@ public class GCPClient extends AbstractBaseClient {
     String audience = additionalParams.getOrDefault("audience", "https://authsvc.singlestore.com/");
     if (audience.endsWith("/"))
       audience = audience.substring(0, audience.length() - 1);
-    HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
       String url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
           + audience + "&format=full";
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
-          .timeout(Duration.ofSeconds(3)).GET().build();
+          .timeout(Timeouts.IDENTITY).GET().build();
       HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
       if (resp.statusCode() != 200 || resp.body().isEmpty()) {
         // For NO_ROLE scenario (no service account), metadata returns 404. Expose

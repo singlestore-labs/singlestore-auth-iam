@@ -20,8 +20,7 @@ public class FastPathDetectionTest {
 
   @Test
   void fastPathAWSViaEnv() throws Exception {
-    if (isCloudEnv())
-      Assumptions.abort("local-only fast path test");
+    Assumptions.assumeFalse(isCloudEnv(), "local-only fast path test");
     // simulate fast path via dedicated system property hook
     System.setProperty("s2iam.test.awsFast", "true");
     try {
@@ -36,8 +35,7 @@ public class FastPathDetectionTest {
 
   @Test
   void fastPathGCPViaCredentials() throws Exception {
-    if (isCloudEnv())
-      Assumptions.abort("local-only fast path test");
+    Assumptions.assumeFalse(isCloudEnv(), "local-only fast path test");
     System.setProperty("s2iam.test.gcpFast", "true");
     try {
       CloudProviderClient c = S2IAM.detectProvider();
@@ -51,8 +49,7 @@ public class FastPathDetectionTest {
 
   @Test
   void fastPathAzureViaFederatedToken() throws Exception {
-    if (isCloudEnv())
-      Assumptions.abort("local-only fast path test");
+    Assumptions.assumeFalse(isCloudEnv(), "local-only fast path test");
     System.setProperty("s2iam.test.azureFast", "true");
     try {
       CloudProviderClient c = S2IAM.detectProvider();

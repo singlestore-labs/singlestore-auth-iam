@@ -77,6 +77,16 @@ class GCPClient(CloudProviderClient):
         loop = asyncio.get_event_loop()
         start = loop.time()
         metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/id"
+        per_attempt_timeout = 3  # seconds (matches aiohttp ClientTimeout total)
+        env_hint = "GCE_METADATA_HOST=set" if os.environ.get("GCE_METADATA_HOST") else "GCE_METADATA_HOST=unset"
+        cred_hint = (
+            "GOOGLE_APPLICATION_CREDENTIALS=external_account"
+            if (
+                os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                and os.path.isfile(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""))
+            )
+            else "GOOGLE_APPLICATION_CREDENTIALS=unset_or_non_external"
+        )
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
                 async with session.get(metadata_url, headers={"Metadata-Flavor": "Google"}) as response:  # noqa: S310
@@ -98,11 +108,13 @@ class GCPClient(CloudProviderClient):
                 category = "connect"
             else:
                 category = "other"
-            self._log(f"Metadata probe failed (elapsed={elapsed_ms}ms category={category}): {msg}")
-            raise Exception(
-                "Not running on GCP: metadata service unavailable (single attempt to 169.254.169.254 failed): "
-                + f"{msg}"
+            diag = (
+                "Not running on GCP: metadata probe failed; "
+                f"elapsed_ms={elapsed_ms} category={category} timeout_s={per_attempt_timeout} "
+                f"env=[{env_hint} {cred_hint}] exception_type={type(e).__name__} detail={msg}"
             )
+            self._log(diag)
+            raise Exception(diag)
 
         raise Exception(
             "Not running on GCP: no environment variable, metadata service, or default credentials detected"
