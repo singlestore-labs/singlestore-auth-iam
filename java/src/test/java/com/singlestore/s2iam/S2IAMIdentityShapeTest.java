@@ -54,6 +54,25 @@ public class S2IAMIdentityShapeTest {
       }
     }
 
+    // Preflight identity retrieval so we can apply skip logic (NO_ROLE / Azure MI
+    // unavailable)
+    // before invoking S2IAM.getDatabaseJWT (which would otherwise fail with an MI
+    // 400 on
+    // generic Azure-hosted runners lacking managed identity). Mirrors logic in
+    // S2IAMJwtHappyPathTest.
+    Map<String, String> addl = new HashMap<>();
+    boolean expectCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
+        || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
+        || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
+    if (provider.getType() == CloudProviderType.gcp && expectCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
+    }
+    CloudProviderClient.IdentityHeadersResult preflight = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, preflight);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, preflight);
+    assertNull(preflight.error, "identity header retrieval failed: "
+        + (preflight.error == null ? "" : preflight.error.getMessage()));
+
     List<JwtOption> opts = new ArrayList<>();
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
