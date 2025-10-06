@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.*;
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import com.singlestore.s2iam.exceptions.S2IAMException;
 import com.singlestore.s2iam.options.JwtOption;
-import com.singlestore.s2iam.options.Options; // for withGcpAudience
+import com.singlestore.s2iam.options.Options; // for withAudience
 import com.singlestore.s2iam.options.ServerUrlOption;
 import java.net.*;
 import java.net.http.*;
@@ -59,7 +59,7 @@ public class S2IAMJwtHappyPathTest {
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
-      opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
+      opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("wg-test", opts.toArray(new JwtOption[0]));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
@@ -96,7 +96,7 @@ public class S2IAMJwtHappyPathTest {
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp && realCloud)
-      opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
+      opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getAPIJWT(opts.toArray(new JwtOption[0]));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
@@ -123,7 +123,7 @@ public class S2IAMJwtHappyPathTest {
     String jwt = S2IAM.getDatabaseJWT("wg-test",
         ServerUrlOption.of(
             server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
-        Options.withGcpAudience(audience));
+        Options.withAudience(audience));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
   }

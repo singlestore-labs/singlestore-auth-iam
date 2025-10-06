@@ -7,9 +7,10 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Parity test: when S2IAM_TEST_ASSUME_ROLE is set we must both detect the cloud
- * provider and successfully assume the specified role. Mirrors Go test
- * expectations (fail-fast instead of skip).
+ * When S2IAM_TEST_ASSUME_ROLE is set we must detect the cloud provider and
+ * successfully assume the specified role (fail-fast; do not skip). This
+ * validates the direct assumeRole() path (identity headers only) separate from
+ * JWT issuance tests.
  */
 public class S2IAMAssumeRoleTest {
 
@@ -17,7 +18,7 @@ public class S2IAMAssumeRoleTest {
   void testAssumeRoleMustSucceedWhenEnvSet() {
     String roleArn = System.getenv("S2IAM_TEST_ASSUME_ROLE");
     if (roleArn == null || roleArn.isEmpty()) {
-      Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set - skipping assume role parity test");
+      Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set - skipping assumeRole test");
     }
     CloudProviderClient base;
     try {

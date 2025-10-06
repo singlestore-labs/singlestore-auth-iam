@@ -77,7 +77,7 @@ public class S2IAMIdentityShapeTest {
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
     if (provider.getType() == CloudProviderType.gcp)
-      opts.add(Options.withGcpAudience("https://authsvc.singlestore.com"));
+      opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("test-workspace", opts.toArray(new JwtOption[0]));
     assertNotNull(jwt);
     String sub = decodeSub(jwt);
