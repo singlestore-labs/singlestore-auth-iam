@@ -10,6 +10,9 @@ import java.net.http.HttpResponse;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+// Avoid relying on private mapper in S2IAM; keep a local mapper instance.
 
 public class GCPClient extends AbstractBaseClient {
   public GCPClient(Logger logger) {
@@ -37,55 +40,43 @@ public class GCPClient extends AbstractBaseClient {
         || System.getenv("GCE_METADATA_HOST") != null)
       return null;
     boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING")) && logger != null;
-    // Metadata probing: attempt both hostname and link-local IP; some hardened
-    // images may only allow one.
-    String[] endpoints = new String[]{
-        "http://metadata.google.internal/computeMetadata/v1/instance/id",
-        "http://169.254.169.254/computeMetadata/v1/instance/id"};
-    Exception firstErr = null;
-    for (String ep : endpoints) {
-      // Use shorter detection timeout to ensure combined probes finish within global
-      // detect window.
-      HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
-      try {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(ep)).header("Metadata-Flavor", "Google")
-            .timeout(Timeouts.DETECT).GET().build();
-        long start = System.nanoTime();
-        HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
-        long durMs = (System.nanoTime() - start) / 1_000_000L;
-        if (resp.statusCode() == 200) {
-          if (debug)
-            logger.logf("GCPClient.detect: success endpoint=%s status=%d durationMs=%d", ep,
-                resp.statusCode(), durMs);
-          return null;
-        } else {
-          if (debug)
-            logger.logf("GCPClient.detect: non-200 endpoint=%s status=%d durationMs=%d", ep,
-                resp.statusCode(), durMs);
-          if (firstErr == null)
-            firstErr = new IllegalStateException("metadata status=" + resp.statusCode());
-        }
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
+    // Single metadata probe per directive (no fallback to link-local IP to keep
+    // fast-fail deterministic)
+    String ep = "http://metadata.google.internal/computeMetadata/v1/instance/id";
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
+    try {
+      HttpRequest req = HttpRequest.newBuilder(URI.create(ep)).header("Metadata-Flavor", "Google")
+          .timeout(Timeouts.DETECT).GET().build();
+      long start = System.nanoTime();
+      HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
+      long durMs = (System.nanoTime() - start) / 1_000_000L;
+      if (resp.statusCode() == 200) {
         if (debug)
-          logger.logf("GCPClient.detect: interrupted endpoint=%s err=%s", ep, ie.getMessage());
-        if (firstErr == null)
-          firstErr = ie;
-      } catch (IOException ioe) {
+          logger.logf("GCPClient.detect: success endpoint=%s status=%d durationMs=%d", ep,
+              resp.statusCode(), durMs);
+        return null;
+      } else {
         if (debug)
-          logger.logf("GCPClient.detect: io error endpoint=%s err=%s class=%s", ep,
-              ioe.getMessage(), ioe.getClass().getSimpleName());
-        if (firstErr == null)
-          firstErr = ioe;
-      } catch (Exception e) {
-        if (debug)
-          logger.logf("GCPClient.detect: other error endpoint=%s err=%s class=%s", ep,
-              e.getMessage(), e.getClass().getSimpleName());
-        if (firstErr == null)
-          firstErr = e;
+          logger.logf("GCPClient.detect: non-200 endpoint=%s status=%d durationMs=%d", ep,
+              resp.statusCode(), durMs);
+        return new IllegalStateException("metadata status=" + resp.statusCode());
       }
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      if (debug)
+        logger.logf("GCPClient.detect: interrupted endpoint=%s err=%s", ep, ie.getMessage());
+      return ie;
+    } catch (IOException ioe) {
+      if (debug)
+        logger.logf("GCPClient.detect: io error endpoint=%s err=%s class=%s", ep, ioe.getMessage(),
+            ioe.getClass().getSimpleName());
+      return ioe;
+    } catch (Exception e) {
+      if (debug)
+        logger.logf("GCPClient.detect: other error endpoint=%s err=%s class=%s", ep, e.getMessage(),
+            e.getClass().getSimpleName());
+      return e;
     }
-    return firstErr == null ? new IllegalStateException("not running on GCP") : firstErr;
   }
 
   @Override
@@ -140,41 +131,75 @@ public class GCPClient extends AbstractBaseClient {
       if (parts.length < 2) {
         return new CloudIdentity(CloudProviderType.gcp, "", "", "", "", Map.of());
       }
-      String json = new String(Base64.getUrlDecoder().decode(parts[1]));
-      String sub = extract(json, "\"sub\":\"");
-      String email = extract(json, "\"email\":\"");
-      // Server (Go) side uses the email when present; don't rely on email_verified
-      // parsing here – be liberal to match server identity log.
-      String identifier = (email != null && !email.isEmpty()) ? email : (sub == null ? "" : sub);
+      String jsonStr = new String(Base64.getUrlDecoder().decode(parts[1]));
+      JsonNode root = OM.readTree(jsonStr);
+      String sub = optText(root, "sub");
+      String email = optText(root, "email");
+      // Parity with Go: prefer verified email (email + email_verified==true); else
+      // fallback to sub
+      String identifier = sub == null ? "" : sub;
+      if (email != null && !email.isEmpty()) {
+        String emailVerified = optText(root, "email_verified");
+        if ("true".equalsIgnoreCase(emailVerified)) {
+          identifier = email;
+        }
+      }
 
-      // Derive region from zone if present
+      // Default resource type (align with Go: instance)
       String resourceType = "instance";
       String region = "";
-      int gce = json.indexOf("compute_engine");
-      if (gce >= 0) {
-        String zone = extract(json.substring(gce), "\"zone\":\"");
-        if (zone != null) {
-          String[] zp = zone.split("/");
-          String last = zp[zp.length - 1];
-          String[] partsZone = last.split("-");
-          if (partsZone.length >= 3) {
-            region = String.join("-", java.util.Arrays.copyOf(partsZone, partsZone.length - 1));
+      JsonNode ce = root.get("google");
+      if (ce == null) {
+        // Some tokens nest compute_engine struct directly under compute_engine
+        ce = root.get("compute_engine");
+      }
+      // Fallback: search textual if structured missing
+      if (ce != null && ce.isObject()) {
+        JsonNode zoneNode = ce.get("zone");
+        if (zoneNode == null) {
+          // In some encodings the path is compute_engine.zone without nesting under
+          // google
+          JsonNode ce2 = root.get("compute_engine");
+          if (ce2 != null && ce2.get("zone") != null)
+            zoneNode = ce2.get("zone");
+        }
+        if (zoneNode != null && zoneNode.isTextual()) {
+          region = deriveRegionFromZone(zoneNode.asText());
+        }
+        // Derive resource type from key hints if present
+        if (ce.get("instance_id") != null)
+          resourceType = "instance"; // keep default
+      } else {
+        // textual fallback (very unlikely needed now)
+        int idx = jsonStr.indexOf("\"zone\":\"");
+        if (idx >= 0) {
+          int s = idx + 8; // length of "zone":"
+          int e = jsonStr.indexOf('"', s);
+          if (e > s) {
+            region = deriveRegionFromZone(jsonStr.substring(s, e));
           }
         }
       }
 
       Map<String, String> extra = new HashMap<>();
-      for (String key : new String[]{"sub", "email", "aud", "iss", "azp", "kid"}) {
-        String val = extract(json, "\"" + key + "\":\"");
-        if (val != null)
-          extra.put(key, val);
+      for (String key : new String[]{"sub", "email", "aud", "iss", "azp", "kid", "project_number",
+          "project_id"}) {
+        String v = optText(root, key);
+        if (v != null && !v.isEmpty())
+          extra.put(key, v);
       }
-      String projNumber = extract(json, "\"project_number\":\"");
-      if (projNumber != null)
-        extra.put("project_number", projNumber);
-      String projId = extract(json, "\"project_id\":\"");
-      if (projId != null)
-        extra.put("project_id", projId);
+      // copy selected compute_engine fields (mirroring server observability
+      // potential)
+      JsonNode ceNode = root.get("google");
+      if (ceNode != null && ceNode.get("compute_engine") != null)
+        ceNode = ceNode.get("compute_engine");
+      if (ceNode == null)
+        ceNode = root.get("compute_engine");
+      if (ceNode != null && ceNode.isObject()) {
+        copyIfText(extra, ceNode, "instance_id");
+        copyIfText(extra, ceNode, "project_id");
+        copyIfText(extra, ceNode, "zone");
+      }
 
       return new CloudIdentity(CloudProviderType.gcp, identifier, sub == null ? identifier : sub,
           region, resourceType, extra);
@@ -183,14 +208,32 @@ public class GCPClient extends AbstractBaseClient {
     }
   }
 
-  private static String extract(String json, String marker) {
-    int i = json.indexOf(marker);
-    if (i < 0)
-      return null;
-    int s = i + marker.length();
-    int e = json.indexOf('"', s);
-    if (e < 0)
-      return null;
-    return json.substring(s, e);
+  private static String optText(JsonNode n, String field) {
+    JsonNode c = n.get(field);
+    return c != null && !c.isNull() ? c.asText() : null;
   }
+
+  private static void copyIfText(Map<String, String> dest, JsonNode node, String field) {
+    JsonNode v = node.get(field);
+    if (v != null && v.isTextual())
+      dest.put(field, v.asText());
+  }
+
+  private static String deriveRegionFromZone(String zoneVal) {
+    // zone patterns: projects/123456789/zones/us-central1-a OR us-central1-a
+    String zone = zoneVal;
+    if (zone.contains("/")) {
+      String[] parts = zone.split("/");
+      zone = parts[parts.length - 1];
+    }
+    String[] segs = zone.split("-");
+    if (segs.length >= 3) {
+      return String.join("-", java.util.Arrays.copyOf(segs, segs.length - 1));
+    }
+    return "";
+  }
+
+  // Local mapper (thread-safe for read ops after configuration); no special
+  // config needed.
+  private static final ObjectMapper OM = new ObjectMapper();
 }

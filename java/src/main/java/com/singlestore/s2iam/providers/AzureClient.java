@@ -38,6 +38,7 @@ public class AzureClient extends AbstractBaseClient {
     if (System.getenv("AZURE_FEDERATED_TOKEN_FILE") != null || System.getenv("MSI_ENDPOINT") != null
         || System.getenv("IDENTITY_ENDPOINT") != null)
       return null;
+    boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING")) && logger != null;
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
     try {
       HttpRequest req = HttpRequest
@@ -56,27 +57,35 @@ public class AzureClient extends AbstractBaseClient {
           HttpResponse<Void> miResp = client.send(miReq, HttpResponse.BodyHandlers.discarding());
           int sc = miResp.statusCode();
           if (sc == 200) {
+            if (debug)
+              logger.logf("AzureClient.detect: classification=azure-with-mi status=%d", sc);
             return null; // full Azure with MI
           }
           if (sc == 400 || sc == 403 || sc == 404) {
-            // Azure without usable MI (e.g., no system/user assigned identity). Still
-            // Azure.
-            return null;
+            if (debug)
+              logger.logf("AzureClient.detect: classification=azure-no-role miStatus=%d", sc);
+            return null; // Azure without MI role available
           }
-          // For other status codes (e.g., 500), conservatively still accept Azure
-          // presence
-          // since instance metadata responded OK. Identity calls will surface errors
-          // later.
-          return null;
-        } catch (IOException | InterruptedException e) {
+          if (debug)
+            logger.logf("AzureClient.detect: classification=azure-mi-other status=%d (accepted)",
+                sc);
+          return null; // other statuses still treated as Azure
+        } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
-          // Instance metadata was reachable; MI probe failed due to transient issue.
-          // Accept detection; identity retrieval will handle errors.
-          return null;
+          if (debug)
+            logger.logf("AzureClient.detect: classification=azure-mi-interrupted err=%s",
+                ie.getMessage());
+          return null; // accept detection though interrupted
+        } catch (IOException e) {
+          if (debug)
+            logger.logf("AzureClient.detect: classification=azure-mi-io err=%s", e.getMessage());
+          return null; // transient IO, accept detection
         }
       }
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
+      return ie;
+    } catch (IOException e) {
       return e;
     }
     return new IllegalStateException("not running on Azure");

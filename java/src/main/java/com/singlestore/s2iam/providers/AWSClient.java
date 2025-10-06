@@ -52,6 +52,7 @@ public class AWSClient extends AbstractBaseClient {
         return null;
 
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
+    boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING")) && logger != null;
     try {
       HttpRequest tokenReq = HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/api/token"))
           .timeout(Timeouts.DETECT).header("X-aws-ec2-metadata-token-ttl-seconds", "60")
@@ -59,7 +60,14 @@ public class AWSClient extends AbstractBaseClient {
       HttpResponse<String> tokenResp = client.send(tokenReq, HttpResponse.BodyHandlers.ofString());
       if (tokenResp.statusCode() == 200)
         return null;
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      return ie;
     } catch (Exception ignored) {
+      if (debug)
+        logger.logf("AWSClient.detect: token endpoint error class=%s msg=%s",
+            ignored.getClass().getSimpleName(), ignored.getMessage());
+      // swallow other exceptions; fallback to secondary probe
     }
     try {
       HttpRequest req = HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/meta-data/"))
@@ -67,8 +75,13 @@ public class AWSClient extends AbstractBaseClient {
       HttpResponse<Void> resp = client.send(req, HttpResponse.BodyHandlers.discarding());
       if (resp.statusCode() == 200)
         return null;
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
+      return ie;
+    } catch (IOException e) {
+      if (debug)
+        logger.logf("AWSClient.detect: metadata path IO error class=%s msg=%s",
+            e.getClass().getSimpleName(), e.getMessage());
       return e;
     }
     return new IllegalStateException("not running on AWS");
@@ -100,33 +113,47 @@ public class AWSClient extends AbstractBaseClient {
       headers.put("X-AWS-Access-Key-ID", baseCreds.accessKeyId());
       if (baseCreds.secretAccessKey() != null)
         headers.put("X-AWS-Secret-Access-Key", baseCreds.secretAccessKey());
-      // If underlying credentials are session credentials (EC2/ECS/IRSA), include
-      // session token
       if (baseCreds instanceof AwsSessionCredentials) {
         String token = ((AwsSessionCredentials) baseCreds).sessionToken();
-        if (token != null && !token.isEmpty()) {
+        if (token != null && !token.isEmpty())
           headers.put("X-AWS-Session-Token", token);
-        }
       }
 
-      String arnOverride = null;
+      String arn;
+      String account;
+      String resourceType;
+      String region;
       if (assumedRole != null && !assumedRole.isEmpty()) {
         AssumeRoleResponse assume = sts.assumeRole(AssumeRoleRequest.builder().roleArn(assumedRole)
-            .roleSessionName("S2IAM-Session" + System.currentTimeMillis()).durationSeconds(900)
+            .roleSessionName("SingleStoreAuth-" + (System.currentTimeMillis() / 1000L))
+            .durationSeconds(3600) // parity with Go (1h)
             .build());
         headers.put("X-AWS-Access-Key-ID", assume.credentials().accessKeyId());
         headers.put("X-AWS-Secret-Access-Key", assume.credentials().secretAccessKey());
         headers.put("X-AWS-Session-Token", assume.credentials().sessionToken());
-        arnOverride = assumedRole; // identity consistency
-      } else if (!headers.containsKey("X-AWS-Session-Token")
-          && System.getenv("AWS_SESSION_TOKEN") != null) {
-        headers.put("X-AWS-Session-Token", System.getenv("AWS_SESSION_TOKEN"));
+        // Refresh caller identity using temp creds for accurate ARN/account
+        StsClient temp = StsClient.builder().region(sts.serviceClientConfiguration().region())
+            .credentialsProvider(
+                () -> AwsSessionCredentials.create(assume.credentials().accessKeyId(),
+                    assume.credentials().secretAccessKey(), assume.credentials().sessionToken()))
+            .build();
+        GetCallerIdentityResponse assumedIdentity = temp
+            .getCallerIdentity(GetCallerIdentityRequest.builder().build());
+        arn = assumedIdentity.arn();
+        account = assumedIdentity.account();
+        region = deriveRegion(arn);
+        resourceType = deriveResourceTypeDetailed(arn);
+      } else {
+        arn = who.arn();
+        account = who.account();
+        region = deriveRegion(arn);
+        resourceType = deriveResourceTypeDetailed(arn);
+        if (!headers.containsKey("X-AWS-Session-Token")
+            && System.getenv("AWS_SESSION_TOKEN") != null) {
+          headers.put("X-AWS-Session-Token", System.getenv("AWS_SESSION_TOKEN"));
+        }
       }
 
-      String arn = arnOverride != null ? arnOverride : who.arn();
-      String account = who.account();
-      String region = deriveRegion(arn);
-      String resourceType = deriveResourceTypeDetailed(arn);
       Map<String, String> extra = new HashMap<>();
       extra.put("account", account);
       if (who.userId() != null && !who.userId().isEmpty())
@@ -161,12 +188,13 @@ public class AWSClient extends AbstractBaseClient {
   private static String deriveResourceTypeDetailed(String arn) {
     if (arn.contains(":instance/"))
       return "ec2";
+    // Align naming with Go implementation which uses the raw first resource segment
     if (arn.contains(":assumed-role/"))
-      return "sts-assumed-role";
+      return "assumed-role";
     if (arn.contains(":role/"))
-      return "iam-role";
+      return "role";
     if (arn.contains(":user/"))
-      return "iam-user";
+      return "user";
     if (arn.contains(":lambda:"))
       return "lambda";
     if (arn.contains(":task/"))

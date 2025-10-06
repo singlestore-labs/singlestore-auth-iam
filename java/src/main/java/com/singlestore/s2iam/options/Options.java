@@ -15,7 +15,7 @@ public final class Options {
     return o -> o.provider = provider;
   }
 
-  public static JwtOption withGcpAudience(String aud) {
+  public static JwtOption withAudience(String aud) {
     return o -> o.additionalParams.put("audience", aud);
   }
 

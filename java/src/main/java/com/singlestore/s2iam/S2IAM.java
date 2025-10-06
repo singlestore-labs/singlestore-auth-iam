@@ -22,7 +22,11 @@ public final class S2IAM {
   }
 
   private static final String DEFAULT_SERVER = "https://authsvc.singlestore.com/auth/iam/:jwtType";
-  private static final Duration DEFAULT_HTTP_TIMEOUT = Duration.ofSeconds(10);
+  private static final String LIB_NAME = "s2iam-java";
+  private static final String LIB_VERSION = Optional
+      .ofNullable(S2IAM.class.getPackage().getImplementationVersion()).orElse("dev");
+  private static final String USER_AGENT = LIB_NAME + "/" + LIB_VERSION; // derived dynamically
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   // Convenience API (database)
   public static String getDatabaseJWT(String workspaceGroupId, JwtOption... opts)
@@ -58,12 +62,61 @@ public final class S2IAM {
     return getAPIJWT(opts);
   }
 
+  // Overloads supporting provider options (primarily for builder convenience)
+  public static String getDatabaseJWT(String workspaceGroupId, JwtOption[] jwtOpts,
+      ProviderOption[] providerOpts) throws S2IAMException {
+    if (providerOpts != null && providerOpts.length > 0) {
+      // apply provider options globally before invoking regular path
+      ProviderOptions po = new ProviderOptions();
+      for (ProviderOption p : providerOpts)
+        p.apply(po);
+      // Currently only timeout/logger/clients are meaningful; we can't thread through
+      // directly without refactor, so store once for detectProvider static use if
+      // needed.
+      // For minimal risk, just pass timeout via a thread-local.
+      ProviderContext.set(po);
+      try {
+        return getDatabaseJWT(workspaceGroupId, jwtOpts);
+      } finally {
+        ProviderContext.clear();
+      }
+    }
+    return getDatabaseJWT(workspaceGroupId, jwtOpts);
+  }
+
+  public static String getAPIJWT(JwtOption[] jwtOpts, ProviderOption[] providerOpts)
+      throws S2IAMException {
+    if (providerOpts != null && providerOpts.length > 0) {
+      ProviderOptions po = new ProviderOptions();
+      for (ProviderOption p : providerOpts)
+        p.apply(po);
+      ProviderContext.set(po);
+      try {
+        return getAPIJWT(jwtOpts);
+      } finally {
+        ProviderContext.clear();
+      }
+    }
+    return getAPIJWT(jwtOpts);
+  }
+
   // Provider detection
   public static CloudProviderClient detectProvider(ProviderOption... opts)
       throws NoCloudProviderDetectedException {
     ProviderOptions po = new ProviderOptions();
     for (ProviderOption opt : opts)
       opt.apply(po);
+    // Merge thread-local provider context (builder) if present and explicit opts
+    // didn't set.
+    ProviderOptions ctx = ProviderContext.get();
+    if (ctx != null) {
+      if (po.timeout == null)
+        po.timeout = ctx.timeout;
+      if (po.logger == null)
+        po.logger = ctx.logger;
+      if (po.clients == null)
+        po.clients = ctx.clients;
+    }
     if (po.logger == null && "true".equals(System.getenv("S2IAM_DEBUGGING"))) {
       po.logger = Logger.STDOUT;
     }
@@ -71,33 +124,32 @@ public final class S2IAM {
       po.clients = List.of(new AWSClient(po.logger), new GCPClient(po.logger),
           new AzureClient(po.logger));
     }
-
-    // Fast detect first
     boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING"));
+    // Fast detect first
     long fastStart = System.nanoTime();
     if (debug && po.logger != null) {
       po.logger.logf("detectProvider: starting fastDetect phase over providers=%d",
           po.clients.size());
     }
+    Map<String, String> fastErrors = new LinkedHashMap<>();
     for (CloudProviderClient c : po.clients) {
       long s = System.nanoTime();
       Exception fe = c.fastDetect();
       long durMs = (System.nanoTime() - s) / 1_000_000L;
-      if (debug && po.logger != null) {
-        po.logger.logf("detectProvider: fastDetect provider=%s result=%s durationMs=%d",
-            c.getClass().getSimpleName(), fe == null ? "SUCCESS" : ("ERR:" + fe.getMessage()),
-            durMs);
-      }
       if (fe == null) {
         if (debug && po.logger != null) {
           po.logger.logf("detectProvider: fastDetect SUCCESS provider=%s totalFastPhaseMs=%d",
               c.getClass().getSimpleName(), (System.nanoTime() - fastStart) / 1_000_000L);
         }
-        return c; // success
+        return c;
+      } else if (debug && po.logger != null) {
+        po.logger.logf("detectProvider: fastDetect FAIL provider=%s err=%s durationMs=%d",
+            c.getClass().getSimpleName(), fe.getMessage(), durMs);
       }
+      fastErrors.put(c.getClass().getSimpleName(), fe.getMessage());
     }
-
-    Duration timeout = po.timeout == null ? Duration.ofSeconds(15) : po.timeout;
+    Duration timeout = po.timeout == null ? Duration.ofSeconds(5) : po.timeout; // align with Go
+                                                                                // default
     if (debug && po.logger != null) {
       po.logger.logf("detectProvider: entering concurrent detect phase timeoutMs=%d",
           timeout.toMillis());
@@ -124,6 +176,7 @@ public final class S2IAM {
     exec.shutdown();
     long deadline = System.nanoTime() + timeout.toNanos();
     List<Throwable> errors = new ArrayList<>();
+    Map<String, String> detectErrors = new LinkedHashMap<>();
     for (int i = 0; i < futures.size(); i++) {
       long remainingMs = (deadline - System.nanoTime()) / 1_000_000L;
       if (remainingMs <= 0)
@@ -133,30 +186,69 @@ public final class S2IAM {
         if (f == null)
           break; // timeout
         CloudProviderClient found = f.get();
-        // Cancel any still-running detection tasks to avoid waiting on other providers
-        for (Future<CloudProviderClient> other : futures) {
+        for (Future<CloudProviderClient> other : futures)
           if (!other.isDone())
             other.cancel(true);
-        }
         return found;
       } catch (ExecutionException ee) {
-        errors.add(ee.getCause());
+        Throwable cause = ee.getCause();
+        errors.add(cause);
         if (debug && po.logger != null) {
           po.logger.logf("detectProvider: provider failed error=%s remainingMs=%d",
-              ee.getCause() == null ? "<null>" : ee.getCause().getMessage(), remainingMs);
+              cause == null ? "<null>" : cause.getMessage(), remainingMs);
         }
+        String key = cause == null ? "unknown" : cause.getClass().getSimpleName();
+        detectErrors.put(key + "@" + i, cause == null ? "null" : cause.getMessage());
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
         errors.add(ie);
         break;
       }
     }
+    for (Future<CloudProviderClient> other : futures)
+      if (!other.isDone())
+        other.cancel(true);
     if (debug && po.logger != null) {
       po.logger.logf("detectProvider: no provider detected errors=%d firstError=%s", errors.size(),
           errors.isEmpty() || errors.get(0) == null ? "<none>" : errors.get(0).getMessage());
     }
-    throw new NoCloudProviderDetectedException("no cloud provider detected"
-        + (errors.isEmpty() ? "" : (": " + errors.get(0).getMessage())));
+    // Build aggregated message (limit lengths to keep exception concise)
+    StringBuilder sb = new StringBuilder("no cloud provider detected");
+    if (!fastErrors.isEmpty()) {
+      sb.append("; fast=");
+      int n = 0;
+      for (var e : fastErrors.entrySet()) {
+        if (n++ > 0)
+          sb.append(',');
+        sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
+        if (n >= 3 && fastErrors.size() > 3) {
+          sb.append("+" + (fastErrors.size() - 3) + "more");
+          break;
+        }
+      }
+    }
+    if (!detectErrors.isEmpty()) {
+      sb.append("; detect=");
+      int n = 0;
+      for (var e : detectErrors.entrySet()) {
+        if (n++ > 0)
+          sb.append(',');
+        sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
+        if (n >= 3 && detectErrors.size() > 3) {
+          sb.append("+" + (detectErrors.size() - 3) + "more");
+          break;
+        }
+      }
+    }
+    throw new NoCloudProviderDetectedException(sb.toString());
+  }
+
+  private static String safeTrunc(String s) {
+    if (s == null)
+      return "<null>";
+    if (s.length() > 60)
+      return s.substring(0, 57) + "...";
+    return s;
   }
 
   private static void applyJwtOptions(JwtOptions o, JwtOption... opts) {
@@ -179,9 +271,52 @@ public final class S2IAM {
         throw new S2IAMException("failed to detect cloud provider", e);
       }
     }
+    // Enforce that audience param (if present) only used for GCP
+    if (o.additionalParams != null && o.additionalParams.containsKey("audience")) {
+      CloudProviderType t = o.provider.getType();
+      if (t != CloudProviderType.gcp) {
+        throw new S2IAMException(
+            "audience parameter is only supported for GCP provider (detected=" + t + ")");
+      }
+    }
+    boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING"));
     CloudProviderClient provider = o.provider;
     if (o.assumeRoleIdentifier != null && !o.assumeRoleIdentifier.isEmpty()) {
-      provider = provider.assumeRole(o.assumeRoleIdentifier);
+      String id = o.assumeRoleIdentifier;
+      switch (provider.getType()) {
+        case aws: {
+          if (!id.startsWith("arn:"))
+            throw new S2IAMException("invalid AWS assumeRoleIdentifier (must start with 'arn:')");
+          String[] arnParts = id.split(":");
+          if (arnParts.length < 6 || arnParts[2].isEmpty() || arnParts[5].isEmpty())
+            throw new S2IAMException("invalid AWS ARN format for assumeRoleIdentifier");
+          if (!arnParts[2].equals("iam") && !arnParts[2].equals("sts"))
+            throw new S2IAMException("AWS assumeRoleIdentifier service must be iam or sts");
+          break;
+        }
+        case gcp: {
+          if (!id.contains("@") || !id.endsWith(".gserviceaccount.com"))
+            throw new S2IAMException(
+                "invalid GCP assumeRoleIdentifier (expected service account email)");
+          break;
+        }
+        case azure: {
+          String s = id.trim();
+          if (s.length() != 36 || s.chars().filter(ch -> ch == '-').count() != 4)
+            throw new S2IAMException(
+                "invalid Azure assumeRoleIdentifier (expected GUID format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)");
+          try {
+            java.util.UUID.fromString(s);
+          } catch (IllegalArgumentException iae) {
+            throw new S2IAMException("invalid Azure assumeRoleIdentifier (not a valid UUID)");
+          }
+          break;
+        }
+        default :
+          throw new S2IAMException("assumeRoleIdentifier validation not implemented for provider: "
+              + provider.getType());
+      }
+      provider = provider.assumeRole(id);
     }
     CloudProviderClient.IdentityHeadersResult res = provider.getIdentityHeaders(o.additionalParams);
     if (res.error != null)
@@ -192,31 +327,46 @@ public final class S2IAM {
 
     String url = o.serverUrl.replace(":cloudProvider", identity.getProvider().name())
         .replace(":jwtType", o.jwtType.name());
-
     String query = "";
     if (o.jwtType == JwtOptions.JWTType.database && o.workspaceGroupId != null
         && !o.workspaceGroupId.isEmpty()) {
-      query = "?workspaceGroupID=" + encode(o.workspaceGroupId);
+      try {
+        query = "?workspaceGroupID=" + java.net.URLEncoder.encode(o.workspaceGroupId,
+            java.nio.charset.StandardCharsets.UTF_8);
+      } catch (Exception e) {
+        throw new S2IAMException("failed to URL encode workspaceGroupId", e);
+      }
     }
-    HttpRequest.Builder rb = HttpRequest.newBuilder(URI.create(url + query))
-        .timeout(DEFAULT_HTTP_TIMEOUT).POST(HttpRequest.BodyPublishers.noBody());
+    Duration httpTimeout = o.timeout != null ? o.timeout : Timeouts.IDENTITY; // apply option
+                                                                              // timeout
+    HttpRequest.Builder rb = HttpRequest.newBuilder(URI.create(url + query)).timeout(httpTimeout)
+        .POST(HttpRequest.BodyPublishers.noBody()).header("User-Agent", USER_AGENT);
     for (Map.Entry<String, String> e : res.headers.entrySet())
       rb.header(e.getKey(), e.getValue());
 
-    HttpClient client = HttpClient.newBuilder().connectTimeout(DEFAULT_HTTP_TIMEOUT).build();
+    if (debug && identity.getProvider() != null) {
+      Logger log = Logger.STDOUT; // simple fallback
+      log.logf("getJWT: requesting jwtType=%s provider=%s url=%s timeoutMs=%d", o.jwtType,
+          identity.getProvider(), url, httpTimeout.toMillis());
+    }
+
+    HttpClient client = HttpClient.newBuilder().connectTimeout(httpTimeout).build();
     HttpResponse<String> response;
     try {
       response = client.send(rb.build(), HttpResponse.BodyHandlers.ofString());
-    } catch (IOException | InterruptedException e) {
+    } catch (InterruptedException ie) {
       Thread.currentThread().interrupt();
-      throw new S2IAMException("error calling authentication server", e);
+      throw new S2IAMException("error calling authentication server (interrupted)", ie);
+    } catch (IOException ioe) {
+      throw new S2IAMException("error calling authentication server", ioe);
     }
-    if (response.statusCode() != 200) {
-      throw new S2IAMException("authentication server returned status " + response.statusCode()
-          + ": " + response.body());
+    int sc = response.statusCode();
+    if (sc != 200) {
+      throw new S2IAMException(
+          "authentication server returned status " + sc + ": " + response.body());
     }
     try {
-      JsonNode node = new ObjectMapper().readTree(response.body());
+      JsonNode node = MAPPER.readTree(response.body());
       String jwt = node.path("jwt").asText();
       if (jwt == null || jwt.isEmpty())
         throw new S2IAMException("received empty JWT from server");
@@ -224,9 +374,5 @@ public final class S2IAM {
     } catch (IOException e) {
       throw new S2IAMException("cannot parse response", e);
     }
-  }
-
-  private static String encode(String s) {
-    return s.replace(" ", "%20");
   }
 }

@@ -7,9 +7,9 @@ This repository contains tools for the SingleStore IAM authentication system.
 [![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam/go)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam/go)
 [![codecov](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam/branch/main/graph/badge.svg)](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam)
 
-## Current status
+## Current Status
 
-This service is not yet available. This library may be updated before the service becomes available.
+This service is not yet available. The APIs and language bindings may change prior to GA release.
 
 ## Overview
 
@@ -20,17 +20,14 @@ The `singlestore-auth-iam` library provides a seamless way to authenticate with 
 
 ### Key Features
 
-- **Multi-language support**: Go and Python libraries with identical functionality
+- **Multi-language support**: Go (reference), Python, and Java implementations with converging functionality
 - **Automatic detection**: Discovers cloud provider and obtains credentials automatically  
 - **Role assumption**: Assume different roles/service accounts for enhanced security
 - **Command-line tool**: Standalone CLI for scripts and CI/CD pipelines
 
 ### Future Plans
-- Additional language support: Java, Node.js, and C++ (coming soon)
+- Additional language support: Node.js and C++ (planned)
 
-## Current Status
-
-This service is not yet available. This library may be updated before the service becomes available.
 
 ## Installation
 
@@ -84,6 +81,47 @@ api_jwt = await s2iam.get_jwt_api()
 ```
 
 **[📖 Full Python Documentation →](python/README.md)**
+
+### Java Library
+
+Add the Maven dependency (snapshot until first release):
+
+```xml
+<dependency>
+	<groupId>com.singlestore</groupId>
+	<artifactId>s2iam</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+</dependency>
+```
+
+Basic usage:
+
+```java
+import com.singlestore.s2iam.S2IAM;
+
+// Detect provider & get database JWT
+String jwt = S2IAM.getDatabaseJWT("workspace-group-id");
+
+// Get API JWT
+String apiJwt = S2IAM.getAPIJWT();
+```
+
+**Note:** Until GA, groupId/artifactId/version may change; pin exact versions and review release notes when updating.
+
+Advanced (Builder API & Assume Role):
+
+```java
+import com.singlestore.s2iam.*;
+
+String jwt = S2IAMRequest.newRequest()
+	.databaseWorkspaceGroup("workspace-group-id") // or .api()
+	.assumeRole("arn:aws:iam::123456789012:role/AppRole") // AWS, or service account email (GCP), or Azure client ID
+	.audience("https://authsvc.singlestore.com")          // GCP ONLY; throws if non-GCP
+	.timeout(java.time.Duration.ofSeconds(5))
+	.get();
+```
+
+Audience (GCP ONLY): Supplying an audience when not on GCP raises an exception (renamed from withGcpAudience to withAudience and now enforced).
 
 ### Command Line Tool
 
@@ -150,6 +188,7 @@ The libraries automatically detect the cloud provider and obtain appropriate cre
 
 - **[Go Library Documentation](go/README.md)** - Complete Go API reference and examples
 - **[Python Library Documentation](python/README.md)** - Complete Python API reference and examples
+- **Java**: See inline Javadoc and `java/README.md` (implementation evolving pre-GA)
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -1,103 +1,132 @@
-SingleStore Auth IAM - Java (Early Scaffold)
-================================================
+SingleStore Auth IAM - Java
+===========================
 
-Status: EXPERIMENTAL / SCAFFOLD ONLY
+Status: ACTIVE DEVELOPMENT (parity tracking the Go reference). Breaking changes may still occur before GA.
 
-This is the initial Java implementation scaffold intended to mirror the Go API.
-Real cloud-provider detection logic still needs to be implemented. The structure
-is in place so incremental provider logic and verification code can be added.
+Overview
+--------
+This Java library obtains short‑lived JWTs for SingleStore database (workspace group) or Management API access using native cloud provider identities (AWS / GCP / Azure). It auto‑detects the runtime cloud provider in seconds (target parity with Go implementation) and sends signed identity headers to the auth service which returns a JWT.
 
-Primary goals achieved in this scaffold:
-
-1. API Surface Parity (core convenience methods):
-   S2IAM.detectProvider()
-   S2IAM.getDatabaseJWT(workspaceGroupId, JwtOption...)
-   S2IAM.getAPIJWT(JwtOption...)
-
-2. Core domain model & interfaces:
-   - CloudProviderType (enum)
-   - CloudIdentity
-   - CloudProviderClient (interface)
-   - Logger (functional interface)
-
-3. Options pattern (similar to Go functional options) via marker interfaces
-   ProviderOption & JwtOption and concrete option helpers (WithTimeout, etc.)
-
-4. Placeholder provider clients (AWS, GCP, Azure) with fast-fail detection.
-
-5. Test pattern replicating Go/Python skip/fail logic using JUnit 5 assumptions.
-
-What still needs real implementation:
-
-- Actual FastDetect / Detect logic per provider.
-- Assume role support for each provider.
-- Identity header acquisition for each provider.
-- Verifier (server-side) implementation.
-- Coverage integration in CI similar to Go & Python.
-
-Environment variable driven test semantics (mirrors other languages):
-  S2IAM_TEST_CLOUD_PROVIDER=aws|gcp|azure
-  S2IAM_TEST_ASSUME_ROLE=... (implies provider expected)
-  S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=aws|gcp|azure (detection expected, role not required)
-
-Until real detection exists, tests will SKIP when no provider is detected and
-no expectation env var is set; they FAIL if an expectation is set.
-
-Example usage (once detection works):
-
+Quick Start
+-----------
 ```java
-String jwt = S2IAM.getDatabaseJWT("my-workspace-group-id");
+import com.singlestore.s2iam.S2IAM;
+
+// Database JWT (workspace group required)
+String dbJwt = S2IAM.getDatabaseJWT("my-workspace-group-id");
+
+// Management API JWT
 String apiJwt = S2IAM.getAPIJWT();
 ```
 
-Custom server URL / provider injection:
+Fluent Builder API
+------------------
+For advanced composition (assume role, custom timeout, explicit provider, custom server URL, GCP audience) use the builder:
 
 ```java
-String jwt = S2IAM.getAPIJWT(
-    Options.withServerUrl("https://authsvc.singlestore.com/auth/iam/:jwtType"),
-    Options.withTimeout(Duration.ofSeconds(3))
+import com.singlestore.s2iam.*;
+
+String jwt = S2IAMRequest.newRequest()
+    .databaseWorkspaceGroup("my-workspace-group-id")     // or .api()
+    .assumeRole("arn:aws:iam::123456789012:role/AppRole") // AWS ARN, GCP service account email, or Azure client ID
+    .timeout(java.time.Duration.ofSeconds(5))
+    .audience("https://authsvc.singlestore.com")          // GCP ONLY (see below)
+    .get();
+```
+
+GCP Audience (GCP ONLY)
+-----------------------
+Use `.audience()` (builder) or `Options.withAudience()` (static API) ONLY when the detected (or explicitly provided) provider is GCP. The audience parameter tunes the GCP identity token audience. If you specify an audience and the provider is not GCP, the library throws `S2IAMException` immediately. (Older name `withGcpAudience` was renamed to `withAudience` and now enforces this validation.)
+
+Assume Role / Impersonation
+---------------------------
+- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). Session name prefix: `SingleStoreAuth-`.
+- GCP: Provide a service account email for impersonation.
+- Azure: Provide a managed identity client (object) ID (UUID format).
+
+Validation is strict; malformed identifiers raise `S2IAMException` before network calls.
+
+Functional Options (Static API)
+-------------------------------
+```java
+import com.singlestore.s2iam.options.Options;
+
+String apiJwt = S2IAM.getAPIJWT(
+    Options.withTimeout(Duration.ofSeconds(4)),
+    Options.withAudience("https://authsvc.singlestore.com") // only if running on GCP
 );
 ```
 
-Building & Testing:
+Detection & Performance
+-----------------------
+Detection proceeds in two phases:
+1. Fast phase (serial) – very quick heuristics per provider.
+2. Full phase (concurrent with 5s default timeout) – parallel deeper probes.
 
+The first positive result short‑circuits. Typical success latency on real cloud instances is under a second (target parity with Go).
+
+Environment Variables for Test Expectations
+-------------------------------------------
+Tests mirror the Go/Python fail/skip semantics:
+
+| Variable | Meaning |
+|----------|---------|
+| `S2IAM_TEST_CLOUD_PROVIDER` = aws|gcp|azure | Provider MUST be detected; tests FAIL if not |
+| `S2IAM_TEST_ASSUME_ROLE` = <identifier> | Role assume path must succeed (also implies detection expected) |
+| `S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE` = aws|gcp|azure | Detection MUST succeed but role not required |
+
+If none of these are set and no provider can be detected, tests SKIP instead of failing.
+
+Debugging
+---------
+Set `S2IAM_DEBUGGING=true` to emit structured detection timing/log lines to stdout.
+
+User Agent
+----------
+All outbound auth service calls include a dynamic `User-Agent: s2iam-java/<impl-version>` header.
+
+Error Semantics
+---------------
+The library is fail-fast—errors are never silently downgraded to warnings. Any unexpected condition produces an exception describing the failing stage.
+
+API Summary
+-----------
+Core static methods:
+- `S2IAM.getDatabaseJWT(workspaceGroupId, JwtOption...)`
+- `S2IAM.getAPIJWT(JwtOption...)`
+- `S2IAM.detectProvider()`
+
+Builder:
+- `S2IAMRequest.newRequest().databaseWorkspaceGroup(id)|api().assumeRole(id).audience(aud).timeout(d).provider(explicitProvider).serverUrl(url).get()`
+
+Selected Options helpers:
+- `Options.withTimeout(Duration)`
+- `Options.withAudience(String)` (GCP only)
+- `Options.withAssumeRole(String)`
+- `Options.withServerUrl(String)`
+- `Options.withProvider(CloudProviderClient)` (explicit injection / test)
+
+Timeouts
+--------
+Default detection + HTTP call timeout: 5s (aligned to Go reference). Override with `Options.withTimeout` or builder `.timeout()`.
+
+Testing Locally
+---------------
 Requires Java 11+ and Maven.
-
 ```bash
 cd java
 mvn -q test
 ```
+Expected outcomes:
+- On a laptop (no cloud metadata): most tests skip.
+- On a real cloud instance (env var set): tests run and must pass quickly.
 
-Next Implementation Steps (suggested order):
-1. Implement AWS metadata FastDetect & Detect.
-2. Implement AWS STS-based identity header acquisition.
-3. Add GCP & Azure detection.
-4. Flesh out AssumeRole semantics.
-5. Add verifier module (possibly separate package path).
-6. Integrate into CI matrix (real cloud runners) mirroring Go/Python.
-
-NOTE: Breaking changes are acceptable at this stage (no external users yet).
-
-Local Fast Path Test Hooks
+Contributing / Future Work
 --------------------------
-Some fast-path detection unit tests use explicit system properties to simulate a cloud
-environment without mutating process environment variables (which is restricted on
-modern JVMs). These properties short-circuit provider fast detection:
+- Further parity refinements with the Go implementation.
+- Extended provider signal heuristics.
+- Additional language clients will follow this contract.
 
-   - `-Ds2iam.test.awsFast=true`
-   - `-Ds2iam.test.gcpFast=true`
-   - `-Ds2iam.test.azureFast=true`
-
-They are only intended for local unit tests and are not honored in production usage.
-
-Known Warning (Maven / Guice)
------------------------------
-Running tests on very recent JDKs (e.g., early access / latest) may show:
-
-```
-WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
-WARNING: sun.misc.Unsafe::staticFieldBase has been called by ... guice-5.1.0 ...
-```
-
-This originates from Maven's embedded Guice dependency, not project code. It is safe
-to ignore and will disappear when Maven/Guice upgrades their internal usage.
+License
+-------
+MIT (see root LICENSE file).
