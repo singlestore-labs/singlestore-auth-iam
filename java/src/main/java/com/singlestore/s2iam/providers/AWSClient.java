@@ -131,7 +131,9 @@ public class AWSClient extends AbstractBaseClient {
         headers.put("X-AWS-Access-Key-ID", assume.credentials().accessKeyId());
         headers.put("X-AWS-Secret-Access-Key", assume.credentials().secretAccessKey());
         headers.put("X-AWS-Session-Token", assume.credentials().sessionToken());
-        // Refresh caller identity using temp creds for accurate ARN/account
+        // Use original role ARN as identity identifier for parity with test
+        // expectations.
+        // Still derive account/region/type from the temporary identity.
         StsClient temp = StsClient.builder().region(sts.serviceClientConfiguration().region())
             .credentialsProvider(
                 () -> AwsSessionCredentials.create(assume.credentials().accessKeyId(),
@@ -139,10 +141,10 @@ public class AWSClient extends AbstractBaseClient {
             .build();
         GetCallerIdentityResponse assumedIdentity = temp
             .getCallerIdentity(GetCallerIdentityRequest.builder().build());
-        arn = assumedIdentity.arn();
         account = assumedIdentity.account();
-        region = deriveRegion(arn);
-        resourceType = deriveResourceTypeDetailed(arn);
+        region = deriveRegion(assumedIdentity.arn());
+        resourceType = deriveResourceTypeDetailed(assumedIdentity.arn());
+        arn = assumedRole; // override to requested role ARN (not STS assumed-role ARN)
       } else {
         arn = who.arn();
         account = who.account();

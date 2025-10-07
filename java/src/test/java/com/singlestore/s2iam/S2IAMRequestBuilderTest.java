@@ -71,6 +71,18 @@ public class S2IAMRequestBuilderTest {
   }
 
   private void assumeOrSkip() throws Exception {
+    // Skip entirely on explicit NO_ROLE environments where we expect cloud
+    // detection
+    // to work but identity headers / JWT retrieval to fail due to missing
+    // permissions
+    // or intentionally unavailable metadata (e.g. GCP 404 identity, Azure 400 MI
+    // token,
+    // AWS missing credentials chain). These hosts set only
+    // S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE.
+    if (isNoRoleOnlyEnvironment()) {
+      Assumptions.abort("No-role environment - skipping JWT builder tests");
+      return;
+    }
     boolean expect = expectCloud();
     try {
       S2IAM.detectProvider();
@@ -83,6 +95,16 @@ public class S2IAMRequestBuilderTest {
     }
   }
 
+  private boolean isNoRoleOnlyEnvironment() {
+    String noRole = System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE");
+    String provider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER");
+    String assume = System.getenv("S2IAM_TEST_ASSUME_ROLE");
+    // Only skip when NO_ROLE is set and neither a normal provider selection nor
+    // assume-role test
+    // is in effect.
+    return noRole != null && !noRole.isEmpty() && provider == null && assume == null;
+  }
+
   private boolean expectCloud() {
     return System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
         || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
@@ -92,15 +114,50 @@ public class S2IAMRequestBuilderTest {
   @Test
   void audience_only_allowed_for_gcp_builder_validation() {
     S2IAMRequest r = S2IAMRequest.newRequest().api()
-        .provider(new FakeProvider(CloudProviderType.aws)).audience("foo");
+        .provider(new FakeProviderLocal(CloudProviderType.aws)).audience("foo");
     assertThrows(S2IAMException.class, r::get, "Audience on non-GCP provider should error");
   }
 
   @Test
   void audience_option_static_api_rejected_for_non_gcp_provider() {
-    FakeProvider awsLike = new FakeProvider(CloudProviderType.aws);
+    FakeProviderLocal awsLike = new FakeProviderLocal(CloudProviderType.aws);
     S2IAMException ex = assertThrows(S2IAMException.class,
         () -> S2IAM.getAPIJWT(Options.withProvider(awsLike), Options.withAudience("notgcp")));
     assertTrue(ex.getMessage().toLowerCase().contains("gcp"));
+  }
+
+  // Minimal local fake provider for audience validation tests (kept local so
+  // static
+  // analysis does not require cross-file lookup in test sources).
+  static class FakeProviderLocal implements CloudProviderClient {
+    private final CloudProviderType type;
+    FakeProviderLocal(CloudProviderType type) {
+      this.type = type;
+    }
+    @Override
+    public CloudProviderType getType() {
+      return type;
+    }
+    @Override
+    public CloudProviderClient assumeRole(String roleIdentifier) {
+      return this;
+    }
+    @Override
+    public Exception fastDetect() {
+      return null;
+    }
+    @Override
+    public Exception detect() {
+      return null;
+    }
+    @Override
+    public IdentityHeadersResult getIdentityHeaders(
+        java.util.Map<String, String> additionalParams) {
+      java.util.Map<String, String> headers = new java.util.HashMap<>();
+      headers.put("X-Test", "ok");
+      CloudIdentity id = new CloudIdentity(type, "local", null, null, null,
+          java.util.Collections.emptyMap());
+      return new IdentityHeadersResult(headers, id, null);
+    }
   }
 }
