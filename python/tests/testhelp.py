@@ -63,7 +63,7 @@ async def require_cloud_role(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProvi
 async def expect_cloud_provider_with_retry_evidence(
     timeout: float,
     retry_fraction: float = 0.6,
-    expected_provider: str | None = None,
+    expected_provider: Optional[str] = None,
 ) -> CloudProviderClient:
     """Attempt detection once; if it times out, immediately perform a second attempt (retry probe).
 
