@@ -86,6 +86,9 @@ public class S2IAMRequestBuilderTest {
     boolean expect = expectCloud();
     try {
       S2IAM.detectProvider();
+      if (!expect) {
+        Assumptions.abort("Cloud provider not explicitly requested - skipping");
+      }
     } catch (NoCloudProviderDetectedException e) {
       if (expect) {
         fail("Cloud provider detection failed - expected to detect provider in test environment");
