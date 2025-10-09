@@ -13,7 +13,7 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType
 
-from .test_server_utils import GoTestServerManager
+from .test_server_utils import get_shared_server
 from .testhelp import expect_cloud_provider_detected, validate_identity_and_jwt
 
 
@@ -114,26 +114,22 @@ class TestFastPathDetection:
             assert normal_identity.region == fastpath_identity.region, "Both providers should extract same region"
 
             # End-result validation using shared helper (mirrors Go shared happy-path code)
-            server = GoTestServerManager(timeout_minutes=1)
-            try:
-                server.start()
-                # Use helper with fast-path provider
-                provider_type = normal_provider.get_type()
-                audience = "https://authsvc.singlestore.com" if provider_type == CloudProviderType.GCP else None
-                _, fast_identity, claims = await validate_identity_and_jwt(
-                    fastpath_provider,
-                    workspace_group_id="test-workspace",
-                    server_url=f"{server.server_url}/auth/iam/database",
-                    audience=audience,
-                )
-                # Cross-check that fast-path identity matches normal detection identity on critical fields
-                assert fast_identity.identifier == normal_identity.identifier, "Identifier mismatch"
-                assert fast_identity.provider == normal_identity.provider, "Provider type mismatch"
-                assert fast_identity.account_id == normal_identity.account_id, "Account ID mismatch"
-                assert fast_identity.region == normal_identity.region, "Region mismatch"
-                print("✓ Fast-path validation: identity and JWT claims consistent with normal detection")
-            finally:
-                server.stop()
+            server = get_shared_server()
+            # Use helper with fast-path provider
+            provider_type = normal_provider.get_type()
+            audience = "https://authsvc.singlestore.com" if provider_type == CloudProviderType.GCP else None
+            _, fast_identity, claims = await validate_identity_and_jwt(
+                fastpath_provider,
+                workspace_group_id="test-workspace",
+                server_url=f"{server.server_url}/auth/iam/database",
+                audience=audience,
+            )
+            # Cross-check that fast-path identity matches normal detection identity on critical fields
+            assert fast_identity.identifier == normal_identity.identifier, "Identifier mismatch"
+            assert fast_identity.provider == normal_identity.provider, "Provider type mismatch"
+            assert fast_identity.account_id == normal_identity.account_id, "Account ID mismatch"
+            assert fast_identity.region == normal_identity.region, "Region mismatch"
+            print("✓ Fast-path validation: identity and JWT claims consistent with normal detection")
 
             print("✓ Fast-path and normal detection produced equivalent results")
 

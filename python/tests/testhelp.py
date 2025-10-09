@@ -8,6 +8,7 @@ to ensure consistent test behavior across language implementations.
 import base64
 import json
 import os
+import time
 from typing import Any, Dict, Optional, Tuple
 
 import pytest
@@ -35,11 +36,29 @@ async def expect_cloud_provider_detected(timeout: float = TEST_DETECT_TIMEOUT) -
     ):
         pytest.skip("cloud provider required")
 
+    start = time.monotonic()
     try:
         provider = await s2iam.detect_provider(timeout=timeout)
         return provider
-    except s2iam.CloudProviderNotFound:
-        pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
+    except s2iam.CloudProviderNotFound as first_err:
+        first_elapsed_ms = int((time.monotonic() - start) * 1000)
+        retry_timeout = max(1.0, timeout * 0.5)
+        retry_start = time.monotonic()
+        try:
+            retry_provider = await s2iam.detect_provider(timeout=retry_timeout)
+            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
+            pytest.fail(
+                "Cloud provider detection failed first attempt but second immediate attempt succeeded; "
+                f"first_elapsed_ms={first_elapsed_ms} retry_elapsed_ms={retry_elapsed_ms} "
+                f"primary_error={first_err} retry_timeout_s={retry_timeout} provider={retry_provider.get_type().value}"
+            )
+        except s2iam.CloudProviderNotFound as second_err:
+            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
+            pytest.fail(
+                "Cloud provider detection failed twice; "
+                f"first_elapsed_ms={first_elapsed_ms} second_elapsed_ms={retry_elapsed_ms} "
+                f"first_error={first_err} second_error={second_err} retry_timeout_s={retry_timeout}"
+            )
     except s2iam.ProviderIdentityUnavailable:
         pytest.skip("cloud provider detected no identity")
 
@@ -57,6 +76,10 @@ async def require_cloud_role(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProvi
 
     # Use expect_cloud_provider_detected for the actual detection logic
     return await expect_cloud_provider_detected(timeout)
+
+
+# Removed hostname diagnostic probe: we only care if an immediate second identical probe
+# (same code path) would succeed. That yields actionable data without introducing DNS.
 
 
 def maybe_parallel() -> None:

@@ -11,17 +11,13 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType, JWTType
 
-from .test_server_utils import GoTestServerManager
+from .test_server_utils import get_shared_server
 from .testhelp import TEST_DETECT_TIMEOUT, expect_cloud_provider_detected, require_cloud_role
 
 
 @pytest.fixture(scope="session")
 def test_server():
-    """Fixture to manage the test server lifecycle."""
-    server = GoTestServerManager(timeout_minutes=5)  # Auto-shutdown after 5 minutes, random port
-    server.start()
-    yield server
-    server.stop()
+    return get_shared_server()
 
 
 @pytest.mark.asyncio

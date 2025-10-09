@@ -30,6 +30,9 @@ class GoTestServerManager:
         self.go_dir = self._get_go_directory(go_dir)
         self.actual_port: Optional[int] = None
 
+    # NOTE: Manager is intentionally not thread-safe because pytest runs tests sequentially.
+    # The server lives for the whole test session (or until explicit stop); process exit handles cleanup.
+
     def _get_go_directory(self, go_dir: Optional[str]) -> str:
         """Get the Go directory location for the two known test scenarios."""
         if go_dir:
@@ -104,6 +107,8 @@ class GoTestServerManager:
         self.info_file = os.path.join(self.go_dir, "s2iam_test_server_info.json")
 
         # Prepare server command (request random port with 0 and info-file)
+        # Use -shutdown-on-stdin-close and keep stdin open for lifetime of process; closing stdin (via process exit)
+        # triggers graceful shutdown. We never explicitly terminate in tests.
         server_cmd = [
             "./s2iam_test_server",
             "-port",
@@ -169,32 +174,7 @@ class GoTestServerManager:
 
         logger.debug("Test server started successfully on port %s", self.actual_port)
 
-    # Removed _read_server_port; info-file polling replaces stdout parsing
-
-    def stop(self) -> None:
-        """Stop the Go test server."""
-        if self.process:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-            self.process = None
-
-        # Ensure stderr file is closed
-        if hasattr(self, "_stderr_file") and self._stderr_file and not self._stderr_file.closed:
-            try:
-                self._stderr_file.flush()
-            except Exception:
-                pass
-            try:
-                self._stderr_file.close()
-            except Exception:
-                pass
-
-        # Show debug log contents if available
-        self.show_debug_log()
+    # Info-file polling supplies the dynamically chosen port; no stdout parsing helper needed.
 
     def show_debug_log(self) -> None:
         """Display the contents of the Go server debug log."""
@@ -222,6 +202,18 @@ class GoTestServerManager:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.stop()
+    def __exit__(self, exc_type, exc_val, exc_tb):  # No explicit shutdown; allow exceptions to propagate
+        return False
+
+
+_shared_server: Optional[GoTestServerManager] = None
+
+
+def get_shared_server() -> GoTestServerManager:
+    """Return a singleton shared test server (starts on first use)."""
+    global _shared_server
+    if _shared_server is None:
+        mgr = GoTestServerManager(timeout_minutes=5)
+        mgr.start()
+        _shared_server = mgr
+    return _shared_server
