@@ -4,7 +4,7 @@ import com.singlestore.s2iam.*;
 import java.util.Map;
 
 /** Base client with default unsupported identity header retrieval. */
-abstract class AbstractBaseClient implements CloudProviderClient {
+public abstract class AbstractBaseClient implements CloudProviderClient {
   protected final Logger logger;
   protected final String assumedRole;
 
