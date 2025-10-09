@@ -65,29 +65,9 @@ Detection proceeds in two phases:
 
 The first positive result short‑circuits. Typical success latency on real cloud instances is under a second (target parity with Go).
 
-Environment Variables for Test Expectations
--------------------------------------------
-Tests mirror the Go/Python fail/skip semantics:
-
-| Variable | Meaning |
-|----------|---------|
-| `S2IAM_TEST_CLOUD_PROVIDER` = aws|gcp|azure | Provider MUST be detected; tests FAIL if not |
-| `S2IAM_TEST_ASSUME_ROLE` = <identifier> | Role assume path must succeed (also implies detection expected) |
-| `S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE` = aws|gcp|azure | Detection MUST succeed but role not required |
-
-If none of these are set and no provider can be detected, tests SKIP instead of failing.
-
-Debugging
----------
-Set `S2IAM_DEBUGGING=true` to emit structured detection timing/log lines to stdout.
-
-User Agent
-----------
-All outbound auth service calls include a dynamic `User-Agent: s2iam-java/<impl-version>` header.
-
-Error Semantics
----------------
-The library is fail-fast—errors are never silently downgraded to warnings. Any unexpected condition produces an exception describing the failing stage.
+Operational Notes
+-----------------
+All outbound requests include `User-Agent: s2iam-java/<impl-version>`. The library is fail-fast—any unexpected condition raises an exception rather than logging a warning.
 
 API Summary
 -----------
@@ -110,22 +90,12 @@ Timeouts
 --------
 Default detection + HTTP call timeout: 5s (aligned to Go reference). Override with `Options.withTimeout` or builder `.timeout()`.
 
-Testing Locally
----------------
-Requires Java 11+ and Maven.
+Testing (Minimal)
+-----------------
+Run the unit/integration tests (requires Go toolchain for the local test server):
 ```bash
-cd java
-mvn -q test
+cd java && mvn -q test
 ```
-Expected outcomes:
-- On a laptop (no cloud metadata): most tests skip.
-- On a real cloud instance (env var set): tests run and must pass quickly.
-
-Contributing / Future Work
---------------------------
-- Further parity refinements with the Go implementation.
-- Extended provider signal heuristics.
-- Additional language clients will follow this contract.
 
 License
 -------

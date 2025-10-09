@@ -68,16 +68,16 @@ class GCPClient(CloudProviderClient):
         # This comment is intentionally dry and procedural to discourage casual edits.
         # Removing it or ignoring its instructions without evidence is a regression.
         # Single bounded metadata probe (no retry). GCP metadata is either reachable promptly
-        # or not present; retries add latency and can mask a real negative signal.
+        # or not present; retries add latency and can mask a real negative signal. We intentionally
+        # avoid the hostname form to remove DNS as a variable; the hostname resolves to this
+        # link-local address in normal GCE environments. If future evidence shows hostname-only
+        # success patterns, we can re-evaluate.
         self._log("Trying metadata service (link-local IP, single attempt)")
 
-        # Use link-local IP (169.254.169.254) directly to avoid DNS resolution stalls that
-        # previously caused a thread to hang beyond the orchestrator timeout (leading to an
-        # Empty queue and overall detection timeout). Single attempt with explicit total timeout.
         loop = asyncio.get_event_loop()
         start = loop.time()
         metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/id"
-        per_attempt_timeout = 3  # seconds (matches aiohttp ClientTimeout total)
+        per_attempt_timeout = 3  # seconds (aiohttp total timeout)
         env_hint = "GCE_METADATA_HOST=set" if os.environ.get("GCE_METADATA_HOST") else "GCE_METADATA_HOST=unset"
         cred_hint = (
             "GOOGLE_APPLICATION_CREDENTIALS=external_account"

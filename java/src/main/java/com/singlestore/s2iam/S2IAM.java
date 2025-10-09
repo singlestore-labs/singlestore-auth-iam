@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import com.singlestore.s2iam.exceptions.S2IAMException;
 import com.singlestore.s2iam.options.*;
-import com.singlestore.s2iam.providers.AWSClient;
-import com.singlestore.s2iam.providers.AzureClient;
-import com.singlestore.s2iam.providers.GCPClient;
+import com.singlestore.s2iam.providers.aws.AWSClient;
+import com.singlestore.s2iam.providers.azure.AzureClient;
+import com.singlestore.s2iam.providers.gcp.GCPClient;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -212,35 +212,8 @@ public final class S2IAM {
       po.logger.logf("detectProvider: no provider detected errors=%d firstError=%s", errors.size(),
           errors.isEmpty() || errors.get(0) == null ? "<none>" : errors.get(0).getMessage());
     }
-    // Build aggregated message (limit lengths to keep exception concise)
-    StringBuilder sb = new StringBuilder("no cloud provider detected");
-    if (!fastErrors.isEmpty()) {
-      sb.append("; fast=");
-      int n = 0;
-      for (var e : fastErrors.entrySet()) {
-        if (n++ > 0)
-          sb.append(',');
-        sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
-        if (n >= 3 && fastErrors.size() > 3) {
-          sb.append("+" + (fastErrors.size() - 3) + "more");
-          break;
-        }
-      }
-    }
-    if (!detectErrors.isEmpty()) {
-      sb.append("; detect=");
-      int n = 0;
-      for (var e : detectErrors.entrySet()) {
-        if (n++ > 0)
-          sb.append(',');
-        sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
-        if (n >= 3 && detectErrors.size() > 3) {
-          sb.append("+" + (detectErrors.size() - 3) + "more");
-          break;
-        }
-      }
-    }
-    throw new NoCloudProviderDetectedException(sb.toString());
+    throw new NoCloudProviderDetectedException(
+        buildAggregateDetectMessage(fastErrors, detectErrors));
   }
 
   private static String safeTrunc(String s) {
@@ -249,6 +222,31 @@ public final class S2IAM {
     if (s.length() > 60)
       return s.substring(0, 57) + "...";
     return s;
+  }
+
+  private static String buildAggregateDetectMessage(Map<String, String> fastErrors,
+      Map<String, String> detectErrors) {
+    StringBuilder sb = new StringBuilder("no cloud provider detected");
+    appendSection(sb, "fast", fastErrors, 3);
+    appendSection(sb, "detect", detectErrors, 3);
+    return sb.toString();
+  }
+
+  private static void appendSection(StringBuilder sb, String label, Map<String, String> src,
+      int max) {
+    if (src.isEmpty())
+      return;
+    sb.append("; ").append(label).append('=');
+    int n = 0;
+    for (var e : src.entrySet()) {
+      if (n++ > 0)
+        sb.append(',');
+      sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
+      if (n >= max && src.size() > max) {
+        sb.append("+" + (src.size() - max) + "more");
+        break;
+      }
+    }
   }
 
   private static void applyJwtOptions(JwtOptions o, JwtOption... opts) {

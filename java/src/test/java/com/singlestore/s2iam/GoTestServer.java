@@ -10,16 +10,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Lightweight manager to build and run the Go test server for integration tests.
- *
- * Updated to use the new --info-file startup contract (JSON) instead of parsing stdout/stderr
- * for a 'port NNNN' line. This mirrors the Go integration tests which rely on an atomic
- * info JSON file written by the server.
- */
-
-/**
- * Lightweight manager to build and run the Go test server for integration
- * tests.
+ * Lightweight manager to build and run the Go test server for integration tests
+ * (info-file based startup).
  */
 class GoTestServer {
   private Process process;

@@ -36,11 +36,29 @@ async def expect_cloud_provider_detected(timeout: float = TEST_DETECT_TIMEOUT) -
     ):
         pytest.skip("cloud provider required")
 
+    start = time.monotonic()
     try:
         provider = await s2iam.detect_provider(timeout=timeout)
         return provider
-    except s2iam.CloudProviderNotFound:
-        pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
+    except s2iam.CloudProviderNotFound as first_err:
+        first_elapsed_ms = int((time.monotonic() - start) * 1000)
+        retry_timeout = max(1.0, timeout * 0.5)
+        retry_start = time.monotonic()
+        try:
+            retry_provider = await s2iam.detect_provider(timeout=retry_timeout)
+            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
+            pytest.fail(
+                "Cloud provider detection failed first attempt but second immediate attempt succeeded; "
+                f"first_elapsed_ms={first_elapsed_ms} retry_elapsed_ms={retry_elapsed_ms} "
+                f"primary_error={first_err} retry_timeout_s={retry_timeout} provider={retry_provider.get_type().value}"
+            )
+        except s2iam.CloudProviderNotFound as second_err:
+            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
+            pytest.fail(
+                "Cloud provider detection failed twice; "
+                f"first_elapsed_ms={first_elapsed_ms} second_elapsed_ms={retry_elapsed_ms} "
+                f"first_error={first_err} second_error={second_err} retry_timeout_s={retry_timeout}"
+            )
     except s2iam.ProviderIdentityUnavailable:
         pytest.skip("cloud provider detected no identity")
 
@@ -60,60 +78,8 @@ async def require_cloud_role(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProvi
     return await expect_cloud_provider_detected(timeout)
 
 
-async def expect_cloud_provider_with_retry_evidence(
-    timeout: float,
-    retry_fraction: float = 0.6,
-    expected_provider: Optional[str] = None,
-) -> CloudProviderClient:
-    """Attempt detection once; if it times out, immediately perform a second attempt (retry probe).
-
-    The test STILL FAILS, but the failure message indicates whether a single retry would
-    have succeeded (informing production resilience decisions without masking flakiness).
-
-    Strategy:
-      1. Run normal detection (timeout)
-      2. On success -> return
-      3. On CloudProviderNotFound -> run a second detection with timeout * retry_fraction
-         - If second succeeds -> fail test with diagnostic noting retry success
-         - Else fail with both attempt diagnostics
-
-    expected_provider is informational only (embeds in failure message for clarity).
-    """
-    # Only run in configured cloud test environments; otherwise defer to original helpers.
-    if not (
-        os.environ.get("S2IAM_TEST_CLOUD_PROVIDER")
-        or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
-        or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
-    ):
-        pytest.skip("cloud provider required")
-
-    start = time.monotonic()
-    try:
-        return await s2iam.detect_provider(timeout=timeout)
-    except s2iam.CloudProviderNotFound as first_err:  # first attempt timed out or failed
-        first_elapsed_ms = int((time.monotonic() - start) * 1000)
-        # Second (probe) attempt – shorter timeout but must be at least 1s to be meaningful
-        retry_timeout = max(1.0, timeout * retry_fraction)
-        retry_start = time.monotonic()
-        try:
-            prov2 = await s2iam.detect_provider(timeout=retry_timeout)
-            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
-            pytest.fail(
-                "Provider detection failed first attempt but succeeded on retry probe: "
-                f"expected={expected_provider or 'unknown'} "
-                f"first_elapsed_ms={first_elapsed_ms} retry_elapsed_ms={retry_elapsed_ms} "
-                f"first_error={first_err}"
-            )
-        except s2iam.CloudProviderNotFound as second_err:
-            second_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
-            pytest.fail(
-                "Provider detection failed twice (retry probe also failed): "
-                f"expected={expected_provider or 'unknown'} "
-                f"first_elapsed_ms={first_elapsed_ms} second_elapsed_ms={second_elapsed_ms} "
-                f"first_error={first_err} second_error={second_err}"
-            )
-    except s2iam.ProviderIdentityUnavailable:
-        pytest.skip("cloud provider detected no identity")
+# Removed hostname diagnostic probe: we only care if an immediate second identical probe
+# (same code path) would succeed. That yields actionable data without introducing DNS.
 
 
 def maybe_parallel() -> None:

@@ -61,8 +61,6 @@ public class FastPathDetectionTest {
     }
   }
 
-  // Environment mutation helpers removed; now we rely solely on explicit system
-  // properties
-  // (s2iam.test.*Fast) that short-circuit provider fastDetect logic for local
-  // tests.
+  // Local fast-path tests rely only on dedicated system properties
+  // (s2iam.test.*Fast).
 }

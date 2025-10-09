@@ -7,7 +7,7 @@ import os
 import queue
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NoReturn, Optional
 
 from .aws import new_client as new_aws_client
 from .azure import new_client as new_azure_client
@@ -167,42 +167,69 @@ async def detect_provider(
         return result
 
     except queue.Empty:
-        # Timeout occurred; signal threads to stop and join briefly.
-        stop_event.set()
-        for thread in threads:
-            thread.join(timeout=0.05)
-        total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
-        # Capture partial status for any providers that never recorded a terminal status.
-        with status_lock:
-            known = {p["provider"] for p in provider_status}
-            for c in clients:
-                name = c.get_type().value
-                if name not in known:
-                    provider_status.append({"provider": name, "status": "timeout"})
-
-        if logger and (debugging or debug_timing):
-            joined_errors = " | ".join(all_errors)[:800]
-            logger.log(
-                (
-                    "DETECT_COMPLETE status=timeout "
-                    f"total_elapsed_ms={total_elapsed_ms} "
-                    f"timeout_s={timeout} "
-                    f"errors='{joined_errors}'"
-                )
-            )
-
-        # Construct a concise provider status summary.
-        summary_parts = []
-        for ps in provider_status:
-            part = ps["provider"] + ":" + ps["status"]
-            if "elapsed_ms" in ps:
-                part += f"@{ps['elapsed_ms']}ms"
-            summary_parts.append(part)
-        summary = ", ".join(summary_parts)
-
-        joined_errors = " | ".join(all_errors)[:800] if all_errors else "<no-provider-errors>"
-        meta = (
-            f"timeout_s={timeout} total_elapsed_ms={total_elapsed_ms} providers={len(clients)} "
-            f"error_count={len(all_errors)} provider_status=[{summary}]"
+        _raise_detection_timeout(
+            timeout=timeout,
+            detection_start=detection_start,
+            clients=clients,
+            threads=threads,
+            provider_status=provider_status,
+            status_lock=status_lock,
+            all_errors=all_errors,
+            logger=logger,
+            debugging=debugging,
+            debug_timing=debug_timing,
+            stop_event=stop_event,
         )
-        raise CloudProviderNotFound(f"Provider detection timed out: {meta} errors=[{joined_errors}]")
+
+
+def _raise_detection_timeout(
+    *,
+    timeout: float,
+    detection_start: float,
+    clients: list[CloudProviderClient],
+    threads: list[threading.Thread],
+    provider_status: list[dict[str, Any]],
+    status_lock: threading.Lock,
+    all_errors: list[str],
+    logger: Optional[Logger],
+    debugging: bool,
+    debug_timing: bool,
+    stop_event: threading.Event,
+) -> NoReturn:
+    """Compose and raise CloudProviderNotFound for a detection timeout.
+
+    Isolated to keep the main detect_provider flow skimmable and ease future
+    experiments (e.g., per-provider granular timeouts or retry policy integration).
+    """
+    stop_event.set()
+    for thread in threads:
+        thread.join(timeout=0.05)
+    total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
+    with status_lock:
+        known = {p["provider"] for p in provider_status}
+        for c in clients:
+            name = c.get_type().value
+            if name not in known:
+                provider_status.append({"provider": name, "status": "timeout"})
+    if logger and (debugging or debug_timing):
+        joined_errors_dbg = " | ".join(all_errors)[:800]
+        logger.log(
+            (
+                "DETECT_COMPLETE status=timeout "
+                f"total_elapsed_ms={total_elapsed_ms} timeout_s={timeout} "
+                f"errors='{joined_errors_dbg}'"
+            )
+        )
+    summary_parts: list[str] = []
+    for ps in provider_status:
+        part = f"{ps['provider']}:{ps['status']}"
+        if "elapsed_ms" in ps:
+            part += f"@{ps['elapsed_ms']}ms"
+        summary_parts.append(part)
+    summary = ", ".join(summary_parts)
+    joined_errors = " | ".join(all_errors)[:800] if all_errors else "<no-provider-errors>"
+    meta = (
+        f"timeout_s={timeout} total_elapsed_ms={total_elapsed_ms} providers={len(clients)} "
+        f"error_count={len(all_errors)} provider_status=[{summary}]"
+    )
+    raise CloudProviderNotFound(f"Provider detection timed out: {meta} errors=[{joined_errors}]")
