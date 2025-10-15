@@ -27,8 +27,34 @@ public final class S2IAM {
       .ofNullable(S2IAM.class.getPackage().getImplementationVersion()).orElse("dev");
   private static final String USER_AGENT = LIB_NAME + "/" + LIB_VERSION; // derived dynamically
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  // Structured detection attempt status (mirrors Python provider_status concept)
+  public static final class DetectAttemptStatus {
+    public final String phase; // fast or detect
+    public final String provider;
+    public final long durationMs;
+    public final String status; // success / error
+    public final String error;
+    DetectAttemptStatus(String phase, String provider, long durationMs, String status, String error) {
+      this.phase = phase;
+      this.provider = provider;
+      this.durationMs = durationMs;
+      this.status = status;
+      this.error = error;
+    }
+  }
+  public static final class DetectResult {
+    public final CloudProviderClient provider; // null if none
+    public final java.util.List<DetectAttemptStatus> attempts;
+    DetectResult(CloudProviderClient provider, java.util.List<DetectAttemptStatus> attempts) {
+      this.provider = provider;
+      this.attempts = attempts;
+    }
+  }
   private static boolean debugEnabled() {
     return "true".equals(System.getenv("S2IAM_DEBUGGING"));
+  }
+  private static boolean timingEnabled() {
+    return "true".equals(System.getenv("S2IAM_DEBUG_TIMING"));
   }
 
   // Convenience API (database)
@@ -106,6 +132,12 @@ public final class S2IAM {
   // Provider detection
   public static CloudProviderClient detectProvider(ProviderOption... opts)
       throws NoCloudProviderDetectedException {
+    return detectProviderWithStatus(opts).provider;
+  }
+
+  // Extended API returning structured attempt statuses for observability / parity across languages.
+  public static DetectResult detectProviderWithStatus(ProviderOption... opts)
+      throws NoCloudProviderDetectedException {
     ProviderOptions po = new ProviderOptions();
     for (ProviderOption opt : opts)
       opt.apply(po);
@@ -128,11 +160,13 @@ public final class S2IAM {
           new AzureClient(po.logger));
     }
   boolean debug = debugEnabled();
-    // Fast detect first
+  java.util.List<DetectAttemptStatus> attemptStatuses = new java.util.ArrayList<>();
+  // Fast detect first
     long fastStart = System.nanoTime();
+    boolean timing = timingEnabled();
     if (debug && po.logger != null) {
-      po.logger.logf("detectProvider: starting fastDetect phase over providers=%d",
-          po.clients.size());
+      po.logger.logf("detectProvider: starting fastDetect phase over providers=%d timing=%s",
+          po.clients.size(), timing);
     }
     Map<String, String> fastErrors = new LinkedHashMap<>();
     for (CloudProviderClient c : po.clients) {
@@ -140,23 +174,38 @@ public final class S2IAM {
       Exception fe = c.fastDetect();
       long durMs = (System.nanoTime() - s) / 1_000_000L;
       if (fe == null) {
+        attemptStatuses.add(new DetectAttemptStatus("fast", c.getType().name(), durMs, "success", null));
         if (debug && po.logger != null) {
-          po.logger.logf("detectProvider: fastDetect SUCCESS provider=%s totalFastPhaseMs=%d",
-              c.getClass().getSimpleName(), (System.nanoTime() - fastStart) / 1_000_000L);
+          if (timing) {
+            po.logger.logf("detectProvider: fastDetect SUCCESS provider=%s totalFastPhaseMs=%d",
+                c.getClass().getSimpleName(), (System.nanoTime() - fastStart) / 1_000_000L);
+          } else {
+            po.logger.logf("detectProvider: fastDetect SUCCESS provider=%s", c.getClass().getSimpleName());
+          }
         }
-        return c;
+        return new DetectResult(c, attemptStatuses);
       } else if (debug && po.logger != null) {
-        po.logger.logf("detectProvider: fastDetect FAIL provider=%s err=%s durationMs=%d",
-            c.getClass().getSimpleName(), fe.getMessage(), durMs);
+        if (timing) {
+          po.logger.logf("detectProvider: fastDetect FAIL provider=%s err=%s durationMs=%d",
+              c.getClass().getSimpleName(), fe.getMessage(), durMs);
+        } else {
+          po.logger.logf("detectProvider: fastDetect FAIL provider=%s err=%s",
+              c.getClass().getSimpleName(), fe.getMessage());
+        }
       }
       fastErrors.put(c.getClass().getSimpleName(), fe.getMessage());
+  attemptStatuses.add(new DetectAttemptStatus("fast", c.getType().name(), durMs, "error", safeTrunc(fe.getMessage())));
     }
   // Detection timeout: use centralized Timeouts.DETECT unless explicitly overridden via ProviderOption.
   // This keeps parity with other languages and allows a single tuning point. Tests rely on fast failure.
   Duration timeout = po.timeout == null ? Timeouts.DETECT : po.timeout;
     if (debug && po.logger != null) {
-      po.logger.logf("detectProvider: entering concurrent detect phase timeoutMs=%d",
-          timeout.toMillis());
+      if (timing) {
+        po.logger.logf("detectProvider: entering concurrent detect phase timeoutMs=%d",
+            timeout.toMillis());
+      } else {
+        po.logger.logf("detectProvider: entering concurrent detect phase");
+      }
     }
     ExecutorService exec = Executors.newFixedThreadPool(po.clients.size());
     CompletionService<CloudProviderClient> cs = new ExecutorCompletionService<>(exec);
@@ -167,9 +216,14 @@ public final class S2IAM {
         Exception err = c.detect();
         long durMs = (System.nanoTime() - s) / 1_000_000L;
         if (debug && po.logger != null) {
-          po.logger.logf("detectProvider: detect provider=%s result=%s durationMs=%d thread=%s",
-              c.getClass().getSimpleName(), err == null ? "SUCCESS" : ("ERR:" + err.getMessage()),
-              durMs, Thread.currentThread().getName());
+          if (timing) {
+            po.logger.logf("detectProvider: detect provider=%s result=%s durationMs=%d thread=%s",
+                c.getClass().getSimpleName(), err == null ? "SUCCESS" : ("ERR:" + err.getMessage()),
+                durMs, Thread.currentThread().getName());
+          } else {
+            po.logger.logf("detectProvider: detect provider=%s result=%s", c.getClass().getSimpleName(),
+                err == null ? "SUCCESS" : ("ERR:" + err.getMessage()));
+          }
         }
         if (err == null)
           return c;
@@ -190,19 +244,33 @@ public final class S2IAM {
         if (f == null)
           break; // timeout
         CloudProviderClient found = f.get();
+  long successDur = timeout.toMillis() - ((deadline - System.nanoTime()) / 1_000_000L); // approximate wall duration into phase
+  attemptStatuses.add(new DetectAttemptStatus("detect", found.getType().name(), successDur, "success", null));
         for (Future<CloudProviderClient> other : futures)
           if (!other.isDone())
             other.cancel(true);
-        return found;
+        return new DetectResult(found, attemptStatuses);
       } catch (ExecutionException ee) {
         Throwable cause = ee.getCause();
         errors.add(cause);
         if (debug && po.logger != null) {
-          po.logger.logf("detectProvider: provider failed error=%s remainingMs=%d",
-              cause == null ? "<null>" : cause.getMessage(), remainingMs);
+          if (timing) {
+            po.logger.logf("detectProvider: provider failed error=%s remainingMs=%d",
+                cause == null ? "<null>" : cause.getMessage(), remainingMs);
+          } else {
+            po.logger.logf("detectProvider: provider failed error=%s",
+                cause == null ? "<null>" : cause.getMessage());
+          }
         }
         String key = cause == null ? "unknown" : cause.getClass().getSimpleName();
         detectErrors.put(key + "@" + i, cause == null ? "null" : cause.getMessage());
+        String providerName = "unknown";
+        if (cause instanceof Exception) {
+          // attempt to derive provider from future index
+          if (i < po.clients.size()) providerName = po.clients.get(i).getType().name();
+        }
+  long errDur = timeout.toMillis() - remainingMs;
+  attemptStatuses.add(new DetectAttemptStatus("detect", providerName, errDur, "error", safeTrunc(cause == null ? null : cause.getMessage())));
       } catch (InterruptedException ie) {
         Thread.currentThread().interrupt();
         errors.add(ie);
@@ -213,11 +281,15 @@ public final class S2IAM {
       if (!other.isDone())
         other.cancel(true);
     if (debug && po.logger != null) {
-      po.logger.logf("detectProvider: no provider detected errors=%d firstError=%s", errors.size(),
-          errors.isEmpty() || errors.get(0) == null ? "<none>" : errors.get(0).getMessage());
+      if (timing) {
+        po.logger.logf("detectProvider: no provider detected errors=%d firstError=%s", errors.size(),
+            errors.isEmpty() || errors.get(0) == null ? "<none>" : errors.get(0).getMessage());
+      } else {
+        po.logger.logf("detectProvider: no provider detected errors=%d", errors.size());
+      }
     }
-    throw new NoCloudProviderDetectedException(
-        buildAggregateDetectMessage(fastErrors, detectErrors));
+  throw new NoCloudProviderDetectedException(
+    buildAggregateDetectMessage(fastErrors, detectErrors) + " attempts=" + attemptStatuses.size());
   }
 
   private static String safeTrunc(String s) {

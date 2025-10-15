@@ -14,6 +14,31 @@ JWTs for the management API are not yet available.
 APIs and language bindings may change before this is considered generally avaialble.
 
 ## Overview
+### Cloud Provider Detection (Parity Overview)
+
+All language implementations follow the same logical ordering to identify the current cloud environment:
+
+1. Fast path hints (environment variables, explicit credential presence, test-only system properties). Returns immediately on first match.
+2. Concurrent metadata detection across AWS, GCP, Azure. Each provider performs a single metadata probe (plus minimal classification calls) with a shared detection timeout.
+3. First successful provider cancels the remaining attempts.
+
+Timeouts:
+- Java & Python use a 10s upper bound for detection orchestration (Java via `Timeouts.DETECT`, Python via a global deadline). Healthy real-cloud responses are typically <100ms; the timeout should rarely be hit.
+- Identity/token fetch operations use a separate 10s baseline (`Timeouts.IDENTITY` in Java) to allow STS / MSI / GCP identity token retrieval.
+
+Observability:
+- Python exposes a `provider_status` list (phase, provider, status, elapsed_ms, error).
+- Java now offers `S2IAM.detectProviderWithStatus` returning a structured attempt list (`phase=fast|detect`, `status=success|error`).
+
+Environment Flags:
+- `S2IAM_DEBUGGING=true` enables human-readable log messages.
+- `S2IAM_DEBUG_TIMING=true` (Java & Python) includes per-attempt duration metrics without requiring always-on verbose logs.
+
+Design Principles:
+- Fail fast but do not prematurely declare failure while a plausible provider may still respond within the 10s window.
+- Avoid hidden retries for initial detection to surface latency issues early (exception: targeted Azure MSI throttling handling lives in provider-specific logic in Python; Java may add symmetric logic if evidence appears).
+- Each provider’s detection attempt is a single network round trip (plus a lightweight supplementary call for Azure classification) to keep CI cycles short.
+
 
 The `singlestore-auth-iam` library provides a seamless way to authenticate with SingleStore services using cloud provider IAM credentials. It automatically discovers your cloud environment (AWS, GCP, Azure) and obtains JWTs for:
 

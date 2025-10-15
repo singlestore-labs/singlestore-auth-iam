@@ -12,12 +12,11 @@ public final class Timeouts {
   }
 
   // Metadata detection timeout.
-  // NOTE: Central tuning point used by S2IAM.detectProvider (unless caller supplies ProviderOption timeout).
-  // Chosen to balance: fast CI failure when no provider (< overall few seconds) vs enough headroom for real VM RTT.
-  // Python currently uses a 10s global orchestration timeout with per-attempt cancellations; Java keeps 5s here
-  // to preserve quick feedback. If production evidence shows legitimate >5s latency on first metadata reach,
-  // consider raising (and mirror across languages) rather than sprinkling ad-hoc overrides.
-  public static final Duration DETECT = Duration.ofSeconds(5);
+  // Central tuning point used by S2IAM.detectProvider (unless caller supplies ProviderOption timeout).
+  // Raised to 10s for cross-language parity (Python orchestrator global timeout) while still canceling
+  // immediately upon first success. Real provider metadata responses normally arrive in <100ms, so the
+  // extended window should not be reached in healthy environments.
+  public static final Duration DETECT = Duration.ofSeconds(10);
 
   // Identity / token retrieval baseline (metadata tokens, STS, MI, etc.)
   public static final Duration IDENTITY = Duration.ofSeconds(10);
