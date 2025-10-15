@@ -57,10 +57,26 @@ class AzureClient(CloudProviderClient):
         if self._detected:
             return
 
+        # Cancellation hygiene: if the coroutine is cancelled (GeneratorExit / CancelledError) we
+        # MUST NOT raise a new exception (would surface as 'coroutine ignored GeneratorExit').
+        # Instead treat as a clean negative detection so orchestrator can proceed with other
+        # providers or aggregate timeout logic. This mirrors the GCP detect() cancellation fix.
+        try:
+            await self._detect_impl()
+        except (asyncio.CancelledError, GeneratorExit):  # noqa: PERF203
+            # Silent benign exit: do not log unless debugging explicitly requested.
+            if os.environ.get("S2IAM_DEBUGGING", "").lower() == "true":
+                self._log("Detection cancelled (treated as no Azure)")
+            return
+
+    async def _detect_impl(self) -> None:
+        """Implementation body split out so we can wrap cancellation cleanly."""
         # Managed identity endpoints can throttle (429). Bounded exponential retries here provide
         # reliable classification (detected-with-identity vs detected-no-identity) without masking
         # genuine absence of Azure signals. Other providers avoid retries to stay fast.
         max_attempts, base_backoff_ms = self._retry_config()
+
+        # NOTE: body moved to _detect_impl for cancellation handling above.
 
         # Step 1: Probe metadata to establish Azure environment.
         metadata_ok = False
@@ -79,6 +95,9 @@ class AzureClient(CloudProviderClient):
                         else:
                             self._log(f"Metadata probe status {response.status} (attempt {i+1}/3)")
             except Exception as e:  # noqa: BLE001
+                # Preserve cancellation semantics
+                if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                    raise
                 self._log(f"Metadata probe failed attempt {i+1}/3: {e}")
             await asyncio.sleep(0.05 * (i + 1))
 
@@ -97,6 +116,8 @@ class AzureClient(CloudProviderClient):
                     self._log("Detected Azure via DefaultAzureCredential fallback")
                     return
             except Exception as e:  # noqa: BLE001
+                if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                    raise
                 self._log(f"DefaultAzureCredential fallback failed: {e}")
             raise Exception("Azure provider not detected")
 
@@ -129,6 +150,8 @@ class AzureClient(CloudProviderClient):
                         else:
                             last_error = f"RETRYABLE:{resp.status} body={body_text[:120]}"
             except Exception as e:  # noqa: BLE001
+                if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                    raise
                 last_error = f"EXCEPTION:{e}"
 
             if attempt < max_attempts:
