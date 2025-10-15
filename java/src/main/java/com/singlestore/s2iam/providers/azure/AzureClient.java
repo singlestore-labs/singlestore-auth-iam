@@ -34,7 +34,7 @@ public class AzureClient extends AbstractBaseClient {
     if (System.getenv("AZURE_FEDERATED_TOKEN_FILE") != null || System.getenv("MSI_ENDPOINT") != null
         || System.getenv("IDENTITY_ENDPOINT") != null)
       return null;
-  boolean debug = debugEnabled() && logger != null;
+    boolean debug = debugEnabled() && logger != null;
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
     try {
       HttpRequest req = HttpRequest
@@ -106,14 +106,14 @@ public class AzureClient extends AbstractBaseClient {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata", "true")
           .timeout(Timeouts.IDENTITY).GET().build();
       HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-  if (resp.statusCode() != 200 || resp.body().isEmpty()) {
-    if (resp.statusCode() == 400 || resp.statusCode() == 403 || resp.statusCode() == 404) {
-      return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
-      "Azure managed identity token unavailable status=" + resp.statusCode()));
-    }
-    return new IdentityHeadersResult(null, null,
-    new IllegalStateException("failed to get Azure MI token status=" + resp.statusCode()));
-  }
+      if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+        if (resp.statusCode() == 400 || resp.statusCode() == 403 || resp.statusCode() == 404) {
+          return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
+              "Azure managed identity token unavailable status=" + resp.statusCode()));
+        }
+        return new IdentityHeadersResult(null, null,
+            new IllegalStateException("failed to get Azure MI token status=" + resp.statusCode()));
+      }
       String body = resp.body();
       ObjectMapper om = new ObjectMapper();
       JsonNode node = om.readTree(body);

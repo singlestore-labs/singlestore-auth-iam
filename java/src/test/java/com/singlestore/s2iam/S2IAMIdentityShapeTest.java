@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import com.singlestore.s2iam.options.JwtOption;
+import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
 import com.singlestore.s2iam.options.Options;
 import com.singlestore.s2iam.options.ServerUrlOption;
 import java.net.URI;
@@ -68,10 +69,14 @@ public class S2IAMIdentityShapeTest {
       addl.put("audience", "https://authsvc.singlestore.com");
     }
     CloudProviderClient.IdentityHeadersResult preflight = provider.getIdentityHeaders(addl);
-    TestSkipUtil.skipIfNoRole(provider, preflight);
-    TestSkipUtil.skipIfAzureMIUnavailable(provider, preflight);
-    assertNull(preflight.error, "identity header retrieval failed: "
-        + (preflight.error == null ? "" : preflight.error.getMessage()));
+  TestSkipUtil.skipIfNoRole(provider, preflight);
+  TestSkipUtil.skipIfAzureMIUnavailable(provider, preflight);
+  if (preflight.error instanceof IdentityUnavailableException) {
+    org.junit.jupiter.api.Assumptions.abort(
+      "identity unavailable (expected in no-role environment): " + preflight.error.getMessage());
+  }
+  assertNull(preflight.error, "identity header retrieval failed: "
+    + (preflight.error == null ? "" : preflight.error.getMessage()));
 
     List<JwtOption> opts = new ArrayList<>();
     opts.add(ServerUrlOption.of(

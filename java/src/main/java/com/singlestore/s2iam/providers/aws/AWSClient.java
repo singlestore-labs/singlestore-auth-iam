@@ -53,8 +53,8 @@ public class AWSClient extends AbstractBaseClient {
     for (String e : envs)
       if (System.getenv(e) != null && !System.getenv(e).isEmpty())
         return null;
-  HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
-  boolean debug = debugEnabled() && logger != null;
+    HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
+    boolean debug = debugEnabled() && logger != null;
     try {
       HttpRequest tokenReq = HttpRequest.newBuilder(URI.create(METADATA_BASE + "/latest/api/token"))
           .timeout(Timeouts.DETECT).header("X-aws-ec2-metadata-token-ttl-seconds", "60")

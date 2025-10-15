@@ -6,7 +6,12 @@ import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
-/** Parity fast-path detection tests (local only, skipped on real cloud). */
+/**
+ * Parity fast-path detection tests (local only, skipped on real cloud).
+ * Detection timeout behavior is centrally defined in {@link Timeouts#DETECT};
+ * these tests rely solely on explicit system property hooks and should remain
+ * fast.
+ */
 public class FastPathDetectionTest {
 
   private boolean isCloudEnv() {

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.*;
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
+import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
 import com.singlestore.s2iam.exceptions.S2IAMException;
 import com.singlestore.s2iam.options.JwtOption;
 import com.singlestore.s2iam.options.Options; // for withAudience
@@ -46,10 +47,15 @@ public class S2IAMJwtHappyPathTest {
       addl.put("audience", "https://authsvc.singlestore.com");
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
-    TestSkipUtil.skipIfNoRole(provider, idRes);
-    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
-    assertNull(idRes.error, "identity header retrieval failed: "
-        + (idRes.error == null ? "" : idRes.error.getMessage()));
+  TestSkipUtil.skipIfNoRole(provider, idRes);
+  TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+  if (idRes.error instanceof IdentityUnavailableException) {
+    // Treat as expected unavailability in NO_ROLE scenarios if skip util missed; abort.
+    org.junit.jupiter.api.Assumptions.abort(
+      "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+  }
+  assertNull(idRes.error, "identity header retrieval failed: "
+    + (idRes.error == null ? "" : idRes.error.getMessage()));
     CloudIdentity cid = idRes.identity;
     assertNotNull(cid, "client identity null");
 
@@ -90,6 +96,10 @@ public class S2IAMJwtHappyPathTest {
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
     TestSkipUtil.skipIfNoRole(provider, idRes);
     TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
     assertNull(idRes.error);
     CloudIdentity cid = idRes.identity;
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();

@@ -34,7 +34,7 @@ public class GCPClient extends AbstractBaseClient {
     if (System.getenv("GOOGLE_APPLICATION_CREDENTIALS") != null
         || System.getenv("GCE_METADATA_HOST") != null)
       return null;
-  boolean debug = debugEnabled() && logger != null;
+    boolean debug = debugEnabled() && logger != null;
     String ep = "http://metadata.google.internal/computeMetadata/v1/instance/id";
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.DETECT).build();
     try {
@@ -96,14 +96,14 @@ public class GCPClient extends AbstractBaseClient {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
           .timeout(Timeouts.IDENTITY).GET().build();
       HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-  if (resp.statusCode() != 200 || resp.body().isEmpty()) {
-    if (resp.statusCode() == 404) {
-      return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
-      "GCP identity token unavailable (no attached service account) status=404"));
-    }
-    return new IdentityHeadersResult(null, null, new IllegalStateException(
-    "failed to get GCP identity token status=" + resp.statusCode()));
-  }
+      if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+        if (resp.statusCode() == 404) {
+          return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
+              "GCP identity token unavailable (no attached service account) status=404"));
+        }
+        return new IdentityHeadersResult(null, null, new IllegalStateException(
+            "failed to get GCP identity token status=" + resp.statusCode()));
+      }
       Map<String, String> headers = new HashMap<>();
       String token = resp.body();
       headers.put("Authorization", "Bearer " + token);
