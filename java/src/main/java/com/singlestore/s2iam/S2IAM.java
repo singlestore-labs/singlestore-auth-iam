@@ -27,6 +27,9 @@ public final class S2IAM {
       .ofNullable(S2IAM.class.getPackage().getImplementationVersion()).orElse("dev");
   private static final String USER_AGENT = LIB_NAME + "/" + LIB_VERSION; // derived dynamically
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static boolean debugEnabled() {
+    return "true".equals(System.getenv("S2IAM_DEBUGGING"));
+  }
 
   // Convenience API (database)
   public static String getDatabaseJWT(String workspaceGroupId, JwtOption... opts)
@@ -117,14 +120,14 @@ public final class S2IAM {
       if (po.clients == null)
         po.clients = ctx.clients;
     }
-    if (po.logger == null && "true".equals(System.getenv("S2IAM_DEBUGGING"))) {
+    if (po.logger == null && debugEnabled()) {
       po.logger = Logger.STDOUT;
     }
     if (po.clients == null) {
       po.clients = List.of(new AWSClient(po.logger), new GCPClient(po.logger),
           new AzureClient(po.logger));
     }
-    boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING"));
+  boolean debug = debugEnabled();
     // Fast detect first
     long fastStart = System.nanoTime();
     if (debug && po.logger != null) {
@@ -148,8 +151,9 @@ public final class S2IAM {
       }
       fastErrors.put(c.getClass().getSimpleName(), fe.getMessage());
     }
-    Duration timeout = po.timeout == null ? Duration.ofSeconds(5) : po.timeout; // align with Go
-                                                                                // default
+  // Detection timeout: use centralized Timeouts.DETECT unless explicitly overridden via ProviderOption.
+  // This keeps parity with other languages and allows a single tuning point. Tests rely on fast failure.
+  Duration timeout = po.timeout == null ? Timeouts.DETECT : po.timeout;
     if (debug && po.logger != null) {
       po.logger.logf("detectProvider: entering concurrent detect phase timeoutMs=%d",
           timeout.toMillis());
@@ -238,22 +242,6 @@ public final class S2IAM {
     return "no cloud provider detected; " + String.join("; ", parts);
   }
 
-  private static void appendSection(StringBuilder sb, String label, Map<String, String> src,
-      int max) {
-    if (src.isEmpty())
-      return;
-    sb.append("; ").append(label).append('=');
-    int n = 0;
-    for (var e : src.entrySet()) {
-      if (n++ > 0)
-        sb.append(',');
-      sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
-      if (n >= max && src.size() > max) {
-        sb.append("+" + (src.size() - max) + "more");
-        break;
-      }
-    }
-  }
 
   private static String formatSection(Map<String, String> src, int max) {
     if (src.isEmpty())
@@ -300,7 +288,7 @@ public final class S2IAM {
             "audience parameter is only supported for GCP provider (detected=" + t + ")");
       }
     }
-    boolean debug = "true".equals(System.getenv("S2IAM_DEBUGGING"));
+  boolean debug = debugEnabled();
     CloudProviderClient provider = o.provider;
     if (o.assumeRoleIdentifier != null && !o.assumeRoleIdentifier.isEmpty()) {
       String id = o.assumeRoleIdentifier;

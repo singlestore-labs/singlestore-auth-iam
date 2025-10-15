@@ -12,6 +12,9 @@ public abstract class AbstractBaseClient implements CloudProviderClient {
     this.logger = logger;
     this.assumedRole = assumedRole;
   }
+  protected static boolean debugEnabled() {
+    return "true".equals(System.getenv("S2IAM_DEBUGGING"));
+  }
 
   @Override
   public CloudProviderClient assumeRole(String roleIdentifier) {
