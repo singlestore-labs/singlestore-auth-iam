@@ -63,7 +63,6 @@ class GCPClient(CloudProviderClient):
 
         try:
             trace_configs = []
-            # Enable trace collection either when debugging explicitly OR if we later hit a timeout
             want_trace = debugging
             tc: Optional[aiohttp.TraceConfig] = None
             if want_trace:
@@ -119,12 +118,10 @@ class GCPClient(CloudProviderClient):
                         if response.status != 200:
                             raise Exception(f"metadata status {response.status}")
 
-            GUARD_MARGIN = 0.25  # seconds; covers event loop scheduling jitter
+            GUARD_MARGIN = 0.25
             try:
                 await asyncio.wait_for(_probe(), timeout=per_attempt_timeout + GUARD_MARGIN)
-            except asyncio.TimeoutError as te:  # normalize to TimeoutError for classification
-                # If we timed out but did not previously enable traces, we cannot retroactively
-                # gather aiohttp phase hooks. Emit a concise marker for diagnostics.
+            except asyncio.TimeoutError as te:
                 if not debugging:
                     self._log("TRACE timeout_without_phase_detail")
                 raise TimeoutError("metadata probe wait_for timeout") from te
@@ -133,11 +130,18 @@ class GCPClient(CloudProviderClient):
                 self._log(f"Detected metadata (elapsed={elapsed_ms}ms)")
             self._detected = True
             return
+        except (GeneratorExit, asyncio.CancelledError) as e:
+            elapsed_ms = int((loop.time() - start) * 1000)
+            if debugging:
+                self._log(
+                    f"Detect cancelled/closed (elapsed_ms={elapsed_ms} type={type(e).__name__}) – treating as negative"
+                )
+            return
         except Exception as e:  # noqa: BLE001
             elapsed_ms = int((loop.time() - start) * 1000)
             msg = str(e) or type(e).__name__
             category = classify(msg)
-            OVER_TIMEOUT_MARGIN_MS = 300  # ms; allow for guard margin + HTTP stack variance
+            OVER_TIMEOUT_MARGIN_MS = 300
             over_timeout = elapsed_ms > (per_attempt_timeout * 1000 + OVER_TIMEOUT_MARGIN_MS)
             diag = (
                 "Not running on GCP: metadata probe failed; "
