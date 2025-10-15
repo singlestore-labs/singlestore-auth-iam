@@ -47,15 +47,16 @@ public class S2IAMJwtHappyPathTest {
       addl.put("audience", "https://authsvc.singlestore.com");
     }
     CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
-  TestSkipUtil.skipIfNoRole(provider, idRes);
-  TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
-  if (idRes.error instanceof IdentityUnavailableException) {
-    // Treat as expected unavailability in NO_ROLE scenarios if skip util missed; abort.
-    org.junit.jupiter.api.Assumptions.abort(
-      "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
-  }
-  assertNull(idRes.error, "identity header retrieval failed: "
-    + (idRes.error == null ? "" : idRes.error.getMessage()));
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes.error instanceof IdentityUnavailableException) {
+      // Treat as expected unavailability in NO_ROLE scenarios if skip util missed;
+      // abort.
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
     CloudIdentity cid = idRes.identity;
     assertNotNull(cid, "client identity null");
 
@@ -123,13 +124,21 @@ public class S2IAMJwtHappyPathTest {
     if (provider.getType() != CloudProviderType.gcp) {
       Assumptions.abort("not GCP");
     }
-    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
-      TestSkipUtil.skipIfNoRoleProbe(provider,
-          Map.of("audience", "https://authsvc.singlestore.com"));
+    boolean realCloud = expectCloud();
+    Map<String, String> addl = new HashMap<>();
+    if (realCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
     }
-    String audience = expectCloud()
-        ? "https://authsvc.singlestore.com"
-        : "https://test.example.com";
+    CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    if (idRes != null && idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    if (idRes != null && idRes.error != null) {
+      fail("identity retrieval failed: " + idRes.error.getMessage());
+    }
+    String audience = realCloud ? "https://authsvc.singlestore.com" : "https://test.example.com";
     String jwt = S2IAM.getDatabaseJWT("wg-test",
         ServerUrlOption.of(
             server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),

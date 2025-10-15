@@ -3,6 +3,7 @@ package com.singlestore.s2iam;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
+import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
 import com.singlestore.s2iam.exceptions.S2IAMException;
 import com.singlestore.s2iam.options.ServerUrlOption;
 import java.nio.file.Path;
@@ -31,18 +32,19 @@ public class S2IAMJwtErrorCasesTest {
   void serverReturnsEmptyJWT() throws Exception {
     assumeOrSkip();
     CloudProviderClient provider = S2IAM.detectProvider();
-    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
-      if (provider.getType() == CloudProviderType.gcp) {
-        TestSkipUtil.skipIfNoRoleProbe(provider,
-            java.util.Map.of("audience", "https://authsvc.singlestore.com"));
-      } else {
-        TestSkipUtil.skipIfNoRoleProbe(provider);
-      }
+    boolean realCloud = expectCloud();
+    java.util.Map<String, String> addl = new java.util.HashMap<>();
+    if (provider.getType() == CloudProviderType.gcp && realCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
     }
-    // For generic non-cloud CI runners (Azure host w/o MI) abort identity-bearing
-    // tests.
-    TestSkipUtil.skipIfAzureMIUnavailable(provider,
-        provider.getIdentityHeaders(java.util.Collections.emptyMap()));
+    CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes != null && idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    assertNull(idRes.error, "identity header retrieval failed: " + (idRes.error == null ? "" : idRes.error.getMessage()));
     // Start dedicated server with flag --return-empty-jwt
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
@@ -56,16 +58,19 @@ public class S2IAMJwtErrorCasesTest {
   void serverReturnsError() throws Exception {
     assumeOrSkip();
     CloudProviderClient provider = S2IAM.detectProvider();
-    if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null) {
-      if (provider.getType() == CloudProviderType.gcp) {
-        TestSkipUtil.skipIfNoRoleProbe(provider,
-            java.util.Map.of("audience", "https://authsvc.singlestore.com"));
-      } else {
-        TestSkipUtil.skipIfNoRoleProbe(provider);
-      }
+    boolean realCloud = expectCloud();
+    java.util.Map<String, String> addl = new java.util.HashMap<>();
+    if (provider.getType() == CloudProviderType.gcp && realCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
     }
-    TestSkipUtil.skipIfAzureMIUnavailable(provider,
-        provider.getIdentityHeaders(java.util.Collections.emptyMap()));
+    CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes != null && idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    assertNull(idRes.error, "identity header retrieval failed: " + (idRes.error == null ? "" : idRes.error.getMessage()));
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();

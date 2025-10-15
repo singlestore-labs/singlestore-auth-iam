@@ -29,7 +29,8 @@ final class TestSkipUtil {
     switch (provider.getType()) {
       case gcp:
         if (containsAny(msg, "gcp-no-role-identity-unavailable-404",
-            "failed to get GCP identity token status=404")) {
+            "failed to get GCP identity token status=404",
+            "GCP identity token unavailable (no attached service account) status=404")) {
           Assumptions.abort("GCP NO_ROLE host: identity unavailable (expected)");
         }
         break;
