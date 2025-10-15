@@ -57,8 +57,8 @@ async def detect_provider(
     # Set up logger only if explicit debugging flag is set; production code must not branch
     # on test harness-only environment variables. Rich diagnostics are instead
     # surfaced via aggregated exception messages below.
-    debugging = os.environ.get("S2IAM_DEBUGGING") == "true"
-    debug_timing = os.environ.get("S2IAM_DEBUG_TIMING") == "true"
+    debugging = os.environ.get("S2IAM_DEBUGGING", "").lower() == "true"
+    debug_timing = os.environ.get("S2IAM_DEBUG_TIMING", "").lower() == "true"
     if logger is None and debugging:
         logger = DefaultLogger()
 
@@ -163,66 +163,46 @@ async def detect_provider(
     detection_start = time.monotonic()
     # Track how many threads have finished (success or error) to allow early exit when all done.
     total_clients = len(clients)
-    try:
-        # Poll loop instead of single blocking get so we can detect early-failure condition.
-        remaining = timeout
-        interval = 0.05  # 50ms poll granularity
-        while remaining > 0:
-            start_poll = time.monotonic()
-            try:
-                result: CloudProviderClient = result_queue.get(timeout=min(interval, remaining))
-                stop_event.set()  # Ensure all threads stop
-                total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
-                if logger:
-                    if debugging or debug_timing:
-                        logger.log(
-                            (
-                                "DETECT_COMPLETE status=success "
-                                f"provider={result.get_type().value} "
-                                f"total_elapsed_ms={total_elapsed_ms}"
-                            )
+    # Poll loop instead of single blocking get so we can detect early-failure condition.
+    remaining = timeout
+    interval = 0.05  # 50ms poll granularity (balance: coarse enough to reduce wakeups, fine enough for fast success)
+    while remaining > 0:
+        start_poll = time.monotonic()
+        try:
+            result: CloudProviderClient = result_queue.get(timeout=min(interval, remaining))
+            stop_event.set()  # Ensure all threads stop
+            total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
+            if logger:
+                if debugging or debug_timing:
+                    logger.log(
+                        (
+                            "DETECT_COMPLETE status=success "
+                            f"provider={result.get_type().value} "
+                            f"total_elapsed_ms={total_elapsed_ms}"
                         )
-                    else:
-                        logger.log(f"Detected provider: {result.get_type().value}")
-                return result
-            except queue.Empty:
-                pass
-            # Early failure: if every thread has produced a terminal status (success/error/timeout/skipped)
-            with status_lock:
-                finished = sum(
-                    1 for ps in provider_status if ps["status"] in {"success", "error", "timeout", "skipped"}
-                )
-            if finished >= total_clients and not any(ps["status"] == "success" for ps in provider_status):
-                # All threads ended without success -> raise immediately (no need to wait remaining timeout)
-                break
-            remaining -= time.monotonic() - start_poll
-        else:
-            # Loop ended naturally (remaining <= 0) without a success result
-            if logger and (debugging or debug_timing):
-                logger.log(
-                    "DETECT_LOOP_COMPLETE no-success reason=timeout-before-result "
-                    f"elapsed_ms={int((time.monotonic()-detection_start)*1000)}"
-                )
+                    )
+                else:
+                    logger.log(f"Detected provider: {result.get_type().value}")
+            return result
+        except queue.Empty:
+            pass
+        # Early failure: if every thread has produced a terminal status (success/error/timeout/skipped)
+        with status_lock:
+            finished = sum(1 for ps in provider_status if ps["status"] in {"success", "error", "timeout", "skipped"})
+        if finished >= total_clients and not any(ps["status"] == "success" for ps in provider_status):
+            # All threads ended without success -> raise immediately (no need to wait remaining timeout)
+            break
+        remaining -= time.monotonic() - start_poll
+    else:
+        # Loop ended naturally (remaining <= 0) without a success result
+        if logger and (debugging or debug_timing):
+            logger.log(
+                "DETECT_LOOP_COMPLETE no-success reason=timeout-before-result "
+                f"elapsed_ms={int((time.monotonic()-detection_start)*1000)}"
+            )
 
-        # No provider detected within timeout or all failed fast.
-        stop_event.set()  # Ensure all threads stop
-    except queue.Empty:  # pragma: no cover - retained for compatibility; main loop handles logic
-        stop_event.set()
-        _raise_detection_timeout(
-            timeout=timeout,
-            detection_start=detection_start,
-            clients=clients,
-            threads=threads,
-            provider_status=provider_status,
-            status_lock=status_lock,
-            all_errors=all_errors,
-            logger=logger,
-            debugging=debugging,
-            debug_timing=debug_timing,
-            stop_event=stop_event,
-            provider_loops=provider_loops,
-            loops_lock=loops_lock,
-        )
+    # No provider detected within timeout or all failed fast.
+    stop_event.set()  # Ensure all threads stop
 
     # If we broke out of loop without returning (early failure or timeout), raise composed error.
     _raise_detection_timeout(
@@ -273,6 +253,8 @@ def _raise_detection_timeout(
                 except Exception:  # noqa: BLE001 - best effort cancellation
                     pass
     for thread in threads:
+        # 50ms join chosen: keeps worst-case added delay bounded (< provider timeout granularity)
+        # while giving threads a chance to observe stop_event and exit cleanly.
         thread.join(timeout=0.05)
     total_elapsed_ms = int((time.monotonic() - detection_start) * 1000)
     with status_lock:

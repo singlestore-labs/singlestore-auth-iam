@@ -35,14 +35,11 @@ class AzureClient(CloudProviderClient):
         if self._logger:
             self._logger.log(f"Azure: {message}")
 
-    async def detect(self) -> None:
-        """Detect if running on Azure (full phase, reliability-focused)."""
-        if self._detected:
-            return
+    @staticmethod
+    def _retry_config() -> tuple[int, int]:
+        """Return (max_attempts, base_backoff_ms) from env with validation.
 
-        # Managed identity endpoints can throttle (429). Bounded exponential retries here provide
-        # reliable classification (detected-with-identity vs detected-no-identity) without masking
-        # genuine absence of Azure signals. Other providers avoid retries to stay fast.
+        Centralized to keep detect() and token acquisition in sync."""
         max_attempts_env = os.environ.get("S2IAM_AZURE_MI_RETRIES", "6")
         base_backoff_ms_env = os.environ.get("S2IAM_AZURE_MI_BACKOFF_MS", "50")
         try:
@@ -53,6 +50,17 @@ class AzureClient(CloudProviderClient):
             base_backoff_ms = max(1, min(5000, int(base_backoff_ms_env)))
         except ValueError:
             base_backoff_ms = 50
+        return max_attempts, base_backoff_ms
+
+    async def detect(self) -> None:
+        """Detect if running on Azure (full phase, reliability-focused)."""
+        if self._detected:
+            return
+
+        # Managed identity endpoints can throttle (429). Bounded exponential retries here provide
+        # reliable classification (detected-with-identity vs detected-no-identity) without masking
+        # genuine absence of Azure signals. Other providers avoid retries to stay fast.
+        max_attempts, base_backoff_ms = self._retry_config()
 
         # Step 1: Probe metadata to establish Azure environment.
         metadata_ok = False
@@ -108,7 +116,8 @@ class AzureClient(CloudProviderClient):
                     ) as resp:
                         if resp.status == 200:
                             self._detected = True
-                            self._log(f"Managed identity token acquired (attempt {attempt}/{max_attempts})")
+                            if os.environ.get("S2IAM_DEBUGGING", "").lower() == "true":
+                                self._log(f"Managed identity token acquired (attempt {attempt}/{max_attempts})")
                             return
                         body_text = await resp.text()
                         if resp.status in (400, 404):
@@ -116,11 +125,11 @@ class AzureClient(CloudProviderClient):
                             last_error = f"identity-missing status={resp.status} body={body_text[:120]}"
                             break
                         if resp.status == 429:
-                            last_error = f"throttled 429 body={body_text[:120]}"
+                            last_error = f"THROTTLE:429 body={body_text[:120]}"
                         else:
-                            last_error = f"status={resp.status} body={body_text[:120]}"
+                            last_error = f"RETRYABLE:{resp.status} body={body_text[:120]}"
             except Exception as e:  # noqa: BLE001
-                last_error = f"exception={e}"
+                last_error = f"EXCEPTION:{e}"
 
             if attempt < max_attempts:
                 delay = (base_backoff_ms / 1000.0) * (2 ** (attempt - 1))

@@ -40,7 +40,7 @@ class GCPClient(CloudProviderClient):
         # reliability on constrained CI VMs; early success returns immediately
         # so typical latency stays low.
         per_attempt_timeout = 10
-        debugging = os.environ.get("S2IAM_DEBUGGING") == "true"
+        debugging = os.environ.get("S2IAM_DEBUGGING", "").lower() == "true"
         env_hint = "GCE_METADATA_HOST=set" if os.environ.get("GCE_METADATA_HOST") else "GCE_METADATA_HOST=unset"
         cred_hint = (
             "GOOGLE_APPLICATION_CREDENTIALS=external_account"
@@ -57,7 +57,7 @@ class GCPClient(CloudProviderClient):
                 return "dns"
             if any(p in lower for p in ("timed out", "timeout")):
                 return "timeout"
-            if any(p in lower for p in ("refused", "connection reset")):
+            if any(p in lower for p in ("refused", "connection reset", "network is unreachable", "no route to host")):
                 return "connect"
             return "other"
 
@@ -119,8 +119,9 @@ class GCPClient(CloudProviderClient):
                         if response.status != 200:
                             raise Exception(f"metadata status {response.status}")
 
+            GUARD_MARGIN = 0.25  # seconds; covers event loop scheduling jitter
             try:
-                await asyncio.wait_for(_probe(), timeout=per_attempt_timeout + 0.25)  # small guard margin
+                await asyncio.wait_for(_probe(), timeout=per_attempt_timeout + GUARD_MARGIN)
             except asyncio.TimeoutError as te:  # normalize to TimeoutError for classification
                 # If we timed out but did not previously enable traces, we cannot retroactively
                 # gather aiohttp phase hooks. Emit a concise marker for diagnostics.
@@ -128,14 +129,16 @@ class GCPClient(CloudProviderClient):
                     self._log("TRACE timeout_without_phase_detail")
                 raise TimeoutError("metadata probe wait_for timeout") from te
             elapsed_ms = int((loop.time() - start) * 1000)
-            self._log(f"Detected metadata (elapsed={elapsed_ms}ms)")
+            if debugging:
+                self._log(f"Detected metadata (elapsed={elapsed_ms}ms)")
             self._detected = True
             return
         except Exception as e:  # noqa: BLE001
             elapsed_ms = int((loop.time() - start) * 1000)
             msg = str(e) or type(e).__name__
             category = classify(msg)
-            over_timeout = elapsed_ms > (per_attempt_timeout * 1000 + 300)
+            OVER_TIMEOUT_MARGIN_MS = 300  # ms; allow for guard margin + HTTP stack variance
+            over_timeout = elapsed_ms > (per_attempt_timeout * 1000 + OVER_TIMEOUT_MARGIN_MS)
             diag = (
                 "Not running on GCP: metadata probe failed; "
                 f"elapsed_ms={elapsed_ms} category={category} timeout_s={per_attempt_timeout} "
