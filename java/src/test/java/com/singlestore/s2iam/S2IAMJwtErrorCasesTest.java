@@ -44,7 +44,8 @@ public class S2IAMJwtErrorCasesTest {
       org.junit.jupiter.api.Assumptions.abort(
           "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
     }
-    assertNull(idRes.error, "identity header retrieval failed: " + (idRes.error == null ? "" : idRes.error.getMessage()));
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
     // Start dedicated server with flag --return-empty-jwt
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
@@ -70,7 +71,8 @@ public class S2IAMJwtErrorCasesTest {
       org.junit.jupiter.api.Assumptions.abort(
           "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
     }
-    assertNull(idRes.error, "identity header retrieval failed: " + (idRes.error == null ? "" : idRes.error.getMessage()));
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
     base.stop();
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();

@@ -156,8 +156,6 @@ Thumbs.db
 *.temp
 .temporary/
 
-# Notes and personal files
-
 # local evelopment-specific copilot instructions 
 .github/copilot-dev-guide.md
 
@@ -171,14 +169,12 @@ python/LICENSE
 go-coverage.out
 python-coverage.xml
 java-coverage.xml
-
-# JaCoCo & Maven build outputs (Maven target/ already indirectly covered for python target but add explicit java target)
-java/target/
-
-# Prevent committing per-run timestamped coverage copies (pattern from Makefile downloads)
 go-coverage-*.out
 python-coverage-*.xml
 java-coverage-*.xml
+
+# JaCoCo & Maven build outputs (Maven target/ already indirectly covered for python target but add explicit java target)
+java/target/
 
 # test junk
 go/s2iam_test_server_info*.json
