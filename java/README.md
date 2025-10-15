@@ -90,13 +90,6 @@ Timeouts
 --------
 Default detection + HTTP call timeout: 5s (aligned to Go reference). Override with `Options.withTimeout` or builder `.timeout()`.
 
-Testing (Minimal)
------------------
-Run the unit/integration tests (requires Go toolchain for the local test server):
-```bash
-cd java && mvn -q test
-```
-
 License
 -------
 MIT (see root LICENSE file).

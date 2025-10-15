@@ -9,7 +9,9 @@ This repository contains tools for the SingleStore IAM authentication system.
 
 ## Current Status
 
-This service is not yet available. The APIs and language bindings may change prior to GA release.
+JWTs for engine access are ready for testing.
+JWTs for the management API are not yet available.
+APIs and language bindings may change before this is considered generally avaialble.
 
 ## Overview
 

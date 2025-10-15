@@ -1,6 +1,4 @@
-"""
-Google Cloud Platform provider client implementation.
-"""
+"""Google Cloud Platform provider client implementation."""
 
 import asyncio
 import os
@@ -20,64 +18,29 @@ from ..models import (
 
 
 class GCPClient(CloudProviderClient):
-    """GCP implementation of CloudProviderClient."""
-
-    def __init__(self, logger: Optional[Logger] = None) -> None:
+    def __init__(self, logger: Optional[Logger] = None):
         self._logger = logger
         self._detected = False
         self._service_account_email: Optional[str] = None
-        self._identity: Optional[CloudIdentity] = None
 
     def _log(self, message: str) -> None:
-        """Log a message if logger is available."""
         if self._logger:
             self._logger.log(f"GCP: {message}")
 
-    async def detect(self) -> None:
-        """Detect if running on GCP (full phase)."""
-        self._log("Starting GCP detection (full phase)")
+    async def detect(self) -> None:  # noqa: D401
         if self._detected:
             return
-
-        # IMPORTANT (future maintainer / future-me): Do NOT add retries here unless you can
-        # produce a reproducible, provider-side behavioral change that: (a) manifests as
-        # a transient failure on the very first metadata probe AND (b) becomes a success
-        # within <1s WITHOUT any configuration / environment change. Historical context:
-        # A GCP detection timeout once occurred and a retry loop was briefly added. Root
-        # cause analysis showed the failure was due to logic (raising before queue publish),
-        # not actual transient unavailability of the metadata endpoint. Adding retries
-        # masked the underlying bug and only injected latency + flakiness surface area.
-        #
-        # Why single attempt is correct for GCP:
-        # 1. GCP metadata service is either immediately reachable or definitively absent.
-        #    (Contrast: Azure IMDS managed identity can 429/throttle legitimately, hence
-        #    bounded exponential retry ONLY on Azure identity acquisition.)
-        # 2. Fast failing keeps cross‑provider race tight and test suite duration low.
-        # 3. Retries make real configuration errors (firewall / network namespace / wrong
-        #    cloud) slower to surface and harder to differentiate from genuine detection.
-        # 4. Every added retry path previously obscured a logic bug rather than fixing a
-        #    platform instability.
-        #
-        # If you believe you need a retry, first capture:
-        #   - exact wall clock timings
-        #   - packet trace or tcpdump showing SYN/SYN-ACK delay OR DNS resolution latency
-        #   - evidence that a second attempt (without any delay you inserted) would have
-        #     succeeded (e.g., manual immediate second curl succeeds while first failed)
-        # and document that evidence in a linked issue. Without that, DO NOT ADD RETRIES.
-        #
-        # This comment is intentionally dry and procedural to discourage casual edits.
-        # Removing it or ignoring its instructions without evidence is a regression.
-        # Single bounded metadata probe (no retry). GCP metadata is either reachable promptly
-        # or not present; retries add latency and can mask a real negative signal. We intentionally
-        # avoid the hostname form to remove DNS as a variable; the hostname resolves to this
-        # link-local address in normal GCE environments. If future evidence shows hostname-only
-        # success patterns, we can re-evaluate.
-        self._log("Trying metadata service (link-local IP, single attempt)")
-
+        # Single metadata probe (no retries). If this times out or errors, treat as
+        # definitive negative (fast fail mirrors Go implementation).
+        self._log("Metadata probe (single attempt, link-local IP)")
         loop = asyncio.get_event_loop()
         start = loop.time()
         metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/id"
-        per_attempt_timeout = 3  # seconds (aiohttp total timeout)
+        # Single attempt wall clock budget. Increased to 10s (was 3s) to favor
+        # reliability on constrained CI VMs; early success returns immediately
+        # so typical latency stays low.
+        per_attempt_timeout = 10
+        debugging = os.environ.get("S2IAM_DEBUGGING") == "true"
         env_hint = "GCE_METADATA_HOST=set" if os.environ.get("GCE_METADATA_HOST") else "GCE_METADATA_HOST=unset"
         cred_hint = (
             "GOOGLE_APPLICATION_CREDENTIALS=external_account"
@@ -87,38 +50,100 @@ class GCPClient(CloudProviderClient):
             )
             else "GOOGLE_APPLICATION_CREDENTIALS=unset_or_non_external"
         )
+
+        def classify(msg: str) -> str:
+            lower = msg.lower()
+            if any(p in lower for p in ("name or service not known", "temporary failure", "not known")):
+                return "dns"
+            if any(p in lower for p in ("timed out", "timeout")):
+                return "timeout"
+            if any(p in lower for p in ("refused", "connection reset")):
+                return "connect"
+            return "other"
+
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
-                async with session.get(metadata_url, headers={"Metadata-Flavor": "Google"}) as response:  # noqa: S310
-                    if response.status != 200:
-                        raise Exception(f"metadata status {response.status}")
+            trace_configs = []
+            # Enable trace collection either when debugging explicitly OR if we later hit a timeout
+            want_trace = debugging
+            tc: Optional[aiohttp.TraceConfig] = None
+            if want_trace:
+                tc = aiohttp.TraceConfig()
+
+                from typing import Any as _Any
+
+                async def _trace_dns_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE dns_start")
+
+                async def _trace_dns_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE dns_end")
+
+                async def _trace_conn_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE connection_create_start")
+
+                async def _trace_conn_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE connection_create_end")
+
+                async def _trace_request_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE request_start")
+
+                async def _trace_request_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE request_end")
+
+                tc.on_dns_resolvehost_start.append(_trace_dns_start)
+                tc.on_dns_resolvehost_end.append(_trace_dns_end)
+                tc.on_connection_create_start.append(_trace_conn_start)
+                tc.on_connection_create_end.append(_trace_conn_end)
+                tc.on_request_start.append(_trace_request_start)
+                tc.on_request_end.append(_trace_request_end)
+                trace_configs.append(tc)
+
+            async def _probe() -> None:
+                async with aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=per_attempt_timeout), trace_configs=trace_configs or None
+                ) as session:
+                    async with session.get(
+                        metadata_url, headers={"Metadata-Flavor": "Google"}
+                    ) as response:  # noqa: S310
+                        if response.status != 200:
+                            raise Exception(f"metadata status {response.status}")
+
+            try:
+                await asyncio.wait_for(_probe(), timeout=per_attempt_timeout + 0.25)  # small guard margin
+            except asyncio.TimeoutError as te:  # normalize to TimeoutError for classification
+                # If we timed out but did not previously enable traces, we cannot retroactively
+                # gather aiohttp phase hooks. Emit a concise marker for diagnostics.
+                if not debugging:
+                    self._log("TRACE timeout_without_phase_detail")
+                raise TimeoutError("metadata probe wait_for timeout") from te
             elapsed_ms = int((loop.time() - start) * 1000)
-            self._log(f"Detected GCP metadata (elapsed={elapsed_ms}ms)")
+            self._log(f"Detected metadata (elapsed={elapsed_ms}ms)")
             self._detected = True
             return
         except Exception as e:  # noqa: BLE001
             elapsed_ms = int((loop.time() - start) * 1000)
             msg = str(e) or type(e).__name__
-            lower = msg.lower()
-            if any(p in lower for p in ("name or service not known", "temporary failure", "not known")):
-                category = "dns"
-            elif any(p in lower for p in ("timed out", "timeout")):
-                category = "timeout"
-            elif any(p in lower for p in ("refused", "connection reset")):
-                category = "connect"
-            else:
-                category = "other"
+            category = classify(msg)
+            over_timeout = elapsed_ms > (per_attempt_timeout * 1000 + 300)
             diag = (
                 "Not running on GCP: metadata probe failed; "
                 f"elapsed_ms={elapsed_ms} category={category} timeout_s={per_attempt_timeout} "
-                f"env=[{env_hint} {cred_hint}] exception_type={type(e).__name__} detail={msg}"
+                f"over_timeout_margin={over_timeout} env=[{env_hint} {cred_hint}] "
+                f"exception_type={type(e).__name__} detail={msg}"
             )
             self._log(diag)
             raise Exception(diag)
-
-        raise Exception(
-            "Not running on GCP: no environment variable, metadata service, or default credentials detected"
-        )
 
     async def fast_detect(self) -> None:
         """Fast detection: env/file only, no network."""

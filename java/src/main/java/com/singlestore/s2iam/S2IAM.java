@@ -226,10 +226,16 @@ public final class S2IAM {
 
   private static String buildAggregateDetectMessage(Map<String, String> fastErrors,
       Map<String, String> detectErrors) {
-    StringBuilder sb = new StringBuilder("no cloud provider detected");
-    appendSection(sb, "fast", fastErrors, 3);
-    appendSection(sb, "detect", detectErrors, 3);
-    return sb.toString();
+    List<String> parts = new ArrayList<>();
+    String fast = formatSection(fastErrors, 3);
+    if (!fast.isEmpty())
+      parts.add("fast=" + fast);
+    String detect = formatSection(detectErrors, 3);
+    if (!detect.isEmpty())
+      parts.add("detect=" + detect);
+    if (parts.isEmpty())
+      return "no cloud provider detected";
+    return "no cloud provider detected; " + String.join("; ", parts);
   }
 
   private static void appendSection(StringBuilder sb, String label, Map<String, String> src,
@@ -247,6 +253,23 @@ public final class S2IAM {
         break;
       }
     }
+  }
+
+  private static String formatSection(Map<String, String> src, int max) {
+    if (src.isEmpty())
+      return "";
+    StringBuilder sb = new StringBuilder();
+    int n = 0;
+    for (var e : src.entrySet()) {
+      if (n++ > 0)
+        sb.append(',');
+      sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
+      if (n >= max && src.size() > max) {
+        sb.append("+" + (src.size() - max) + "more");
+        break;
+      }
+    }
+    return sb.toString();
   }
 
   private static void applyJwtOptions(JwtOptions o, JwtOption... opts) {

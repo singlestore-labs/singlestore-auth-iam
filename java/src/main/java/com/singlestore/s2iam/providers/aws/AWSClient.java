@@ -21,6 +21,10 @@ import software.amazon.awssdk.services.sts.model.GetCallerIdentityRequest;
 import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
 
 public class AWSClient extends AbstractBaseClient {
+  // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
+  // legacy metadata path.
+  // Identity headers always reflect either the base credentials or an assumed
+  // role (if provided).
   private static final String METADATA_BASE = System.getenv()
       .getOrDefault("S2IAM_AWS_METADATA_BASE", "http://169.254.169.254");
   private volatile StsClient sts;

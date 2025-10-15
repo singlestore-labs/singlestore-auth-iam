@@ -319,22 +319,87 @@ class AzureClient(CloudProviderClient):
             return "unknown", {}
 
     async def _get_managed_identity_token(self, resource: str, client_id: Optional[str] = None) -> dict[str, str]:
-        """Get token from Azure managed identity endpoint."""
+        """Get token from Azure managed identity endpoint with bounded exponential backoff.
+
+        Retry policy rationale:
+        - 429 (throttling) and transient 5xx responses are retriable per Azure MSI guidance.
+        - 400/404 (e.g. identity not configured) are treated as hard failures (no retries) so we surface
+          absence quickly without extending detection / header acquisition latency.
+        - Network exceptions (connection reset, timeout) are treated as transient and retried.
+        - Default attempts: 6 (≈ < 3.2s worst-case added latency with 50ms base, capped delay 1.6s) mirroring
+          detect() logic. Environment overrides respected: S2IAM_AZURE_MI_RETRIES / S2IAM_AZURE_MI_BACKOFF_MS.
+
+        This function is on the identity acquisition path (after successful provider detection) and
+        therefore can afford limited retries for robustness without materially impacting overall
+        provider classification speed (classification already done)."""
         url = "http://169.254.169.254/metadata/identity/oauth2/token"
         params = {"api-version": "2018-02-01", "resource": resource}
-
         if client_id:
             params["client_id"] = client_id
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    # Azure MI returns a JSON object with string fields like access_token, expires_in, etc.
-                    return {str(k): str(v) for k, v in data.items() if isinstance(k, str)}
-                else:
-                    text = await response.text()
-                    raise Exception(f"Failed to get managed identity token: {response.status} - {text}")
+        # Read retry configuration (reuse detection env vars for consistency)
+        max_attempts_env = os.environ.get("S2IAM_AZURE_MI_RETRIES", "6")
+        base_backoff_ms_env = os.environ.get("S2IAM_AZURE_MI_BACKOFF_MS", "50")
+        try:
+            max_attempts = max(1, min(20, int(max_attempts_env)))
+        except ValueError:
+            max_attempts = 6
+        try:
+            base_backoff_ms = max(1, min(5000, int(base_backoff_ms_env)))
+        except ValueError:
+            base_backoff_ms = 50
+
+        last_error: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                    async with session.get(url, params=params, headers={"Metadata": "true"}) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            token = {str(k): str(v) for k, v in data.items() if isinstance(k, str)}
+                            if self._logger:
+                                self._logger.log(
+                                    f"Azure: Managed identity token success (attempt {attempt}/{max_attempts})"
+                                )
+                            return token
+                        body_text = await response.text()
+                        # Hard non-retriable statuses (identity absent / misconfiguration)
+                        if response.status in (400, 404):
+                            raise Exception(
+                                f"Failed to get managed identity token: {response.status} - {body_text[:180]}"
+                            )
+                        # Retriable statuses
+                        if response.status == 429 or 500 <= response.status < 600:
+                            last_error = f"status={response.status} body={body_text[:180]}"
+                            if self._logger:
+                                self._logger.log(
+                                    "Azure: Managed identity token transient error "
+                                    f"(attempt {attempt}/{max_attempts}) {last_error}"
+                                )
+                        else:
+                            # Non-retriable other status; surface immediately
+                            raise Exception(
+                                f"Failed to get managed identity token: {response.status} - {body_text[:180]}"
+                            )
+            except Exception as e:  # noqa: BLE001
+                # Network or other transient exception; decide to retry unless last attempt
+                last_error = f"exception={e}"
+                if attempt == max_attempts:
+                    raise Exception(f"Failed to get managed identity token after retries: {last_error}")
+                if self._logger:
+                    self._logger.log(f"Azure: Managed identity token exception (attempt {attempt}/{max_attempts}) {e}")
+
+            # Backoff before next attempt if not returned / raised
+            if attempt < max_attempts:
+                delay = (base_backoff_ms / 1000.0) * (2 ** (attempt - 1))
+                # Cap single delay to 1.6s here (shorter than detect() cap) to bound identity latency
+                delay = min(delay, 1.6)
+                await asyncio.sleep(delay)
+
+        # If loop exits without returning, raise aggregated last error
+        raise Exception(
+            f"Failed to get managed identity token after {max_attempts} attempts: {last_error or 'unknown-error'}"
+        )
 
     async def _get_instance_metadata(self) -> dict[str, Any]:
         """Get Azure instance metadata."""

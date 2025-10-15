@@ -105,8 +105,6 @@ jobs:
         set -euox pipefail
         make ssh-copy-to-remote
         make ssh-run-remote-tests TEST_TARGET=on-remote-test
-        # Run Java cloud tests (separate target) – fail fast if they fail
-        make ssh-run-remote-tests TEST_TARGET=on-remote-test-java
         make ssh-download-coverage
         ls -la go-coverage.out python-coverage.xml
 

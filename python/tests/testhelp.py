@@ -78,10 +78,6 @@ async def require_cloud_role(timeout: float = TEST_DETECT_TIMEOUT) -> CloudProvi
     return await expect_cloud_provider_detected(timeout)
 
 
-# Removed hostname diagnostic probe: we only care if an immediate second identical probe
-# (same code path) would succeed. That yields actionable data without introducing DNS.
-
-
 def maybe_parallel() -> None:
     """
     Call pytest.mark.skip for Azure tests in cloud environments to avoid rate limiting.
