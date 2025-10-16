@@ -37,9 +37,9 @@ public class S2IAMRequestBuilderTest {
     CloudProviderClient provider = detectOrSkip();
     S2IAMRequest req = S2IAMRequest.newRequest().databaseWorkspaceGroup("wg-test").serverUrl(url())
         .timeout(java.time.Duration.ofSeconds(3));
-  boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
-    || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
-    || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
+    boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
+        || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
+        || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
     if (provider.getType() == CloudProviderType.gcp && realCloud) {
       req.audience("https://authsvc.singlestore.com");
     }
@@ -54,9 +54,9 @@ public class S2IAMRequestBuilderTest {
   void apiJwtViaBuilder() throws Exception {
     CloudProviderClient provider = detectOrSkip();
     S2IAMRequest req = S2IAMRequest.newRequest().api().serverUrl(url());
-  boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
-    || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
-    || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
+    boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
+        || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
+        || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
     if (provider.getType() == CloudProviderType.gcp && realCloud) {
       req.audience("https://authsvc.singlestore.com");
     }

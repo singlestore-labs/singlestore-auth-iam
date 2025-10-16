@@ -138,6 +138,25 @@ class GCPClient(CloudProviderClient):
                     f"Detect cancelled/closed (elapsed_ms={elapsed_ms} type={type(e).__name__}) – treating as negative"
                 )
             return
+        except RuntimeError as e:
+            # Occasionally during task cancellation Python/aiohttp surfaces a RuntimeError
+            # with the message "coroutine ignored GeneratorExit" as an unraisable exception
+            # (Pytest reports PytestUnraisableExceptionWarning). This indicates the coroutine
+            # was being torn down after a GeneratorExit; it is a cancellation artifact, not a
+            # positive detection signal nor a real failure of the environment. Treat it the
+            # same as a cancelled detection attempt to avoid noisy warnings while preserving
+            # fail-fast behavior for genuine errors.
+            msg = str(e)
+            if "coroutine ignored GeneratorExit" in msg:
+                elapsed_ms = int((loop.time() - start) * 1000)
+                if debugging:
+                    self._log(
+                        "Detect runtime cancellation artifact "
+                        f"(elapsed_ms={elapsed_ms} detail={msg}) – treating as negative"
+                    )
+                return
+            # For any other RuntimeError fall through to generic exception handling below.
+            raise
         except Exception as e:  # noqa: BLE001
             elapsed_ms = int((loop.time() - start) * 1000)
             msg = str(e) or type(e).__name__

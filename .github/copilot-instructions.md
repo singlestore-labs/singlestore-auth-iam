@@ -141,6 +141,12 @@ Use the same output file name (test_output.log) every time so that you don't lit
 ### Errors
 - go errors should be tested with errors.Is(). String matching is only okay for external system errors.
 
+## Test coverage
+- We want good test coverage
+- Best way: simplify so that there is less code to test
+- Next best: refactor so that more code can be covered by unit tests and then add unit tests
+- Worst: add integration tests 
+
 ## Backawards compatibility
 
 There are no current users of this library. No users of the production server. 

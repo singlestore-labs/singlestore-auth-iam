@@ -180,10 +180,10 @@ public final class S2IAM {
       po.logger.logf("detectProvider: starting fastDetect phase over providers=%d timing=%s",
           po.clients.size(), timing);
     }
-  // Collect fast phase errors inline (provider simpleName -> message) only for
-  // potential debugging; final thrown exception will summarize from
-  // attemptStatuses instead of dual maps.
-  Map<String, String> fastPhaseErrors = new LinkedHashMap<>();
+    // Collect fast phase errors inline (provider simpleName -> message) only for
+    // potential debugging; final thrown exception will summarize from
+    // attemptStatuses instead of dual maps.
+    Map<String, String> fastPhaseErrors = new LinkedHashMap<>();
     for (CloudProviderClient c : po.clients) {
       long s = System.nanoTime();
       Exception fe = c.fastDetect();
@@ -210,7 +210,7 @@ public final class S2IAM {
               c.getClass().getSimpleName(), fe.getMessage());
         }
       }
-  fastPhaseErrors.put(c.getClass().getSimpleName(), fe.getMessage());
+      fastPhaseErrors.put(c.getClass().getSimpleName(), fe.getMessage());
       attemptStatuses.add(new DetectAttemptStatus("fast", c.getType().name(), durMs, "error",
           safeTrunc(fe.getMessage())));
     }
@@ -255,7 +255,7 @@ public final class S2IAM {
     exec.shutdown();
     long deadline = System.nanoTime() + timeout.toNanos();
     List<Throwable> errors = new ArrayList<>();
-  Map<String, String> detectPhaseErrors = new LinkedHashMap<>();
+    Map<String, String> detectPhaseErrors = new LinkedHashMap<>();
     for (int i = 0; i < futures.size(); i++) {
       long remainingMs = (deadline - System.nanoTime()) / 1_000_000L;
       if (remainingMs <= 0)
@@ -290,12 +290,13 @@ public final class S2IAM {
             po.logger.logf("detectProvider: provider failed provider=%s error=%s remainingMs=%d",
                 providerName, cause == null ? "<null>" : cause.getMessage(), remainingMs);
           } else {
-            po.logger.logf("detectProvider: provider failed provider=%s error=%s",
-                providerName, cause == null ? "<null>" : cause.getMessage());
+            po.logger.logf("detectProvider: provider failed provider=%s error=%s", providerName,
+                cause == null ? "<null>" : cause.getMessage());
           }
         }
-        String key = (cause == null ? "unknown" : cause.getClass().getSimpleName()) + "@" + providerName;
-  detectPhaseErrors.put(key, cause == null ? "null" : cause.getMessage());
+        String key = (cause == null ? "unknown" : cause.getClass().getSimpleName()) + "@"
+            + providerName;
+        detectPhaseErrors.put(key, cause == null ? "null" : cause.getMessage());
         long errDur = timeout.toMillis() - remainingMs;
         attemptStatuses.add(new DetectAttemptStatus("detect", providerName, errDur, "error",
             safeTrunc(cause == null ? null : cause.getMessage())));
@@ -317,13 +318,15 @@ public final class S2IAM {
         po.logger.logf("detectProvider: no provider detected errors=%d", errors.size());
       }
     }
-  // Simplified aggregate message: rely on attemptStatuses list for structured
-  // review; include counts of fast vs detect errors.
-  long fastErrCount = attemptStatuses.stream().filter(a -> a.phase.equals("fast") && a.status.equals("error")).count();
-  long detectErrCount = attemptStatuses.stream().filter(a -> a.phase.equals("detect") && a.status.equals("error")).count();
-  String msg = "no cloud provider detected; fastErrors=" + fastErrCount + 
-    " detectErrors=" + detectErrCount + " attempts=" + attemptStatuses.size();
-  throw new NoCloudProviderDetectedException(msg);
+    // Simplified aggregate message: rely on attemptStatuses list for structured
+    // review; include counts of fast vs detect errors.
+    long fastErrCount = attemptStatuses.stream()
+        .filter(a -> a.phase.equals("fast") && a.status.equals("error")).count();
+    long detectErrCount = attemptStatuses.stream()
+        .filter(a -> a.phase.equals("detect") && a.status.equals("error")).count();
+    String msg = "no cloud provider detected; fastErrors=" + fastErrCount + " detectErrors="
+        + detectErrCount + " attempts=" + attemptStatuses.size();
+    throw new NoCloudProviderDetectedException(msg);
   }
 
   private static String safeTrunc(String s) {

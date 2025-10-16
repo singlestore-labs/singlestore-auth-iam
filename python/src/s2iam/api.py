@@ -124,7 +124,7 @@ async def detect_provider(
                 try:
                     # Allow provider to expose explicit method; fallback to attribute.
                     if hasattr(client, "is_detected") and callable(getattr(client, "is_detected")):
-                        is_detected = bool(client.is_detected())  # type: ignore[attr-defined]
+                        is_detected = bool(client.is_detected())
                     elif hasattr(client, "_detected"):
                         is_detected = bool(getattr(client, "_detected"))
                 except Exception:  # noqa: BLE001 - conservative: treat as success only if flag readable
@@ -141,9 +141,7 @@ async def detect_provider(
                         }
                     )
                     if logger and (debugging or debug_timing):
-                        logger.log(
-                            f"DETECT_THREAD_SUCCESS provider={client.get_type().value} elapsed_ms={elapsed_ms}"
-                        )
+                        logger.log(f"DETECT_THREAD_SUCCESS provider={client.get_type().value} elapsed_ms={elapsed_ms}")
                 else:
                     record_status(
                         {
