@@ -11,7 +11,7 @@ This repository contains tools for the SingleStore IAM authentication system.
 
 JWTs for engine access are ready for testing.
 JWTs for the management API are not yet available.
-APIs and language bindings may change before this is considered generally avaialble.
+APIs and language bindings may change before this is considered generally available.
 
 ## Overview
 ### Cloud Provider Detection (Parity Overview)

@@ -326,7 +326,7 @@ public final class S2IAM {
         .filter(a -> a.phase.equals("detect") && a.status.equals("error")).count();
     String msg = "no cloud provider detected; fastErrors=" + fastErrCount + " detectErrors="
         + detectErrCount + " attempts=" + attemptStatuses.size();
-    throw new NoCloudProviderDetectedException(msg);
+    throw new NoCloudProviderDetectedException(msg, attemptStatuses);
   }
 
   private static String safeTrunc(String s) {
