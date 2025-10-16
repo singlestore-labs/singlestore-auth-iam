@@ -30,8 +30,9 @@ class GCPClient(CloudProviderClient):
     async def detect(self) -> None:  # noqa: D401
         if self._detected:
             return
-        # Single metadata probe (no retries). If this times out or errors, treat as
-        # definitive negative (fast fail mirrors Go implementation).
+        # Single metadata probe (no retries). GCP metadata is either immediately
+        # reachable or absent; retries add latency and can hide real negative
+        # signals (firewall / wrong environment). Fast fail mirrors Go impl.
         self._log("Metadata probe (single attempt, link-local IP)")
         loop = asyncio.get_event_loop()
         start = loop.time()

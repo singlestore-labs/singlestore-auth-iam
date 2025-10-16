@@ -57,17 +57,9 @@ String apiJwt = S2IAM.getAPIJWT(
 );
 ```
 
-Detection & Performance
------------------------
-Detection proceeds in two phases:
-1. Fast phase (serial) – very quick heuristics per provider.
-2. Full phase (concurrent with 5s default timeout) – parallel deeper probes.
-
-The first positive result short‑circuits. Typical success latency on real cloud instances is under a second (target parity with Go).
-
 Operational Notes
 -----------------
-All outbound requests include `User-Agent: s2iam-java/<impl-version>`. The library is fail-fast—any unexpected condition raises an exception rather than logging a warning.
+The library is fail-fast—unexpected conditions raise exceptions. Typical detection completes in under a second on real cloud instances; a higher ceiling timeout (10s) avoids false negatives on constrained environments.
 
 API Summary
 -----------
@@ -88,7 +80,7 @@ Selected Options helpers:
 
 Timeouts
 --------
-Default detection + HTTP call timeout: 5s (aligned to Go reference). Override with `Options.withTimeout` or builder `.timeout()`.
+Default detection + HTTP call timeout: 10s. Override with `Options.withTimeout` or builder `.timeout()`.
 
 License
 -------

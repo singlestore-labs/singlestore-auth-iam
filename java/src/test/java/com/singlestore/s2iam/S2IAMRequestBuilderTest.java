@@ -37,7 +37,9 @@ public class S2IAMRequestBuilderTest {
     CloudProviderClient provider = detectOrSkip();
     S2IAMRequest req = S2IAMRequest.newRequest().databaseWorkspaceGroup("wg-test").serverUrl(url())
         .timeout(java.time.Duration.ofSeconds(3));
-    boolean realCloud = expectCloud();
+  boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
+    || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
+    || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
     if (provider.getType() == CloudProviderType.gcp && realCloud) {
       req.audience("https://authsvc.singlestore.com");
     }
@@ -52,7 +54,9 @@ public class S2IAMRequestBuilderTest {
   void apiJwtViaBuilder() throws Exception {
     CloudProviderClient provider = detectOrSkip();
     S2IAMRequest req = S2IAMRequest.newRequest().api().serverUrl(url());
-    boolean realCloud = expectCloud();
+  boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
+    || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
+    || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
     if (provider.getType() == CloudProviderType.gcp && realCloud) {
       req.audience("https://authsvc.singlestore.com");
     }
@@ -69,32 +73,34 @@ public class S2IAMRequestBuilderTest {
   }
 
   private CloudProviderClient detectOrSkip() throws Exception {
-    boolean expect = expectCloud();
-    try {
-      CloudProviderClient p = S2IAM.detectProvider();
-      if (!expect) {
-        Assumptions.abort("Cloud provider not explicitly requested - skipping");
+    String expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER");
+    if (expectProvider == null) {
+      String role = System.getenv("S2IAM_TEST_ASSUME_ROLE");
+      if (role != null && !role.isEmpty()) {
+        expectProvider = "aws"; // assume role supported on aws
       }
-      // NO_ROLE environments: skip early (identity tests would abort later anyway)
+    }
+    if (expectProvider == null)
+      expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE");
+    try {
+      CloudProviderClient client = S2IAM.detectProvider();
+      if (expectProvider == null) {
+        Assumptions.abort("No cloud provider detected - not running in cloud environment");
+      }
+      // No-role environment skip for builder tests requiring identity
       if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null
           && System.getenv("S2IAM_TEST_CLOUD_PROVIDER") == null
           && System.getenv("S2IAM_TEST_ASSUME_ROLE") == null) {
         Assumptions.abort("No-role environment - skipping JWT builder tests");
       }
-      return p;
+      return client;
     } catch (NoCloudProviderDetectedException e) {
-      if (expect) {
+      if (expectProvider != null) {
         fail("Cloud provider detection failed - expected to detect provider in test environment");
       }
       Assumptions.abort("No cloud provider detected - skipping");
       return null; // unreachable
     }
-  }
-
-  private boolean expectCloud() {
-    return System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
-        || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
-        || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
   }
 
   @Test

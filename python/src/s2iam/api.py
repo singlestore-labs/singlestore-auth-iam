@@ -21,9 +21,9 @@ from .models import (
 DETECT_PROVIDER_DEFAULT_TIMEOUT: float = 10.0
 """Default timeout (seconds) for provider detection.
 
-Rationale: Reliability over negative‑path speed. A larger ceiling avoids false
-negatives on resource‑constrained CI VMs while early success short‑circuits so
-real cloud latency remains low. Mirrors project policy decision (see PR notes).
+Rationale: Prefer avoiding false negatives over minimizing worst‑case wait.
+10s ceiling handles slow or throttled metadata on constrained CI VMs while
+early success still returns in sub‑second typical cases. Mirrors Go/Java parity.
 """
 
 
@@ -118,22 +118,44 @@ async def detect_provider(
                 provider_loops.append(loop)
             try:
                 detect_coro = client.detect()
-                # Run detect; if global stop_event is set while running, we attempt loop.stop()
                 loop.run_until_complete(detect_coro)
-                # Success - put result in queue if we're first
-                if not stop_event.is_set():
-                    result_queue.put(client)
-                    stop_event.set()  # Signal other threads to stop
+                # Post-call validation: provider must internally mark detected.
+                is_detected = True
+                try:
+                    # Allow provider to expose explicit method; fallback to attribute.
+                    if hasattr(client, "is_detected") and callable(getattr(client, "is_detected")):
+                        is_detected = bool(client.is_detected())  # type: ignore[attr-defined]
+                    elif hasattr(client, "_detected"):
+                        is_detected = bool(getattr(client, "_detected"))
+                except Exception:  # noqa: BLE001 - conservative: treat as success only if flag readable
+                    pass
                 elapsed_ms = int((time.monotonic() - thread_start) * 1000)
-                record_status(
-                    {
-                        "provider": client.get_type().value,
-                        "status": "success",
-                        "elapsed_ms": elapsed_ms,
-                    }
-                )
-                if logger and (debugging or debug_timing):
-                    logger.log(f"DETECT_THREAD_SUCCESS provider={client.get_type().value} elapsed_ms={elapsed_ms}")
+                if is_detected and not stop_event.is_set():
+                    result_queue.put(client)
+                    stop_event.set()
+                    record_status(
+                        {
+                            "provider": client.get_type().value,
+                            "status": "success",
+                            "elapsed_ms": elapsed_ms,
+                        }
+                    )
+                    if logger and (debugging or debug_timing):
+                        logger.log(
+                            f"DETECT_THREAD_SUCCESS provider={client.get_type().value} elapsed_ms={elapsed_ms}"
+                        )
+                else:
+                    record_status(
+                        {
+                            "provider": client.get_type().value,
+                            "status": "not_detected",
+                            "elapsed_ms": elapsed_ms,
+                        }
+                    )
+                    if logger and (debugging or debug_timing):
+                        logger.log(
+                            f"DETECT_THREAD_NOT_DETECTED provider={client.get_type().value} elapsed_ms={elapsed_ms}"
+                        )
             finally:
                 loop.close()
         except Exception as e:

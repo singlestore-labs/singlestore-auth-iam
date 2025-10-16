@@ -36,29 +36,12 @@ async def expect_cloud_provider_detected(timeout: float = TEST_DETECT_TIMEOUT) -
     ):
         pytest.skip("cloud provider required")
 
-    start = time.monotonic()
+    # Single attempt only (fail-fast). Retries can mask genuine negative signals
+    # (wrong environment / firewall) and slow CI.
     try:
-        provider = await s2iam.detect_provider(timeout=timeout)
-        return provider
-    except s2iam.CloudProviderNotFound as first_err:
-        first_elapsed_ms = int((time.monotonic() - start) * 1000)
-        retry_timeout = max(1.0, timeout * 0.5)
-        retry_start = time.monotonic()
-        try:
-            retry_provider = await s2iam.detect_provider(timeout=retry_timeout)
-            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
-            pytest.fail(
-                "Cloud provider detection failed first attempt but second immediate attempt succeeded; "
-                f"first_elapsed_ms={first_elapsed_ms} retry_elapsed_ms={retry_elapsed_ms} "
-                f"primary_error={first_err} retry_timeout_s={retry_timeout} provider={retry_provider.get_type().value}"
-            )
-        except s2iam.CloudProviderNotFound as second_err:
-            retry_elapsed_ms = int((time.monotonic() - retry_start) * 1000)
-            pytest.fail(
-                "Cloud provider detection failed twice; "
-                f"first_elapsed_ms={first_elapsed_ms} second_elapsed_ms={retry_elapsed_ms} "
-                f"first_error={first_err} second_error={second_err} retry_timeout_s={retry_timeout}"
-            )
+        return await s2iam.detect_provider(timeout=timeout)
+    except s2iam.CloudProviderNotFound:
+        pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
     except s2iam.ProviderIdentityUnavailable:
         pytest.skip("cloud provider detected no identity")
 

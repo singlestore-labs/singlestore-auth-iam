@@ -140,6 +140,16 @@ public final class S2IAM {
   // across languages.
   public static DetectResult detectProviderWithStatus(ProviderOption... opts)
       throws NoCloudProviderDetectedException {
+    // Internal wrapper used to carry provider type through ExecutionException
+    // instead of inferring based on future ordering (which is brittle and adds
+    // branches). Simplifies error attribution for coverage.
+    class ProviderDetectFailure extends Exception {
+      final String providerType;
+      ProviderDetectFailure(String providerType, Exception cause) {
+        super(cause.getMessage(), cause);
+        this.providerType = providerType;
+      }
+    }
     ProviderOptions po = new ProviderOptions();
     for (ProviderOption opt : opts)
       opt.apply(po);
@@ -170,7 +180,10 @@ public final class S2IAM {
       po.logger.logf("detectProvider: starting fastDetect phase over providers=%d timing=%s",
           po.clients.size(), timing);
     }
-    Map<String, String> fastErrors = new LinkedHashMap<>();
+  // Collect fast phase errors inline (provider simpleName -> message) only for
+  // potential debugging; final thrown exception will summarize from
+  // attemptStatuses instead of dual maps.
+  Map<String, String> fastPhaseErrors = new LinkedHashMap<>();
     for (CloudProviderClient c : po.clients) {
       long s = System.nanoTime();
       Exception fe = c.fastDetect();
@@ -197,7 +210,7 @@ public final class S2IAM {
               c.getClass().getSimpleName(), fe.getMessage());
         }
       }
-      fastErrors.put(c.getClass().getSimpleName(), fe.getMessage());
+  fastPhaseErrors.put(c.getClass().getSimpleName(), fe.getMessage());
       attemptStatuses.add(new DetectAttemptStatus("fast", c.getType().name(), durMs, "error",
           safeTrunc(fe.getMessage())));
     }
@@ -236,13 +249,13 @@ public final class S2IAM {
         if (err == null)
           return c;
         else
-          throw err;
+          throw new ProviderDetectFailure(c.getType().name(), err);
       }));
     }
     exec.shutdown();
     long deadline = System.nanoTime() + timeout.toNanos();
     List<Throwable> errors = new ArrayList<>();
-    Map<String, String> detectErrors = new LinkedHashMap<>();
+  Map<String, String> detectPhaseErrors = new LinkedHashMap<>();
     for (int i = 0; i < futures.size(); i++) {
       long remainingMs = (deadline - System.nanoTime()) / 1_000_000L;
       if (remainingMs <= 0)
@@ -266,23 +279,23 @@ public final class S2IAM {
       } catch (ExecutionException ee) {
         Throwable cause = ee.getCause();
         errors.add(cause);
+        String providerName = cause instanceof ProviderDetectFailure
+            ? ((ProviderDetectFailure) cause).providerType
+            : "unknown";
+        if (cause instanceof ProviderDetectFailure) {
+          cause = cause.getCause();
+        }
         if (debug && po.logger != null) {
           if (timing) {
-            po.logger.logf("detectProvider: provider failed error=%s remainingMs=%d",
-                cause == null ? "<null>" : cause.getMessage(), remainingMs);
+            po.logger.logf("detectProvider: provider failed provider=%s error=%s remainingMs=%d",
+                providerName, cause == null ? "<null>" : cause.getMessage(), remainingMs);
           } else {
-            po.logger.logf("detectProvider: provider failed error=%s",
-                cause == null ? "<null>" : cause.getMessage());
+            po.logger.logf("detectProvider: provider failed provider=%s error=%s",
+                providerName, cause == null ? "<null>" : cause.getMessage());
           }
         }
-        String key = cause == null ? "unknown" : cause.getClass().getSimpleName();
-        detectErrors.put(key + "@" + i, cause == null ? "null" : cause.getMessage());
-        String providerName = "unknown";
-        if (cause instanceof Exception) {
-          // attempt to derive provider from future index
-          if (i < po.clients.size())
-            providerName = po.clients.get(i).getType().name();
-        }
+        String key = (cause == null ? "unknown" : cause.getClass().getSimpleName()) + "@" + providerName;
+  detectPhaseErrors.put(key, cause == null ? "null" : cause.getMessage());
         long errDur = timeout.toMillis() - remainingMs;
         attemptStatuses.add(new DetectAttemptStatus("detect", providerName, errDur, "error",
             safeTrunc(cause == null ? null : cause.getMessage())));
@@ -304,8 +317,13 @@ public final class S2IAM {
         po.logger.logf("detectProvider: no provider detected errors=%d", errors.size());
       }
     }
-    throw new NoCloudProviderDetectedException(buildAggregateDetectMessage(fastErrors, detectErrors)
-        + " attempts=" + attemptStatuses.size());
+  // Simplified aggregate message: rely on attemptStatuses list for structured
+  // review; include counts of fast vs detect errors.
+  long fastErrCount = attemptStatuses.stream().filter(a -> a.phase.equals("fast") && a.status.equals("error")).count();
+  long detectErrCount = attemptStatuses.stream().filter(a -> a.phase.equals("detect") && a.status.equals("error")).count();
+  String msg = "no cloud provider detected; fastErrors=" + fastErrCount + 
+    " detectErrors=" + detectErrCount + " attempts=" + attemptStatuses.size();
+  throw new NoCloudProviderDetectedException(msg);
   }
 
   private static String safeTrunc(String s) {
@@ -316,36 +334,7 @@ public final class S2IAM {
     return s;
   }
 
-  private static String buildAggregateDetectMessage(Map<String, String> fastErrors,
-      Map<String, String> detectErrors) {
-    List<String> parts = new ArrayList<>();
-    String fast = formatSection(fastErrors, 3);
-    if (!fast.isEmpty())
-      parts.add("fast=" + fast);
-    String detect = formatSection(detectErrors, 3);
-    if (!detect.isEmpty())
-      parts.add("detect=" + detect);
-    if (parts.isEmpty())
-      return "no cloud provider detected";
-    return "no cloud provider detected; " + String.join("; ", parts);
-  }
-
-  private static String formatSection(Map<String, String> src, int max) {
-    if (src.isEmpty())
-      return "";
-    StringBuilder sb = new StringBuilder();
-    int n = 0;
-    for (var e : src.entrySet()) {
-      if (n++ > 0)
-        sb.append(',');
-      sb.append(e.getKey()).append(':').append(safeTrunc(e.getValue()));
-      if (n >= max && src.size() > max) {
-        sb.append("+" + (src.size() - max) + "more");
-        break;
-      }
-    }
-    return sb.toString();
-  }
+  // Removed buildAggregateDetectMessage/formatSection in favor of simpler counts.
 
   private static void applyJwtOptions(JwtOptions o, JwtOption... opts) {
     for (JwtOption opt : opts)
