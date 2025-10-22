@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ "**" ]
+    branches: [ main ]
 
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read

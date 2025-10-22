@@ -35,9 +35,10 @@ async def expect_cloud_provider_detected(timeout: float = TEST_DETECT_TIMEOUT) -
     ):
         pytest.skip("cloud provider required")
 
+    # Single attempt only (fail-fast). Retries can mask genuine negative signals
+    # (wrong environment / firewall) and slow CI.
     try:
-        provider = await s2iam.detect_provider(timeout=timeout)
-        return provider
+        return await s2iam.detect_provider(timeout=timeout)
     except s2iam.CloudProviderNotFound:
         pytest.fail("Cloud provider detection failed - expected to detect provider in test environment")
     except s2iam.ProviderIdentityUnavailable:
