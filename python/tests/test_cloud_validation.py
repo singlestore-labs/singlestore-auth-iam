@@ -10,18 +10,13 @@ import pytest
 import s2iam
 from s2iam import CloudProviderType, JWTType
 
-from .test_server_utils import GoTestServerManager
+from .test_server_utils import get_shared_server
 from .testhelp import expect_cloud_provider_detected, require_cloud_role, validate_identity_and_jwt
 
 
 @pytest.fixture(scope="session")
 def test_server():
-    server = GoTestServerManager(timeout_minutes=5)
-    try:
-        server.start()
-        yield server
-    finally:
-        server.stop()
+    return get_shared_server()
 
 
 @pytest.mark.asyncio
