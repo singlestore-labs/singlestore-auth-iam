@@ -2,6 +2,7 @@
 Shared test utilities for managing the Go test server.
 """
 
+import json
 import logging
 import os
 import subprocess
@@ -28,6 +29,9 @@ class GoTestServerManager:
         self.server_url = f"http://localhost:{self.port}"  # Will be updated after server starts
         self.go_dir = self._get_go_directory(go_dir)
         self.actual_port: Optional[int] = None
+
+    # NOTE: Manager is intentionally not thread-safe because pytest runs tests sequentially.
+    # The server lives for the whole test session (or until explicit stop); process exit handles cleanup.
 
     def _get_go_directory(self, go_dir: Optional[str]) -> str:
         """Get the Go directory location for the two known test scenarios."""
@@ -99,13 +103,21 @@ class GoTestServerManager:
 
         logger.debug("Go server debug log will be written to: %s", debug_log_file)
 
-        # Prepare server command
+        # Prepare info file path (atomic write by server)
+        self.info_file = os.path.join(self.go_dir, "s2iam_test_server_info.json")
+
+        # Prepare server command (request random port with 0 and info-file)
+        # Use -shutdown-on-stdin-close and keep stdin open for lifetime of process; closing stdin (via process exit)
+        # triggers graceful shutdown. We never explicitly terminate in tests.
         server_cmd = [
             "./s2iam_test_server",
             "-port",
             str(self.port),
             "-timeout",
             f"{self.timeout_minutes}m",
+            "-info-file",
+            self.info_file,
+            "-shutdown-on-stdin-close",
         ]
         logger.debug("Starting server with command: %s", " ".join(server_cmd))
         logger.debug("Server working directory: %s", self.go_dir)
@@ -115,125 +127,54 @@ class GoTestServerManager:
         )
 
         # Start the server with timeout
+        # We don't need stdout; server only writes JSON to file when info-file supplied
         self.process = subprocess.Popen(
             server_cmd,
             cwd=self.go_dir,
             env=env,
-            stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,  # so closing triggers shutdown if desired
+            stdout=self._stderr_file,  # route to debug log; keep single sink
             stderr=self._stderr_file,
             text=True,
-            bufsize=1,  # line-buffered for text mode
         )
 
         logger.debug("Server process started with PID: %s", self.process.pid)
 
-        # Wait for server to start - increased wait time for CI
-        logger.debug("Waiting for server to initialize...")
-        time.sleep(3)  # Increased from 2 to 3 seconds
-
-        # Check if process is still running
-        poll_result = self.process.poll()
-        if poll_result is not None:
-            stdout, stderr = self.process.communicate()
-            logger.error("Server failed to start - process exited with code: %s", poll_result)
-            logger.error("Server failed to start - stdout: %s", stdout)
-            logger.error("Server failed to start - stderr: %s", stderr)
-            raise Exception(f"Test server failed to start (exit code: {poll_result}): {stderr}")
-
-        logger.debug("Server process still running, attempting to read port...")
-
-        # If we used port 0, read the actual port from server output
-        if self.port == 0:
-            self.actual_port = self._read_server_port()
+        # Poll for info file instead of sleeping blindly
+        logger.debug("Waiting for info file: %s", self.info_file)
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if self.process.poll() is not None:
+                # Process exited early
+                with open(self.debug_log_file, "r", errors="ignore") as f:
+                    debug_contents = f.read()
+                raise Exception(
+                    f"Test server exited early (code={self.process.returncode}); debug log:\n{debug_contents}"
+                )
+            try:
+                with open(self.info_file, "r") as f:
+                    info = json.load(f)
+                port = info["server_info"]["port"]
+                if port:
+                    self.actual_port = port
+                    break
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                logger.debug("Info file read parse issue (continuing): %s", e)
+            time.sleep(0.1)
         else:
-            self.actual_port = self.port
+            raise Exception("Timed out waiting for server info file")
+
+        if not self.actual_port:
+            raise Exception("Server did not provide a valid port in info file")
 
         # Update server_url with actual port
         self.server_url = f"http://localhost:{self.actual_port}"
 
         logger.debug("Test server started successfully on port %s", self.actual_port)
 
-    def _read_server_port(self) -> int:
-        """Read the server port from JSON written to stdout (synchronous, simple)."""
-        import json
-
-        start_time = time.time()
-        timeout = 30  # seconds
-        buffer = ""
-        all_stdout: list[str] = []
-        brace_count = 0
-        in_json = False
-
-        logger.debug("Reading server port from JSON output (timeout=%ds)...", timeout)
-
-        while time.time() - start_time < timeout:
-            if not self.process or self.process.poll() is not None:
-                logger.error("Server process ended while reading port")
-                break
-
-            # Blocking read of one line; server prints pretty JSON with newlines
-            line = self.process.stdout.readline() if self.process and self.process.stdout else ""
-            if not line:
-                time.sleep(0.05)
-                continue
-
-            all_stdout.append(line)
-            buffer += line
-            logger.debug("STDOUT: %s", line.rstrip())
-
-            for ch in line:
-                if ch == "{":
-                    brace_count += 1
-                    in_json = True
-                elif ch == "}":
-                    brace_count -= 1
-
-            if in_json and brace_count == 0:
-                js_start = buffer.find("{")
-                js_end = buffer.rfind("}") + 1
-                if js_start >= 0 and js_end > js_start:
-                    js = buffer[js_start:js_end]
-                    try:
-                        obj = json.loads(js)
-                        port = obj["server_info"]["port"]
-                        logger.debug("Parsed port from JSON: %s", port)
-                        return port
-                    except Exception as e:
-                        logger.debug("JSON parse failed (continuing): %s", e)
-                        buffer = ""
-                        brace_count = 0
-                        in_json = False
-
-        logger.error("Failed to read server port within %ds", timeout)
-        logger.error("All stdout received:\n%s", "".join(all_stdout))
-        if self.process:
-            logger.error("Server process exit code: %s", self.process.poll())
-        raise Exception(f"Could not read server port from JSON output after {timeout}s timeout")
-
-    def stop(self) -> None:
-        """Stop the Go test server."""
-        if self.process:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-            self.process = None
-
-        # Ensure stderr file is closed
-        if hasattr(self, "_stderr_file") and self._stderr_file and not self._stderr_file.closed:
-            try:
-                self._stderr_file.flush()
-            except Exception:
-                pass
-            try:
-                self._stderr_file.close()
-            except Exception:
-                pass
-
-        # Show debug log contents if available
-        self.show_debug_log()
+    # Info-file polling supplies the dynamically chosen port; no stdout parsing helper needed.
 
     def show_debug_log(self) -> None:
         """Display the contents of the Go server debug log."""
@@ -261,6 +202,18 @@ class GoTestServerManager:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.stop()
+    def __exit__(self, exc_type, exc_val, exc_tb):  # No explicit shutdown; allow exceptions to propagate
+        return False
+
+
+_shared_server: Optional[GoTestServerManager] = None
+
+
+def get_shared_server() -> GoTestServerManager:
+    """Return a singleton shared test server (starts on first use)."""
+    global _shared_server
+    if _shared_server is None:
+        mgr = GoTestServerManager(timeout_minutes=5)
+        mgr.start()
+        _shared_server = mgr
+    return _shared_server

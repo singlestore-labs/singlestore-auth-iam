@@ -37,7 +37,7 @@ class AWSClient(CloudProviderClient):
         self._sts_client = None
         self._session = None
 
-    def _log(self, message: str) -> None:  # pragma: no cover - trivial
+    def _log(self, message: str) -> None:
         if self._logger:
             self._logger.log(f"AWS: {message}")
 
@@ -70,32 +70,49 @@ class AWSClient(CloudProviderClient):
             return False
 
     async def detect(self) -> None:
-        self._log("Starting AWS detection")
-
-        for var in ("AWS_EXECUTION_ENV", "AWS_REGION", "AWS_DEFAULT_REGION", "AWS_LAMBDA_FUNCTION_NAME"):
-            if os.environ.get(var):
-                self._detected = True
-                self._log(f"Detected via env var {var}")
-                return
+        # Full (network-inclusive) detection. Raise on failure so orchestrator never
+        # selects an undetected client (prevents later ProviderNotDetected errors).
+        self._log("Starting AWS detection (full phase)")
+        if self._detected:
+            return
 
         if await self._check_metadata_service():
             self._detected = True
             self._log("Detected via metadata service")
             return
 
-        try:  # noqa: BLE001
-            import boto3  # type: ignore[import-untyped]
+        try:
+            import boto3  # optional dependency in some usage contexts
+        except ImportError as e:  # noqa: BLE001
+            self._log(f"boto3 import failed: {e}")
+        else:
+            try:  # noqa: BLE001
+                sts_client = boto3.client("sts")
+                identity = sts_client.get_caller_identity()
+                if identity.get("Account"):
+                    self._detected = True
+                    self._log("Detected via STS")
+                    return
+            except Exception as e:  # noqa: BLE001
+                self._log(f"STS detection failed: {e}")
 
-            sts_client = boto3.client("sts")
-            identity = sts_client.get_caller_identity()
-            if identity.get("Account"):
+        self._log("AWS full detection did not succeed; raising")
+        raise Exception("AWS provider not detected")
+
+    async def fast_detect(self) -> None:
+        """Fast detection: env only, no network calls."""
+        # IRSA / web identity short-circuit: ONLY honor explicit env vars.
+        if os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE") or os.environ.get("AWS_ROLE_ARN"):
+            self._detected = True
+            self._log("FastDetect: IRSA environment variables present")
+            return
+
+        for var in ("AWS_EXECUTION_ENV", "AWS_REGION", "AWS_DEFAULT_REGION", "AWS_LAMBDA_FUNCTION_NAME"):
+            if os.environ.get(var):
                 self._detected = True
-                self._log("Detected via STS")
+                self._log(f"FastDetect: detected via env var {var}")
                 return
-        except Exception as e:  # noqa: BLE001
-            self._log(f"STS detection failed: {e}")
-
-        raise Exception("Not running on AWS: env, metadata, STS all failed")
+        raise Exception("FastDetect: no AWS indicators")
 
     async def _ensure_region(self) -> None:
         if self._region:
@@ -153,8 +170,15 @@ class AWSClient(CloudProviderClient):
             self._sts_client = self._session.client("sts", region_name=self._region)
             self._log("Initialized STS client")
 
-        if self._sts_client is None or self._session is None:  # pragma: no cover - defensive
-            raise ProviderIdentityUnavailable("STS client/session not initialized")
+        if self._sts_client is None or self._session is None:
+            # Can happen when clone created via assume_role (sts_client copied but session not)
+            import boto3
+
+            if self._session is None:
+                self._session = boto3.Session()
+            if self._sts_client is None:
+                self._sts_client = self._session.client("sts", region_name=self._region)
+            self._log("Recovered missing STS session/client state")
 
         # Narrow optionals after explicit check
         sts_client = self._sts_client
@@ -190,8 +214,10 @@ class AWSClient(CloudProviderClient):
                 }
             else:
                 identity_resp = await loop.run_in_executor(None, sts_client.get_caller_identity)
-                assumed = ":assumed-role/" in identity_resp["Arn"] or os.environ.get("AWS_SESSION_TOKEN") is not None
-                if assumed:
+                role_assumed = (
+                    ":assumed-role/" in identity_resp["Arn"] or os.environ.get("AWS_SESSION_TOKEN") is not None
+                )
+                if role_assumed:
                     creds = session_obj.get_credentials()
                     headers = {
                         "X-AWS-Access-Key-ID": creds.access_key,
@@ -200,6 +226,8 @@ class AWSClient(CloudProviderClient):
                     }
                     if creds.token:
                         headers["X-AWS-Session-Token"] = creds.token
+                    if os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE") or os.environ.get("AWS_ROLE_ARN"):
+                        self._log("Using IRSA web identity session credentials")
                 else:
                     self._log("Getting session token for static credentials")
                     session_resp = await loop.run_in_executor(None, sts_client.get_session_token)
@@ -219,6 +247,11 @@ class AWSClient(CloudProviderClient):
                 res_parts = parts[5].split("/")
                 if res_parts and res_parts[0]:
                     resource_type = res_parts[0]
+
+            # If region unset locally (IRSA path without env/metadata), adopt ARN region
+            if not self._region and region_from_arn:
+                self._region = region_from_arn
+                self._log(f"Derived region from ARN: {self._region}")
 
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,

@@ -1,12 +1,7 @@
-"""
-Google Cloud Platform provider client implementation.
-"""
+"""Google Cloud Platform provider client implementation."""
 
 import asyncio
 import os
-import socket
-import urllib.error
-import urllib.request
 from typing import Any, Optional
 
 import aiohttp
@@ -23,74 +18,181 @@ from ..models import (
 
 
 class GCPClient(CloudProviderClient):
-    """GCP implementation of CloudProviderClient."""
-
-    def __init__(self, logger: Optional[Logger] = None) -> None:
+    def __init__(self, logger: Optional[Logger] = None):
         self._logger = logger
         self._detected = False
         self._service_account_email: Optional[str] = None
-        self._identity: Optional[CloudIdentity] = None
 
     def _log(self, message: str) -> None:
-        """Log a message if logger is available."""
         if self._logger:
             self._logger.log(f"GCP: {message}")
 
-    async def detect(self) -> None:
-        """Detect if running on GCP (matches Go implementation)."""
-        self._log("Starting GCP detection")
+    async def detect(self) -> None:  # noqa: D401
+        if self._detected:
+            return
+        # Single metadata probe (no retries). GCP metadata is either immediately
+        # reachable or absent; retries add latency and can hide real negative
+        # signals (firewall / wrong environment). Fast fail mirrors Go impl.
+        self._log("Metadata probe (single attempt, link-local IP)")
+        loop = asyncio.get_event_loop()
+        start = loop.time()
+        metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/id"
+        # Single attempt wall clock budget. Increased to 10s (was 3s) to favor
+        # reliability on constrained CI VMs; early success returns immediately
+        # so typical latency stays low.
+        per_attempt_timeout = 10
+        debugging = os.environ.get("S2IAM_DEBUGGING", "").lower() == "true"
+        env_hint = "GCE_METADATA_HOST=set" if os.environ.get("GCE_METADATA_HOST") else "GCE_METADATA_HOST=unset"
+        cred_hint = (
+            "GOOGLE_APPLICATION_CREDENTIALS=external_account"
+            if (
+                os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                and os.path.isfile(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", ""))
+            )
+            else "GOOGLE_APPLICATION_CREDENTIALS=unset_or_non_external"
+        )
 
-        # Fast path: Check if GCE_METADATA_HOST environment variable is set
-        if os.environ.get("GCE_METADATA_HOST"):
-            self._log("Found GCE_METADATA_HOST environment variable")
-            # When env var is set, we need to verify identity access (strict check)
-            try:
-                await self._verify_metadata_access()
-                self._log("GCP identity metadata access verified")
-                self._detected = True
-                return
-            except Exception:
-                self._log("Metadata service available but no identity access")
-                raise ProviderIdentityUnavailable("GCP metadata available but no identity access")
+        def classify(msg: str) -> str:
+            lower = msg.lower()
+            if any(p in lower for p in ("name or service not known", "temporary failure", "not known")):
+                return "dns"
+            if any(p in lower for p in ("timed out", "timeout")):
+                return "timeout"
+            if any(p in lower for p in ("refused", "connection reset", "network is unreachable", "no route to host")):
+                return "connect"
+            return "other"
 
-        # Try to access GCP metadata service directly
-        self._log("Trying metadata service")
         try:
-            # Use urllib with explicit timeout (matches Go's http.Client{Timeout: 3 * time.Second})
-            def sync_check() -> bool:
-                req = urllib.request.Request(
-                    "http://metadata.google.internal/computeMetadata/v1/instance/id",
-                    headers={"Metadata-Flavor": "Google"},
-                )
-                # Set socket timeout to match Go implementation
-                socket.setdefaulttimeout(3.0)
-                try:
-                    with urllib.request.urlopen(req, timeout=3.0) as response:
-                        if response.status == 200:
-                            return True
-                        else:
-                            raise Exception(f"Metadata service returned status {response.status}")
-                finally:
-                    socket.setdefaulttimeout(None)  # Reset to default
+            trace_configs = []
+            want_trace = debugging
+            tc: Optional[aiohttp.TraceConfig] = None
+            if want_trace:
+                tc = aiohttp.TraceConfig()
 
-            # Run sync operation in executor to avoid blocking event loop
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, sync_check)
+                from typing import Any as _Any
 
-            self._log("Successfully detected GCP environment")
+                async def _trace_dns_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE dns_start")
+
+                async def _trace_dns_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE dns_end")
+
+                async def _trace_conn_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE connection_create_start")
+
+                async def _trace_conn_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE connection_create_end")
+
+                async def _trace_request_start(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE request_start")
+
+                async def _trace_request_end(
+                    session: aiohttp.ClientSession, context: _Any, params: _Any
+                ) -> None:  # noqa: D401
+                    self._log("TRACE request_end")
+
+                tc.on_dns_resolvehost_start.append(_trace_dns_start)
+                tc.on_dns_resolvehost_end.append(_trace_dns_end)
+                tc.on_connection_create_start.append(_trace_conn_start)
+                tc.on_connection_create_end.append(_trace_conn_end)
+                tc.on_request_start.append(_trace_request_start)
+                tc.on_request_end.append(_trace_request_end)
+                trace_configs.append(tc)
+
+            async def _probe() -> None:
+                async with aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=per_attempt_timeout), trace_configs=trace_configs or None
+                ) as session:
+                    async with session.get(
+                        metadata_url, headers={"Metadata-Flavor": "Google"}
+                    ) as response:  # noqa: S310
+                        if response.status != 200:
+                            raise Exception(f"metadata status {response.status}")
+
+            GUARD_MARGIN = 0.25
+            try:
+                await asyncio.wait_for(_probe(), timeout=per_attempt_timeout + GUARD_MARGIN)
+            except asyncio.TimeoutError as te:
+                if not debugging:
+                    self._log("TRACE timeout_without_phase_detail")
+                raise TimeoutError("metadata probe wait_for timeout") from te
+            elapsed_ms = int((loop.time() - start) * 1000)
+            if debugging:
+                self._log(f"Detected metadata (elapsed={elapsed_ms}ms)")
             self._detected = True
             return
-
-        except Exception as e:
-            error_msg = str(e) if str(e) else f"{type(e).__name__}"
-            self._log(f"Metadata service error: {error_msg}")
-            raise Exception(
-                f"Not running on GCP: metadata service unavailable (no GCE_METADATA_HOST env var and cannot reach metadata.google.internal): {error_msg}"  # noqa: E501
+        except (GeneratorExit, asyncio.CancelledError) as e:
+            elapsed_ms = int((loop.time() - start) * 1000)
+            if debugging:
+                self._log(
+                    f"Detect cancelled/closed (elapsed_ms={elapsed_ms} type={type(e).__name__}) – treating as negative"
+                )
+            return
+        except RuntimeError as e:
+            # Occasionally during task cancellation Python/aiohttp surfaces a RuntimeError
+            # with the message "coroutine ignored GeneratorExit" as an unraisable exception
+            # (Pytest reports PytestUnraisableExceptionWarning). This indicates the coroutine
+            # was being torn down after a GeneratorExit; it is a cancellation artifact, not a
+            # positive detection signal nor a real failure of the environment. Treat it the
+            # same as a cancelled detection attempt to avoid noisy warnings while preserving
+            # fail-fast behavior for genuine errors.
+            msg = str(e)
+            if "coroutine ignored GeneratorExit" in msg:
+                elapsed_ms = int((loop.time() - start) * 1000)
+                if debugging:
+                    self._log(
+                        "Detect runtime cancellation artifact "
+                        f"(elapsed_ms={elapsed_ms} detail={msg}) – treating as negative"
+                    )
+                return
+            # For any other RuntimeError fall through to generic exception handling below.
+            raise
+        except Exception as e:  # noqa: BLE001
+            elapsed_ms = int((loop.time() - start) * 1000)
+            msg = str(e) or type(e).__name__
+            category = classify(msg)
+            OVER_TIMEOUT_MARGIN_MS = 300
+            over_timeout = elapsed_ms > (per_attempt_timeout * 1000 + OVER_TIMEOUT_MARGIN_MS)
+            diag = (
+                "Not running on GCP: metadata probe failed; "
+                f"elapsed_ms={elapsed_ms} category={category} timeout_s={per_attempt_timeout} "
+                f"over_timeout_margin={over_timeout} env=[{env_hint} {cred_hint}] "
+                f"exception_type={type(e).__name__} detail={msg}"
             )
+            self._log(diag)
+            raise Exception(diag)
 
-        raise Exception(
-            "Not running on GCP: no environment variable, metadata service, or default credentials detected"
-        )
+    async def fast_detect(self) -> None:
+        """Fast detection: env/file only, no network."""
+        # external_account credential file
+        cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if cred_path and os.path.isfile(cred_path):
+            try:  # noqa: BLE001
+                with open(cred_path, "r", encoding="utf-8") as f:
+                    content = f.read(4096)
+                if '"type"' in content and '"external_account"' in content:
+                    self._log("FastDetect: external_account credentials present")
+                    self._detected = True
+                    return
+            except Exception as e:  # noqa: BLE001
+                self._log(f"FastDetect: credential file read failed: {e}")
+
+        if os.environ.get("GCE_METADATA_HOST"):
+            # Do NOT verify network here; leave that to full detect
+            self._log("FastDetect: GCE_METADATA_HOST present")
+            self._detected = True
+            return
+        raise Exception("FastDetect: no GCP indicators")
 
     async def _verify_metadata_access(self) -> None:
         """Verify we can access identity-related metadata."""

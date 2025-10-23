@@ -176,24 +176,40 @@ The library defines several specific exceptions:
 
 ### Testing
 
-The library includes comprehensive tests that use the Go test server for integration testing:
+Tests use the Go test server (`s2iam_test_server`) started with the new `--info-file` flag for deterministic startup (no stdout JSON parsing). Async tests require `pytest-asyncio` which is part of the `dev` extras.
 
 ```bash
-# Run tests
+# Install with dev dependencies
+pip install -e .[dev]
+
+# Run full test suite (cloud‑dependent tests skip outside cloud VMs)
 pytest
 
-# Run tests with coverage
+# Coverage
 pytest --cov=s2iam --cov-report=html
+
+# Example: Just integration tests
+pytest -k integration
+```
+
+Manual server run example (atomic startup):
+
+```bash
+go build -o s2iam_test_server ../go/cmd/s2iam_test_server
+tmpfile=$(mktemp)
+./s2iam_test_server --port=0 --info-file "$tmpfile" --shutdown-on-stdin-close &
+while [ ! -s "$tmpfile" ]; do sleep 0.05; done
+jq . "$tmpfile"
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
+# Format
 black src tests
 isort src tests
 
-# Lint
+# Static checks
 flake8 src tests
 mypy src
 ```
