@@ -13,32 +13,9 @@ JWTs for engine access are ready for testing.
 JWTs for the management API are not yet available.
 APIs and language bindings may change before this is considered generally available.
 
+Current language support: Go, Python, Java, shell.
+
 ## Overview
-### Cloud Provider Detection (Parity Overview)
-
-All language implementations follow the same logical ordering to identify the current cloud environment:
-
-1. Fast path hints (environment variables, explicit credential presence, test-only system properties). Returns immediately on first match.
-2. Concurrent metadata detection across AWS, GCP, Azure. Each provider performs a single metadata probe (plus minimal classification calls) with a shared detection timeout.
-3. First successful provider cancels the remaining attempts.
-
-Timeouts:
-- Java & Python use a 10s upper bound for detection orchestration (Java via `Timeouts.DETECT`, Python via a global deadline). Healthy real-cloud responses are typically <100ms; the timeout should rarely be hit.
-- Identity/token fetch operations use a separate 10s baseline (`Timeouts.IDENTITY` in Java) to allow STS / MSI / GCP identity token retrieval.
-
-Observability:
-- Python exposes a `provider_status` list (phase, provider, status, elapsed_ms, error).
-- Java now offers `S2IAM.detectProviderWithStatus` returning a structured attempt list (`phase=fast|detect`, `status=success|error`).
-
-Environment Flags:
-- `S2IAM_DEBUGGING=true` enables human-readable log messages.
-- `S2IAM_DEBUG_TIMING=true` (Java & Python) includes per-attempt duration metrics without requiring always-on verbose logs.
-
-Design Principles:
-- Fail fast but do not prematurely declare failure while a plausible provider may still respond within the 10s window.
-- Avoid hidden retries for initial detection to surface latency issues early (exception: targeted Azure MSI throttling handling lives in provider-specific logic in Python; Java may add symmetric logic if evidence appears).
-- Each provider’s detection attempt is a single network round trip (plus a lightweight supplementary call for Azure classification) to keep CI cycles short.
-
 
 The `singlestore-auth-iam` library provides a seamless way to authenticate with SingleStore services using cloud provider IAM credentials. It automatically discovers your cloud environment (AWS, GCP, Azure) and obtains JWTs for:
 
@@ -65,6 +42,14 @@ To install the Go library:
 go get github.com/singlestore-labs/singlestore-auth-iam/go
 ```
 
+### Command Line Tool
+
+To install the shell command:
+
+```sh
+go install github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam@latest
+```
+
 ### Python
 
 To install the Python library:
@@ -77,6 +62,41 @@ Or from source:
 cd python
 pip install -e .
 ```
+
+### Java (Snapshot)
+
+Until the first registered release, use the current snapshot version and ensure JDK 11+ (library is compiled targeting Java 11 for broad compatibility).
+
+Maven:
+```xml
+<dependency>
+	<groupId>com.singlestore</groupId>
+	<artifactId>s2iam</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+</dependency>
+```
+
+Gradle (Groovy DSL):
+```gradle
+dependencies {
+	implementation 'com.singlestore:s2iam:0.0.1-SNAPSHOT'
+}
+```
+
+Gradle (Kotlin DSL):
+```kotlin
+dependencies {
+	implementation("com.singlestore:s2iam:0.0.1-SNAPSHOT")
+}
+```
+
+The Java API mirrors Go/Python convenience methods:
+```java
+String dbJwt = S2IAM.getDatabaseJWT("workspace-group-id");
+String apiJwt = S2IAM.getAPIJWT();
+```
+
+For advanced composition (assume role, custom timeout, audience for GCP only) see `java/README.md`.
 
 ## Usage
 
@@ -152,12 +172,6 @@ Audience (GCP ONLY): Supplying an audience when not on GCP raises an exception (
 
 ### Command Line Tool
 
-#### Installation
-
-```bash
-go install github.com/singlestore-labs/singlestore-auth-iam/go/cmd/s2iam@latest
-```
-
 #### Usage
 
 ```bash
@@ -213,9 +227,9 @@ The libraries automatically detect the cloud provider and obtain appropriate cre
 
 ## Documentation
 
-- **[Go Library Documentation](go/README.md)** - Complete Go API reference and examples
+- **[Go Library Documentation](https://pkg.go.dev/github.com/singlestore-labs/singlestore-auth-iam/go/s2iam) and [README](go/README.md)** - Complete Go API reference and examples
 - **[Python Library Documentation](python/README.md)** - Complete Python API reference and examples
-- **Java**: See inline Javadoc and `java/README.md` (implementation evolving pre-GA)
+- **Java**: See inline Javadoc and `[README](java/README.md)` (implementation evolving pre-GA)
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
