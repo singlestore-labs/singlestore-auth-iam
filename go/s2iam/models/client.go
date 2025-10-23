@@ -60,8 +60,15 @@ const (
 type CloudProviderClient interface {
 	// Detect tests if we are executing within this cloud provider. No
 	// assumption of how is made -- we could also be inside K8s. For
-	// AWS, we could be on Lambda or EC2.
+	// AWS, we could be on Lambda or EC2. Detect assumes that FastDetect() has
+	// already been called and will return early if FastDetect succeeded.
 	Detect(ctx context.Context) error
+
+	// FastDetect performs only in-process, non-network detection (environment variables,
+	// credential file presence). It must not perform any I/O that can block. It returns
+	// nil if detection succeeded, ErrNoCloudProviderDetected (wrapped) if not detected,
+	// and any other error for unexpected conditions.
+	FastDetect() error
 
 	// GetType returns the cloud provider type as a string
 	GetType() CloudProviderType

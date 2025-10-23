@@ -806,11 +806,8 @@ func TestCloudProviderNoRole(t *testing.T) {
 // Test with environment variable for debugging
 func TestWithDebugging(t *testing.T) {
 	// Cannot use t.Parallel() - modifies global environment variable S2IAM_DEBUGGING
-	// Set debugging env var
-	_ = os.Setenv("S2IAM_DEBUGGING", "true")
-	defer func() {
-		_ = os.Unsetenv("S2IAM_DEBUGGING")
-	}()
+	// Set debugging env var using t.Setenv for automatic cleanup
+	t.Setenv("S2IAM_DEBUGGING", "true")
 
 	// This should create a logger automatically
 	client, err := s2iam.DetectProvider(context.Background(),

@@ -4,7 +4,7 @@
 ![Go unit tests](https://github.com/singlestore-labs/singlestore-auth-iam/actions/workflows/go.yml/badge.svg)
 [![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam/go)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam/go)
 
-A Go client library for getting JWT tokens from SingleStore's IAM service when running in cloud environments (AWS, GCP, Azure).
+A Go client library for getting JWTs from SingleStore's IAM service when running in cloud environments (AWS, GCP, Azure).
 
 ## Installation
 
