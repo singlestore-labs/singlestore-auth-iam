@@ -17,8 +17,8 @@ const (
 	// defaultServer is the default authentication server endpoint
 	defaultServer = "https://authsvc.singlestore.com/auth/iam/:jwtType"
 
-	// defaultHTTPTimeout controls outbound calls to the auth service
-	defaultHTTPTimeout = 10 * time.Second
+	// defaultHTTPClientTimeout is used for outbound auth server requests
+	defaultHTTPClientTimeout = 10 * time.Second
 )
 
 // JWTOptions are used to configure how to get JWTs
@@ -149,7 +149,7 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	}
 
 	// Send request
-	httpClient := &http.Client{Timeout: defaultHTTPTimeout}
+	httpClient := &http.Client{Timeout: defaultHTTPClientTimeout}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", errors.Errorf("error calling authentication server: %w", err)

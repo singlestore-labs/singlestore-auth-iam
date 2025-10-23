@@ -156,12 +156,25 @@ Thumbs.db
 *.temp
 .temporary/
 
-# Notes and personal files
-notes
-*.local
-
 # local evelopment-specific copilot instructions 
 .github/copilot-dev-guide.md
 
 # Python-specific excludes
 python/LICENSE
+
+# === Project-specific ephemeral artifacts ===
+*-log
+
+# Coverage artifacts aggregated locally after remote download
+go-coverage.out
+python-coverage.xml
+java-coverage.xml
+go-coverage-*.out
+python-coverage-*.xml
+java-coverage-*.xml
+
+# JaCoCo & Maven build outputs (Maven target/ already indirectly covered for python target but add explicit java target)
+java/target/
+
+# test junk
+go/s2iam_test_server_info*.json

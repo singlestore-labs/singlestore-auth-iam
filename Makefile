@@ -13,25 +13,34 @@ UNIQUE_DIR := dev-$(shell echo $$(( ( $(shell date +%s) / 60 ) % 3 + 1 )))
 endif
 export UNIQUE_DIR
 
-.PHONY: help test test-local test-go-local test-python-local on-remote-test on-remote-test-go on-remote-test-python check-cloud-env check-host clean dev-setup dev-setup-common dev-setup-go dev-setup-python lint lint-go lint-python format format-go format-python ssh-copy-to-remote ssh-run-remote-tests ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-cleanup-remote
+.PHONY: help test \
+ test-local test-go-local test-python-local test-local-java \
+ on-remote-test on-remote-test-go on-remote-test-python on-remote-test-java \
+ check-cloud-env check-host clean \
+ dev-setup-ubuntu dev-setup-macos \
+ dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python dev-setup-ubuntu-java dev-setup-macos-java \
+ dev-setup-common \
+ lint lint-go lint-python lint-java \
+ format format-go format-python format-java \
+ ssh-copy-to-remote ssh-run-remote-tests \
+ ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java \
+ ssh-cleanup-remote
 
 # Default target
 help:
 	@echo "SingleStore Auth IAM Build System"
 	@echo ""
 	@echo "Local Testing:"
-	@echo "  make test                                 Run all local tests (Go + Python)"
-	@echo "  make test-go-local                        Run Go local tests"
-	@echo "  make test-python-local                    Run Python local tests"
+	@echo "  make test                                 Run all local tests (Go + Python + Java)"
+	@echo "  make test-local-go                        Run Go local tests"
+	@echo "  make test-local-python                    Run Python local tests"
+	@echo "  make test-local-java                      Run Java local tests"
 	@echo ""
 	@echo "Cloud Testing (run ON cloud VMs - these targets work when you're ON the cloud host):"
-	@echo "  make on-remote-test                       Run cloud tests (Go + Python)"
+	@echo "  make on-remote-test                       Run cloud tests (Go + Python + Java)"
 	@echo "  make on-remote-test-go                    Run Go cloud tests only"
 	@echo "  make on-remote-test-python                Run Python cloud tests only"
-	@echo ""
-	@echo "(Legacy launch-* convenience targets removed; use explicit sequence:)"
-	@echo "  make ssh-copy-to-remote && make ssh-run-remote-tests TEST_TARGET=on-remote-test && make ssh-download-coverage && make ssh-cleanup-remote"
-	@echo "  (Or specify on-remote-test-go / on-remote-test-python for single language)"
+	@echo "  make on-remote-test-java                  Run Java cloud tests only"
 	@echo ""
 	@echo "  SSH Operations (for advanced usage):"
 	@echo "    make ssh-copy-to-remote                 Copy code to remote HOST"
@@ -42,9 +51,14 @@ help:
 	@echo "    make ssh-cleanup-remote                 Clean up remote directory on HOST"
 	@echo ""
 	@echo "Development Setup:"
-	@echo "  make dev-setup                            Full development setup (Go + Python tooling)"
-	@echo "  make dev-setup-go                         Go development tooling (modules + linters)"
-	@echo "  make dev-setup-python                     Python development tooling (system + pip dev deps)"
+	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python + Java)"
+	@echo "  make dev-setup-ubuntu-go                  Ubuntu/Debian Go toolchain + linters"
+	@echo "  make dev-setup-ubuntu-python              Ubuntu/Debian Python tooling + deps"
+	@echo "  make dev-setup-ubuntu-java               Ubuntu/Debian Java development tooling (OpenJDK + Maven deps)"
+	@echo "  make dev-setup-macos                      Full dev setup macOS (Go + Python + Java)"
+	@echo "  make dev-setup-macos-go                   macOS Go toolchain + linters"
+	@echo "  make dev-setup-macos-python               macOS Python tooling + deps"
+	@echo "  make dev-setup-macos-java                 macOS Java development tooling (Temurin/OpenJDK + Maven deps)"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint                                 Run all linters"
@@ -68,21 +82,43 @@ help:
 	@echo "   AZURE_POSITIVE_*, AZURE_NEGATIVE_*)"
 	@echo ""
 	@echo "Coverage files are automatically timestamped (e.g., go-coverage-20250807-143022.out)"
+	@echo ""
+	@echo "Helper Scripts (doodles/):"
+	@echo "  doodles/install-all                      Run dev-setup across all remote test hosts"
 
 # Test targets
 test: test-local
 	@echo "✓ All local tests completed"
 
-test-local: test-go-local test-python-local
+.PHONY: test-local-patterns
+test-local-patterns:
+	! git grep -i 'jwt[ _]token'
+	@violations=$$(git grep -n 'S2IAM_TEST_' -- 'go/s2iam' 'go/internal' 'python/src' 'java/src/main' 2>/dev/null | grep -v '_test.go' | grep -v '/testhelp/' || true); \
+	 if [ -n "$$violations" ]; then \
+	   echo 'ERROR: S2IAM_TEST_ variables found in library (non-test) source:'; \
+	   echo "$$violations"; \
+	   exit 1; \
+	 fi
+
+test-local: test-local-patterns test-local-go test-local-python test-local-java
 	@echo "✓ All local tests passed"
 
-test-go-local:
+test-local-go:
 	@echo "Running Go local tests..."
 	cd go && go test -v ./...
 
-test-python-local:
+test-local-python:
 	@echo "Running Python local tests..."
-	cd python && python3 -m pytest tests/ -v
+	cd python && python3 -m venv test-venv && \
+	PIP_CACHE_DIR=$(HOME)/.cache/pip-test ./test-venv/bin/pip install -e '.[dev]' && \
+	./test-venv/bin/python -m pytest tests/ -v; \
+	EXIT_CODE=$$?; \
+	rm -rf test-venv; \
+	exit $$EXIT_CODE
+
+test-local-java:
+	@echo "Running Java local tests..."
+	cd java && mvn -q -DskipTests=false test
 
 check-cloud-env:
 	@if [ -z "$$S2IAM_TEST_CLOUD_PROVIDER" ] && [ -z "$$S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE" ] && [ -z "$$S2IAM_TEST_ASSUME_ROLE" ]; then \
@@ -99,18 +135,17 @@ ifndef HOST
 endif
 
 on-remote-completed: 
-	@echo "✓ All tests completed successfully"
+	@echo "ALL_TESTS_COMPLETED_OK"
 
 # Cloud test targets (designed to run ON cloud VMs)
-on-remote-test: check-cloud-env on-remote-test-go on-remote-test-python
+on-remote-test: check-cloud-env on-remote-test-java on-remote-test-go on-remote-test-python
 
 on-remote-test-go: check-cloud-env
 	@echo "=== Running Go cloud tests ==="
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd go && go test -v --failfast ./...
-	cd go && go test -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/go/... ./...
+	cd go && go test -v -failfast -covermode=atomic -coverprofile=coverage.out -coverpkg=github.com/singlestore-labs/singlestore-auth-iam/go/... ./...
 
 on-remote-test-python: check-cloud-env
 	@echo "=== Running Python cloud tests ==="
@@ -118,25 +153,47 @@ on-remote-test-python: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
 	# Add src to PYTHONPATH so tests can import s2iam without installation
-	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short
-	cd python && PYTHONPATH=src python3 -m pytest tests/ --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
+	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 
-dev-setup: dev-setup-go dev-setup-python
-	@echo "✓ Full development environment ready"
+on-remote-test-java: check-cloud-env
+	@echo "=== Running Java cloud tests ==="
+	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
+	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
+	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
+	cd java && mvn -q -DskipTests=false verify
+	# Copy JaCoCo XML up one level for remote retrieval naming consistency
+	@if [ -f java/target/site/jacoco/jacoco.xml ]; then cp java/target/site/jacoco/jacoco.xml java-coverage.xml || true; fi
+
+dev-setup-ubuntu: dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-ubuntu-java
+	@echo "✓ Full Ubuntu/Debian development environment ready"
+
+dev-setup-macos: dev-setup-macos-go dev-setup-macos-python dev-setup-macos-java
+	@echo "✓ Full macOS development environment ready"
 
 dev-setup-common:
 	sudo apt update
-	sudo snap install go --classic
+	sudo snap install go --classic || sudo apt install -y golang
 	cd go && go mod download
 
-dev-setup-go: dev-setup-common 
+dev-setup-ubuntu-go: dev-setup-common
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	mkdir -p $$HOME/bin
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.0.2
-	@echo "✓ Go development environment ready"
+	@echo "✓ Ubuntu Go development environment ready"
 
-dev-setup-python: dev-setup-common 
+dev-setup-macos-go:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	brew install go golangci-lint
+	cd go && go mod download
+	go install mvdan.cc/gofumpt@latest
+	go install golang.org/x/tools/cmd/goimports@latest
+	@echo "✓ macOS Go development environment ready"
+
+dev-setup-ubuntu-python: dev-setup-common
 	sudo apt update
 	sudo apt install -y python3 python3-pip python3-venv \
 		python3-aiohttp python3-boto3 python3-google-auth python3-jwt python3-cryptography \
@@ -144,21 +201,53 @@ dev-setup-python: dev-setup-common
 		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort
 	@echo "Installing editable package with dev extras (pip) ..."
 	cd python && pip install -e .[dev]
-	@echo "✓ Python development environment ready (no virtualenv)"
+	@echo "✓ Ubuntu Python development environment ready (no virtualenv)"
 
-# Cloud provider specific installations
-install-aws:
-	@echo "Installing AWS CLI..."
+dev-setup-ubuntu-java:
+	@echo "Installing Java toolchain (OpenJDK 11 + Maven)..."
+	sudo apt update
+	sudo apt install -y openjdk-11-jdk maven
+	@echo "Priming Maven dependency cache (offline build support)..."
+	cd java && mvn -q -DskipTests dependency:go-offline || { echo "Maven dependency prefetch failed"; exit 1; }
+	@echo "✓ Java development environment ready"
+
+dev-setup-macos-java:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	@echo "Installing Java toolchain (Temurin 11 + Maven + Spotless deps)..."
+	brew install openjdk@11 maven || { echo "Failed to install Java tooling"; exit 1; }
+	# Ensure JAVA_HOME is set for current shell usage note
+	@echo "Add to shell profile if not present: export JAVA_HOME=\`/usr/libexec/java_home -v 11\`"
+	@echo "Priming Maven dependency cache (offline build support)..."
+	cd java && mvn -q -DskipTests dependency:go-offline || { echo "Maven dependency prefetch failed"; exit 1; }
+	@echo "✓ macOS Java development environment ready"
+
+dev-setup-macos-python:
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "ERROR: Homebrew not found. Install from https://brew.sh first."; \
+		exit 1; \
+	fi
+	brew install python3 pipx 
+	python3 -m pip install --upgrade pip
+	pipx ensurepath
+	python3 -m pip install --upgrade \
+		black isort flake8 mypy pytest pytest-cov pytest-asyncio aiohttp boto3 google-auth pyjwt cryptography requests google-auth-oauthlib
+	cd python && pip3 install -e .[dev]
+	@echo "✓ macOS Python development environment ready"
+
+dev-setup-aws:
 	sudo snap install aws-cli --classic
 
-install-azure:
+dev-setup-azure:
 	@echo "Installing Azure CLI..."
 	curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-install-gcp:
+dev-setup-gcp:
 	@echo "GCP dependencies installed via python3-google-auth and python3-google-auth-oauthlib"
 
-lint: lint-go lint-python
+lint: lint-go lint-python lint-java
 
 lint-go:
 	@echo "Running Go linters..."
@@ -186,7 +275,15 @@ lint-python:
 	cd python && python3 -m black --check src/ tests/
 	cd python && python3 -m isort --check-only src tests
 
-format: format-go format-python
+format: format-go format-python format-java
+ 
+lint-java:
+	@echo "Running Java formatter check (Spotless)..."
+	cd java && mvn -q spotless:check || { echo "Java formatting issues found (run make format-java)"; exit 1; }
+
+format-java:
+	@echo "Formatting Java code (Spotless)..."
+	cd java && mvn -q spotless:apply
 
 format-go:
 	@echo "Formatting Go code..."
@@ -228,7 +325,7 @@ ssh-run-remote-tests: check-host
 	ssh $(SSH_OPTS) $(HOST) \
 		"cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && env $(ENV_VARS) make $(TEST_TARGET) on-remote-completed" \
 		2>&1 | tee $(HOST)-log
-	@if grep -q "✓ All tests completed successfully" $(HOST)-log; then \
+	@if grep -q "ALL_TESTS_COMPLETED_OK" $(HOST)-log; then \
 		echo "✓ Remote tests passed on $(HOST)"; \
 	else \
 		echo "✗ Remote tests failed on $(HOST) - check $(HOST)-log"; \
@@ -237,7 +334,7 @@ ssh-run-remote-tests: check-host
 
 # Generic function to download coverage files
 # CI target - download coverage files from remote host
-ssh-download-coverage: ssh-download-coverage-go ssh-download-coverage-python
+ssh-download-coverage: ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java
 	@echo "✓ All coverage files downloaded"
 
 # CI target - download Go coverage from remote host
@@ -256,12 +353,17 @@ ssh-download-coverage-python: check-host
 	if [ ! -s ./python-coverage-$$TIMESTAMP.xml ]; then echo "Python coverage file empty or missing"; exit 1; fi; \
 	cp ./python-coverage-$$TIMESTAMP.xml python-coverage.xml
 
+ssh-download-coverage-java: check-host
+	@echo "Downloading Java coverage from $(HOST)..."
+	TIMESTAMP=$$(date +%Y%m%d-%H%M%S); \
+	scp $(SSH_OPTS) $(HOST):$(REMOTE_BASE_DIR)/$(UNIQUE_DIR)/java/java-coverage.xml ./java-coverage-$$TIMESTAMP.xml || scp $(SSH_OPTS) $(HOST):$(REMOTE_BASE_DIR)/$(UNIQUE_DIR)/java/target/site/jacoco/jacoco.xml ./java-coverage-$$TIMESTAMP.xml; \
+	if [ ! -s ./java-coverage-$$TIMESTAMP.xml ]; then echo "Java coverage file empty or missing"; exit 1; fi; \
+	cp ./java-coverage-$$TIMESTAMP.xml java-coverage.xml
+
 # Generic function to cleanup remote directory
 # CI target - cleanup remote directory
 ssh-cleanup-remote: check-host
 	@echo "Cleaning up remote directory on $(HOST)..."
 	ssh $(SSH_OPTS) $(HOST) "rm -rf $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)"
-
-## (Removed legacy launch-* targets; explicit sequence preferred for clarity and fail-fast)
 
 

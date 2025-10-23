@@ -89,6 +89,11 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 strict_equality = true
 
+[[tool.mypy.overrides]]
+# Narrow suppression: ignore missing type stubs only for boto3 and its core companions
+module = ["boto3", "botocore", "s3transfer"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
