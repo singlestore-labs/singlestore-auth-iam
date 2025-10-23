@@ -21,6 +21,11 @@ const (
 	getRegionURL   = "http://169.254.169.254/latest/meta-data/placement/region"
 	getTokenURL    = "http://169.254.169.254/latest/api/token"
 	getMetadataURL = "http://169.254.169.254/latest/meta-data/"
+
+	// Timeouts for AWS metadata/token detection (short to keep detection fast)
+	awsMetadataTimeout    = 2 * time.Second
+	awsTokenTimeout       = 2 * time.Second
+	awsRegionProbeTimeout = 2 * time.Second
 )
 
 // AWSClient implements the CloudProviderClient interface for AWS
@@ -45,6 +50,23 @@ func (c *AWSClient) copy() *AWSClient {
 		region:    c.region,
 		logger:    c.logger,
 	}
+}
+
+// FastDetect performs environment / config file only detection without any network I/O.
+// It returns nil if AWS environment indicators are present.
+func (c *AWSClient) FastDetect() error {
+	if os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE") != "" || os.Getenv("AWS_ROLE_ARN") != "" ||
+		os.Getenv("AWS_EXECUTION_ENV") != "" || os.Getenv("AWS_REGION") != "" ||
+		os.Getenv("AWS_DEFAULT_REGION") != "" || os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		c.mu.Lock()
+		c.detected = true
+		c.mu.Unlock()
+		if c.logger != nil {
+			c.logger.Logf("AWS FastDetect - Detected via environment variables")
+		}
+		return nil
+	}
+	return errors.WithStack(models.ErrNoCloudProviderDetected)
 }
 
 // NewClient returns the AWS client singleton
@@ -75,10 +97,9 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 		if c.logger != nil {
 			c.logger.Logf("AWS ensureRegion - Trying metadata service for region")
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-			getRegionURL, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, getRegionURL, nil)
 		if err == nil {
-			client := &http.Client{}
+			client := &http.Client{Timeout: awsRegionProbeTimeout}
 			resp, err := client.Do(req)
 			if err == nil {
 				defer func() {
@@ -123,7 +144,11 @@ func (c *AWSClient) ensureRegion(ctx context.Context) error {
 	return nil
 }
 
-// Detect tests if we are executing within AWS.
+// Detect performs full (potentially network) detection. It assumes FastDetect
+// has already been called. If c.detected is already true (FastDetect set it), Detect
+// returns immediately without further work. Region initialization is deferred to
+// first identity/header retrieval; Detect itself does not need region except when
+// deriving it from metadata as part of detection path.
 func (c *AWSClient) Detect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -137,23 +162,8 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		c.logger.Logf("AWS Detection - Starting detection")
 	}
 
-	// Check common AWS environment variables (fast check first)
-	if os.Getenv("AWS_EXECUTION_ENV") != "" || os.Getenv("AWS_REGION") != "" ||
-		os.Getenv("AWS_DEFAULT_REGION") != "" || os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		if c.logger != nil {
-			c.logger.Logf("AWS Detection - Found AWS environment variables")
-		}
-		c.detected = true // Mark detected first to avoid re-detection
-
-		// Initialize region first (separate from full initialization)
-		if err := c.ensureRegion(ctx); err != nil {
-			c.detected = false // Reset detection on failure
-			return err
-		}
-
-		// Return success - the STS client will be created lazily when needed
-		return nil
-	}
+	// Environment-only paths were handled by FastDetect; we intentionally do not
+	// repeat them here to avoid duplication and to keep semantics clear.
 
 	// Try to access the AWS instance metadata service
 	// Try IMDSv2 first (token-based method)
@@ -161,7 +171,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		getTokenURL, nil)
 	if err == nil {
 		tokenReq.Header.Set("X-aws-ec2-metadata-token-ttl-seconds", "21600")
-		client := &http.Client{}
+		client := &http.Client{Timeout: awsTokenTimeout}
 		resp, err := client.Do(tokenReq)
 
 		if err == nil {
@@ -172,15 +182,8 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 				if c.logger != nil {
 					c.logger.Logf("AWS Detection - Metadata service detected")
 				}
-				c.detected = true // Mark detected first to avoid re-detection
-
-				// Initialize region first (separate from full initialization)
-				if err := c.ensureRegion(ctx); err != nil {
-					c.detected = false // Reset detection on failure
-					return err
-				}
-
-				// Return success - the STS client will be created lazily when needed
+				c.detected = true
+				// Region derivation postponed; ensureRegion will run lazily when headers needed
 				return nil
 			}
 			if c.logger != nil {
@@ -199,7 +202,7 @@ func (c *AWSClient) Detect(ctx context.Context) error {
 		return errors.Errorf("not running on AWS: failed to detect AWS environment (no environment variables or metadata service): %w", err)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: awsMetadataTimeout}
 	resp, err := client.Do(req)
 	if err == nil {
 		defer func() {
@@ -353,6 +356,17 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 	}
 
+	// If region still empty (e.g., IRSA with no env vars and metadata blocked) attempt to derive from ARN
+	if c.region == "" && callerIdentity.Arn != nil {
+		arnParts := strings.Split(*callerIdentity.Arn, ":")
+		if len(arnParts) >= 4 && arnParts[3] != "" {
+			c.region = arnParts[3]
+			if c.logger != nil {
+				c.logger.Logf("AWS GetIdentityHeaders - Derived region from ARN: %s", c.region)
+			}
+		}
+	}
+
 	// Check if we're already using session credentials
 	isUsingSessionCredentials := strings.Contains(*callerIdentity.Arn, ":assumed-role/") ||
 		os.Getenv("AWS_SESSION_TOKEN") != ""
@@ -360,6 +374,12 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	// If we're using session credentials, we can't call GetSessionToken
 	// So we'll use the credentials we already have
 	if isUsingSessionCredentials {
+		// Log explicitly when IRSA env vars present for observability
+		if os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE") != "" || os.Getenv("AWS_ROLE_ARN") != "" {
+			if c.logger != nil {
+				c.logger.Logf("AWS GetIdentityHeaders - Using IRSA web identity session credentials")
+			}
+		}
 		if c.logger != nil {
 			c.logger.Logf("AWS GetIdentityHeaders - Using existing session credentials")
 		}

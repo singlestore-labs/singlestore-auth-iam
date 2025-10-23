@@ -89,7 +89,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	// Custom usage
 	flagSet.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", args[0])
-		fmt.Fprintf(os.Stderr, "Obtain a JWT token from SingleStore IAM authentication.\n\n")
+		fmt.Fprintf(os.Stderr, "Obtain a JWT from SingleStore IAM authentication.\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flagSet.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
