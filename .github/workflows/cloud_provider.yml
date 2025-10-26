@@ -134,7 +134,7 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Upload Java coverage to Codecov
-      uses: codecov/codecov-action@v5.4.3
+      uses: codecov/codecov-action@v5.5.1
       with:
         files: ./java-coverage.xml
         flags: java,${{ matrix.name }}
