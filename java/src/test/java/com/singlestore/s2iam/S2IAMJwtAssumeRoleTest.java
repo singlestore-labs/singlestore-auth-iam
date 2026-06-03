@@ -54,6 +54,7 @@ public class S2IAMJwtAssumeRoleTest {
     List<JwtOption> opts = new ArrayList<>();
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
+    opts.add(Options.withAllowHttp());
     if (base.getType() == CloudProviderType.gcp)
       opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String originalJwt = S2IAM.getDatabaseJWT("test-workspace", opts.toArray(new JwtOption[0]));

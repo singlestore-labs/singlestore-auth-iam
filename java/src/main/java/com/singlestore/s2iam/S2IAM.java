@@ -337,6 +337,28 @@ public final class S2IAM {
     return s;
   }
 
+  static void validateAuthServerURL(String rawUrl, boolean allowHttp) throws S2IAMException {
+    URI uri;
+    try {
+      uri = URI.create(rawUrl);
+    } catch (IllegalArgumentException e) {
+      throw new S2IAMException("invalid server URL: " + rawUrl, e);
+    }
+    String scheme = uri.getScheme();
+    if ("https".equals(scheme)) {
+      return;
+    }
+    if ("http".equals(scheme) && allowHttp) {
+      return;
+    }
+    if ("http".equals(scheme)) {
+      throw new S2IAMException(
+          "authentication server URL must use HTTPS; use Options.withAllowHttp() for testing");
+    }
+    throw new S2IAMException(
+        "authentication server URL must use HTTPS (got scheme " + scheme + ")");
+  }
+
   // Removed buildAggregateDetectMessage/formatSection in favor of simpler counts.
 
   private static void applyJwtOptions(JwtOptions o, JwtOption... opts) {
@@ -352,6 +374,8 @@ public final class S2IAM {
     if (o.serverUrl == null || o.serverUrl.isEmpty()) {
       throw new S2IAMException("server URL is required");
     }
+    String probeUrl = o.serverUrl.replace(":cloudProvider", "aws").replace(":jwtType", "database");
+    validateAuthServerURL(probeUrl, o.allowHttp);
     if (o.provider == null) {
       try {
         o.provider = detectProvider();
@@ -415,6 +439,7 @@ public final class S2IAM {
 
     String url = o.serverUrl.replace(":cloudProvider", identity.getProvider().name())
         .replace(":jwtType", o.jwtType.name());
+    validateAuthServerURL(url, o.allowHttp);
     String query = "";
     if (o.jwtType == JwtOptions.JWTType.database && o.workspaceGroupId != null
         && !o.workspaceGroupId.isEmpty()) {

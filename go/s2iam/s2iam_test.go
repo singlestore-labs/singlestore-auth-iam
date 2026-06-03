@@ -211,14 +211,14 @@ func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 		require.NoError(t, err, "Failed to get client-side identity")
 
 		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
-			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
 		_, clientIdentity, err = client.GetIdentityHeaders(ctx, nil)
 		require.NoError(t, err, "Failed to get client-side identity")
 
 		token, err = s2iam.GetDatabaseJWT(ctx, "test-workspace",
-			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 	}
 
 	require.NoError(t, err)
@@ -299,11 +299,11 @@ func TestGetAPIJWT(t *testing.T) {
 	if client.GetType() == s2iam.ProviderGCP && (os.Getenv("S2IAM_TEST_CLOUD_PROVIDER") != "" || os.Getenv("S2IAM_TEST_ASSUME_ROLE") != "") {
 		// On real GCP, explicitly use the default audience to ensure compatibility
 		token, err = s2iam.GetAPIJWT(ctx,
-			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 	} else {
 		token, err = s2iam.GetAPIJWT(ctx,
-			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 	}
 
 	require.NoError(t, err)
@@ -334,7 +334,7 @@ func TestGetDatabaseJWT_EmptyJWT(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "received empty JWT")
@@ -350,7 +350,7 @@ func TestGetDatabaseJWT_InvalidJSON(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot parse response")
@@ -366,7 +366,7 @@ func TestGetDatabaseJWT_ServerError(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "authentication server returned status 500")
@@ -382,7 +382,7 @@ func TestGetDatabaseJWT_VerificationFailure(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "authentication server returned status 401")
@@ -409,7 +409,7 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 
 		ctx := context.Background()
 		token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+			s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 			s2iam.WithGCPAudience("https://authsvc.singlestore.com"))
 		require.NoError(t, err)
 		require.NotEmpty(t, token)
@@ -423,7 +423,7 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 
 	ctx := context.Background()
 	token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 		s2iam.WithGCPAudience("https://test.example.com"))
 
 	require.NoError(t, err)
@@ -447,7 +447,7 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 
 	ctx := context.Background()
 	originalJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"))
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP())
 	require.NoError(t, err)
 	originalClaims := validateJWT(t, originalJWT)
 	originalIdentifier := originalClaims["sub"].(string)
@@ -458,7 +458,7 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 
 	// Now test with role assumption
 	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 		s2iam.WithAssumeRole(roleIdentifier))
 
 	// Since S2IAM_TEST_ASSUME_ROLE is set, role assumption MUST succeed
@@ -526,7 +526,7 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 	}
 
 	_, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"),
+		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 		s2iam.WithAssumeRole(invalidRole))
 
 	// This should fail since the role doesn't exist (or AssumeRole isn't supported)

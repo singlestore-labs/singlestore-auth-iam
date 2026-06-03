@@ -59,6 +59,7 @@ class TestHappyPath:
             provider,
             workspace_group_id="test-workspace",
             server_url=f"{test_server.server_url}/auth/iam/database",
+            allow_http=True,
             audience=audience,
         )
         provider_type = provider.get_type()
@@ -121,6 +122,8 @@ class TestProviderSpecificIntegration:
             jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
+                allow_http=True,
+            allow_http=True,
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
@@ -165,6 +168,8 @@ class TestProviderSpecificIntegration:
             jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
+                allow_http=True,
+            allow_http=True,
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
@@ -217,6 +222,7 @@ class TestErrorHandlingValidation:
                 await s2iam.get_jwt(
                     jwt_type=JWTType.DATABASE_ACCESS,
                     server_url="http://invalid-server-url:9999/invalid",
+                    allow_http=True,
                     provider=provider,
                     timeout=5.0,
                 )

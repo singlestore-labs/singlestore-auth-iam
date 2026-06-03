@@ -201,6 +201,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 		JWTType:          "database",
 		WorkspaceGroupID: "test-workspace",
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
+		AllowHTTP:        true,
 		EnvName:          "TOKEN",
 		EnvStatus:        "STATUS",
 		Timeout:          10 * time.Second,
@@ -253,6 +254,7 @@ func TestRealMain(t *testing.T) {
 				"cmd",
 				"--workspace-group-id", "test-workspace",
 				"--server-url", "http://mock-server/auth/iam/:jwtType", // Will be replaced if test runs
+				"--allow-http",
 			},
 			exitCode: 0,
 			wantErr:  false,

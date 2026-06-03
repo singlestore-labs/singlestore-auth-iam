@@ -11,6 +11,10 @@ public final class Options {
     return o -> o.serverUrl = url;
   }
 
+  public static JwtOption withAllowHttp() {
+    return o -> o.allowHttp = true;
+  }
+
   public static JwtOption withProvider(CloudProviderClient provider) {
     return o -> o.provider = provider;
   }

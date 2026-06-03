@@ -152,6 +152,7 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 	// Run client against test server - should succeed with real cloud provider
 	clientCmd := exec.Command(clientBinary,
 		"--server-url", endpoints["auth"],
+		"--allow-http",
 		"--jwt-type", "api",
 		"--env-name", "TOKEN",
 		"--env-status", "STATUS")

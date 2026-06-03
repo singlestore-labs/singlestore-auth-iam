@@ -19,6 +19,7 @@ async def get_jwt(
     jwt_type: JWTType,
     workspace_group_id: Optional[str] = None,
     server_url: Optional[str] = None,
+    allow_http: bool = False,
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -47,6 +48,19 @@ async def get_jwt(
         NoCloudProviderDetectedError: If no cloud provider is detected
         Exception: If JWT acquisition fails
     """
+    import os
+
+    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
+    if server_url is None:
+        if env_server_url:
+            server_url = env_server_url
+        else:
+            server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
+
+    from .https import validate_auth_server_url
+
+    validate_auth_server_url(server_url, allow_http=allow_http)
+
     # Detect provider if not provided
     if provider is None:
         # Import here to avoid circular import
@@ -60,16 +74,6 @@ async def get_jwt(
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
-
-    # Prepare server URL, allow override via environment variable
-    import os
-
-    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
-    if server_url is None:
-        if env_server_url:
-            server_url = env_server_url
-        else:
-            server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
 
     # Prepare request body
     request_data = {
@@ -122,6 +126,7 @@ async def get_jwt(
 async def get_jwt_database(
     workspace_group_id: Optional[str] = None,
     server_url: str = "https://authsvc.singlestore.com/auth/iam/database",
+    allow_http: bool = False,
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -149,6 +154,7 @@ async def get_jwt_database(
         jwt_type=JWTType.DATABASE_ACCESS,
         workspace_group_id=workspace_group_id,
         server_url=server_url,
+        allow_http=allow_http,
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
@@ -161,6 +167,7 @@ async def get_jwt_database(
 async def get_jwt_api(
     workspace_group_id: Optional[str] = None,
     server_url: str = "https://authsvc.singlestore.com/auth/iam/api",
+    allow_http: bool = False,
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
@@ -187,6 +194,7 @@ async def get_jwt_api(
         jwt_type=JWTType.API_GATEWAY_ACCESS,
         workspace_group_id=workspace_group_id,
         server_url=server_url,
+        allow_http=allow_http,
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,

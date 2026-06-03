@@ -25,6 +25,7 @@ public final class S2IAMRequest {
   private String assumeRoleId;
   private Duration timeout;
   private String serverUrl;
+  private boolean allowHttp;
   private final Map<String, String> additionalParams = new LinkedHashMap<>();
   private CloudProviderClient provider; // optional explicit provider (skips detection)
 
@@ -70,6 +71,12 @@ public final class S2IAMRequest {
     return this;
   }
 
+  /** Allow http:// authentication server URLs (for testing only). */
+  public S2IAMRequest allowHttp() {
+    this.allowHttp = true;
+    return this;
+  }
+
   /**
    * Provide explicit provider (e.g., FakeProvider in tests) to skip detection.
    */
@@ -109,6 +116,8 @@ public final class S2IAMRequest {
       jwtOpts.add(Options.withAssumeRole(assumeRoleId));
     if (serverUrl != null)
       jwtOpts.add(Options.withServerUrl(serverUrl));
+    if (allowHttp)
+      jwtOpts.add(Options.withAllowHttp());
     if (timeout != null)
       providerOpts.add(Options.withTimeout(timeout));
     // Map additional params to existing explicit helpers (currently only audience)

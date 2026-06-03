@@ -89,6 +89,7 @@ class TestJWTIntegration:
             jwt = await s2iam.get_jwt(
                 jwt_type=JWTType.DATABASE_ACCESS,
                 server_url=f"{test_server.server_url}/auth/iam/database",
+                allow_http=True,
                 provider=provider,
                 workspace_group_id="test-workspace",
             )
@@ -121,6 +122,7 @@ class TestJWTIntegration:
                 jwt = await s2iam.get_jwt(
                     jwt_type=jwt_type,
                     server_url=f"{test_server.server_url}/auth/iam/{jwt_type.value}",
+                    allow_http=True,
                     provider=provider,
                     workspace_group_id="test-workspace",
                 )
@@ -242,6 +244,7 @@ class TestErrorHandling:
                 await s2iam.get_jwt(
                     jwt_type=JWTType.DATABASE_ACCESS,
                     server_url="http://invalid-server:9999/auth",
+                    allow_http=True,
                     provider=provider,
                     workspace_group_id="test",
                 )

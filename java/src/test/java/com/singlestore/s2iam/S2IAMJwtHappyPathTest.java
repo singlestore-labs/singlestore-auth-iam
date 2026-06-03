@@ -65,6 +65,7 @@ public class S2IAMJwtHappyPathTest {
     // includes :jwtType
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
+    opts.add(Options.withAllowHttp());
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getDatabaseJWT("wg-test", opts.toArray(new JwtOption[0]));
@@ -106,6 +107,7 @@ public class S2IAMJwtHappyPathTest {
     java.util.List<JwtOption> opts = new java.util.ArrayList<>();
     opts.add(ServerUrlOption.of(
         server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")));
+    opts.add(Options.withAllowHttp());
     if (provider.getType() == CloudProviderType.gcp && realCloud)
       opts.add(Options.withAudience("https://authsvc.singlestore.com"));
     String jwt = S2IAM.getAPIJWT(opts.toArray(new JwtOption[0]));
@@ -142,6 +144,7 @@ public class S2IAMJwtHappyPathTest {
     String jwt = S2IAM.getDatabaseJWT("wg-test",
         ServerUrlOption.of(
             server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
+        Options.withAllowHttp(),
         Options.withAudience(audience));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
@@ -150,7 +153,7 @@ public class S2IAMJwtHappyPathTest {
   @Test
   void missingWorkspaceGroupId() {
     S2IAMException ex = assertThrows(S2IAMException.class, () -> S2IAM.getDatabaseJWT("",
-        ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType")));
+        ServerUrlOption.of(server.getBaseURL() + "/auth/iam/:jwtType"), Options.withAllowHttp()));
     assertTrue(ex.getMessage().contains("workspaceGroupId"));
   }
 
