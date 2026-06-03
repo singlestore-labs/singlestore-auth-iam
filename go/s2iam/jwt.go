@@ -39,6 +39,7 @@ type jwtOptions struct {
 	JWTType              JWTType
 	WorkspaceGroupID     string
 	ServerURL            string
+	AllowHTTP            bool
 	Provider             models.CloudProviderClient
 	AdditionalParams     map[string]string
 	AssumeRoleIdentifier string
@@ -48,6 +49,14 @@ type jwtOptions struct {
 func WithServerURL(serverURL string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.ServerURL = serverURL
+	})
+}
+
+// WithAllowHTTP permits http:// authentication server URLs for local testing.
+// HTTPS is required by default.
+func WithAllowHTTP() JWTOption {
+	return jwtOption(func(o *jwtOptions) {
+		o.AllowHTTP = true
 	})
 }
 
@@ -128,6 +137,13 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	uri, err := url.Parse(targetURL)
 	if err != nil {
 		return "", errors.Errorf("invalid server URL: %w", err)
+	}
+	if uri.Scheme != "https" {
+		if uri.Scheme == "http" && jwtOpts.AllowHTTP {
+			// Explicitly allowed for local test servers.
+		} else {
+			return "", errors.Errorf("server URL must use https (got %q); use WithAllowHTTP for local testing", uri.Scheme)
+		}
 	}
 
 	// Add query parameters
