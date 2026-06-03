@@ -104,6 +104,7 @@ async def validate_identity_and_jwt(
         server_url=server_url,
         provider=provider,
         additional_params=additional_params,
+        allow_http=True,
     )
     assert token and token.count(".") == 2, "JWT structure invalid"
 

@@ -123,6 +123,7 @@ class TestProviderSpecificIntegration:
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
+                allow_http=True,
             )
 
             assert jwt is not None
@@ -167,6 +168,7 @@ class TestProviderSpecificIntegration:
                 server_url=f"{test_server.server_url}/auth/iam/database",
                 provider=provider,
                 workspace_group_id="test-workspace",
+                allow_http=True,
             )
 
             assert jwt is not None

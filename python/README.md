@@ -117,7 +117,8 @@ Get a JWT from SingleStore's authentication service.
 **Parameters:**
 - `jwt_type` (JWTType): Type of JWT to request
 - `workspace_group_id` (str): Workspace group ID
-- `server_url` (str): Authentication server URL
+- `server_url` (str): Authentication server URL. Custom URLs must use HTTPS by default.
+- `allow_http` (bool): Allow an HTTP `server_url` for local testing only.
 - `**kwargs`: Additional provider-specific parameters
 
 **Returns:** `str` (JWT)

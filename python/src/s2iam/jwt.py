@@ -3,6 +3,7 @@ JWT functionality for SingleStore authentication.
 """
 
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -15,6 +16,15 @@ from .models import (
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
 
 
+def _validate_server_url(server_url: str, allow_http: bool) -> None:
+    scheme = urlparse(server_url).scheme
+    if scheme == "https":
+        return
+    if scheme == "http" and allow_http:
+        return
+    raise ValueError(f"server_url must use https (got {scheme!r}); pass allow_http=True for local testing")
+
+
 async def get_jwt(
     jwt_type: JWTType,
     workspace_group_id: Optional[str] = None,
@@ -23,6 +33,7 @@ async def get_jwt(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
+    allow_http: bool = False,
     logger: Optional[Logger] = None,
     **kwargs: Any,
 ) -> str:
@@ -38,6 +49,7 @@ async def get_jwt(
             Only used for database JWTs. When None, the JWT may have broader access.
         timeout (float): Timeout in seconds for the request
         server_url (Optional[str]): Override the default server URL
+        allow_http (bool): Allow an http:// server URL for local testing
         logger (Optional[Logger]): Logger instance for debug output
 
     Returns:
@@ -70,6 +82,7 @@ async def get_jwt(
             server_url = env_server_url
         else:
             server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
+    _validate_server_url(server_url, allow_http)
 
     # Prepare request body
     request_data = {
@@ -126,6 +139,7 @@ async def get_jwt_database(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
+    allow_http: bool = False,
     logger: Optional[Logger] = None,
     **kwargs: Any,
 ) -> str:
@@ -139,6 +153,7 @@ async def get_jwt_database(
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
         timeout: Request timeout in seconds
+        allow_http: Allow an http:// server URL for local testing
         logger: Optional logger instance
         **kwargs: Additional options
 
@@ -153,6 +168,7 @@ async def get_jwt_database(
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
         timeout=timeout,
+        allow_http=allow_http,
         logger=logger,
         **kwargs,
     )
@@ -165,6 +181,7 @@ async def get_jwt_api(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     timeout: float = 10.0,
+    allow_http: bool = False,
     logger: Optional[Logger] = None,
     **kwargs: Any,
 ) -> str:
@@ -177,6 +194,7 @@ async def get_jwt_api(
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
         timeout: Request timeout in seconds
+        allow_http: Allow an http:// server URL for local testing
         logger: Optional logger instance
         **kwargs: Additional options
 
@@ -191,6 +209,7 @@ async def get_jwt_api(
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
         timeout=timeout,
+        allow_http=allow_http,
         logger=logger,
         **kwargs,
     )
