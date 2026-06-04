@@ -128,6 +128,7 @@ func TestRun_Success(t *testing.T) {
 		JWTType:          "database",
 		WorkspaceGroupID: "test-workspace",
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
+		AllowHTTP:        true,
 		Timeout:          10 * time.Second,
 	}
 
