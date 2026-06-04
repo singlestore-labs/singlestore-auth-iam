@@ -122,7 +122,6 @@ class TestFastPathDetection:
                 fastpath_provider,
                 workspace_group_id="test-workspace",
                 server_url=f"{server.server_url}/auth/iam/database",
-                allow_http=True,
                 audience=audience,
             )
             # Cross-check that fast-path identity matches normal detection identity on critical fields
