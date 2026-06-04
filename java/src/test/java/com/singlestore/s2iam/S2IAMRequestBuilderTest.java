@@ -36,7 +36,7 @@ public class S2IAMRequestBuilderTest {
   void databaseJwtViaBuilder() throws Exception {
     CloudProviderClient provider = detectOrSkip();
     S2IAMRequest req = S2IAMRequest.newRequest().databaseWorkspaceGroup("wg-test").serverUrl(url())
-        .timeout(java.time.Duration.ofSeconds(3));
+        .allowHttp().timeout(java.time.Duration.ofSeconds(3));
     boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
         || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
         || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
@@ -53,7 +53,7 @@ public class S2IAMRequestBuilderTest {
   @Test
   void apiJwtViaBuilder() throws Exception {
     CloudProviderClient provider = detectOrSkip();
-    S2IAMRequest req = S2IAMRequest.newRequest().api().serverUrl(url());
+    S2IAMRequest req = S2IAMRequest.newRequest().api().serverUrl(url()).allowHttp();
     boolean realCloud = System.getenv("S2IAM_TEST_CLOUD_PROVIDER") != null
         || System.getenv("S2IAM_TEST_ASSUME_ROLE") != null
         || System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null;
