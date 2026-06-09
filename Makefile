@@ -22,6 +22,7 @@ export UNIQUE_DIR
  dev-setup-common \
  lint lint-go lint-python lint-java \
  format format-go format-python format-java \
+ docs-api docs-api-html docs-api-md docs-api-lint docs-api-clean \
  ssh-copy-to-remote ssh-run-remote-tests \
  ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java \
  ssh-cleanup-remote ssh-acquire-lock ssh-release-lock ssh-clear-lock
@@ -68,6 +69,13 @@ help:
 	@echo "  make lint                                 Run all linters"
 	@echo "  make format                               Format all code"
 	@echo "  make clean                                Clean build artifacts"
+	@echo ""
+	@echo "API Documentation:"
+	@echo "  make docs-api                             Generate HTML + Markdown from OpenAPI"
+	@echo "  make docs-api-html                        Generate HTML (Redoc) only"
+	@echo "  make docs-api-md                          Generate Markdown (Widdershins) only"
+	@echo "  make docs-api-lint                        Validate docs/api/openapi.yaml"
+	@echo "  make docs-api-clean                       Remove generated API docs"
 	@echo ""
 	@echo "Environment Variables for Cloud Testing:"
 	@echo "  S2IAM_TEST_CLOUD_PROVIDER=gcp|azure|aws  Enable positive cloud tests"
@@ -303,6 +311,38 @@ format-python:
 	@echo "Formatting Python code..."
 	cd python && python3 -m black src/ tests/
 	cd python && python3 -m isort src tests
+
+# API documentation (OpenAPI → HTML/Markdown; requires Node.js for npx)
+OPENAPI_SPEC := docs/api/openapi.yaml
+DOCS_GEN_DIR := docs/generated
+REDOCLY_CLI_VERSION ?= 1.28.2
+WIDDERSHINS_VERSION ?= 4.0.1
+
+docs-api: docs-api-html docs-api-md
+
+docs-api-lint: $(OPENAPI_SPEC)
+	@echo "Validating OpenAPI spec..."
+	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) lint $(OPENAPI_SPEC)
+
+docs-api-html: $(OPENAPI_SPEC)
+	@echo "Generating API HTML (Redoc)..."
+	@mkdir -p $(DOCS_GEN_DIR)
+	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) build-docs $(OPENAPI_SPEC) -o $(DOCS_GEN_DIR)/api.html
+	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html"
+
+docs-api-md: $(OPENAPI_SPEC)
+	@echo "Generating API Markdown (Widdershins)..."
+	@mkdir -p $(DOCS_GEN_DIR)
+	npx --yes widdershins@$(WIDDERSHINS_VERSION) $(OPENAPI_SPEC) \
+		-o $(DOCS_GEN_DIR)/api.md \
+		--language_tabs 'shell:curl' \
+		--summary \
+		--search=false \
+		--expandBody=true
+	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.md"
+
+docs-api-clean:
+	rm -rf $(DOCS_GEN_DIR)
 
 # Clean targets
 clean:
