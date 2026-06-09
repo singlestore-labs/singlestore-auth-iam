@@ -12,11 +12,7 @@ from typing import Any, Dict, List, NoReturn, Optional
 from .aws import new_client as new_aws_client
 from .azure import new_client as new_azure_client
 from .gcp import new_client as new_gcp_client
-from .models import (
-    CloudProviderClient,
-    CloudProviderNotFound,
-    Logger,
-)
+from .models import CloudProviderClient, CloudProviderNotFound, Logger
 
 DETECT_PROVIDER_DEFAULT_TIMEOUT: float = 10.0
 """Default timeout (seconds) for provider detection.

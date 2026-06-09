@@ -144,8 +144,7 @@ public class S2IAMJwtHappyPathTest {
     String jwt = S2IAM.getDatabaseJWT("wg-test",
         ServerUrlOption.of(
             server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType")),
-        Options.withAllowHttp(),
-        Options.withAudience(audience));
+        Options.withAllowHttp(), Options.withAudience(audience));
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
   }

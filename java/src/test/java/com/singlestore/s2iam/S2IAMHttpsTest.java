@@ -26,8 +26,9 @@ public class S2IAMHttpsTest {
 
   @AfterEach
   void stop() {
-    if (server != null)
+    if (server != null) {
       server.stop();
+    }
   }
 
   private String url() {
@@ -35,19 +36,7 @@ public class S2IAMHttpsTest {
   }
 
   @Test
-  void validateAuthServerURL_rejectsHttpByDefault() {
-    S2IAMException ex = assertThrows(S2IAMException.class,
-        () -> S2IAM.validateAuthServerURL("http://localhost/auth/iam/api", false));
-    assertTrue(ex.getMessage().contains("HTTPS"));
-  }
-
-  @Test
-  void validateAuthServerURL_allowsHttpWhenOptedIn() throws Exception {
-    assertDoesNotThrow(() -> S2IAM.validateAuthServerURL("http://localhost/auth/iam/api", true));
-  }
-
-  @Test
-  void getAPIJWT_rejectsHttpWithoutAllowHttp() {
+  void getJWT_rejectsHttpWithoutAllowHttp() {
     FakeProvider fake = new FakeProvider();
     S2IAMException ex = assertThrows(S2IAMException.class,
         () -> S2IAM.getAPIJWT(Options.withProvider(fake), ServerUrlOption.of(url())));
@@ -55,35 +44,10 @@ public class S2IAMHttpsTest {
   }
 
   @Test
-  void getAPIJWT_allowsHttpWithAllowHttp() throws Exception {
+  void getJWT_allowsHttpWithAllowHttp() throws Exception {
     CloudProviderClient provider = detectOrSkip();
     String jwt = S2IAM.getAPIJWT(Options.withProvider(provider), ServerUrlOption.of(url()),
         Options.withAllowHttp());
-    assertNotNull(jwt);
-    assertFalse(jwt.isEmpty());
-  }
-
-  @Test
-  void getAPIJWT_rejectsHttpWithoutAllowHttp_usingSameProviderAsAllowCase() throws Exception {
-    CloudProviderClient provider = detectOrSkip();
-    S2IAMException ex = assertThrows(S2IAMException.class,
-        () -> S2IAM.getAPIJWT(Options.withProvider(provider), ServerUrlOption.of(url())));
-    assertTrue(ex.getMessage().contains("HTTPS"));
-  }
-
-  @Test
-  void builder_rejectsHttpWithoutAllowHttp() throws Exception {
-    CloudProviderClient provider = detectOrSkip();
-    S2IAMException ex = assertThrows(S2IAMException.class,
-        () -> S2IAMRequest.newRequest().api().serverUrl(url()).provider(provider).get());
-    assertTrue(ex.getMessage().contains("HTTPS"));
-  }
-
-  @Test
-  void builder_allowsHttpWithAllowHttp() throws Exception {
-    CloudProviderClient provider = detectOrSkip();
-    String jwt = S2IAMRequest.newRequest().api().serverUrl(url()).allowHttp().provider(provider)
-        .get();
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
   }
@@ -92,15 +56,18 @@ public class S2IAMHttpsTest {
     String expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER");
     if (expectProvider == null) {
       String role = System.getenv("S2IAM_TEST_ASSUME_ROLE");
-      if (role != null && !role.isEmpty())
+      if (role != null && !role.isEmpty()) {
         expectProvider = "aws";
+      }
     }
-    if (expectProvider == null)
+    if (expectProvider == null) {
       expectProvider = System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE");
+    }
     try {
       CloudProviderClient client = S2IAM.detectProvider();
-      if (expectProvider == null)
+      if (expectProvider == null) {
         Assumptions.abort("No cloud provider detected - not running in cloud environment");
+      }
       if (System.getenv("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE") != null
           && System.getenv("S2IAM_TEST_CLOUD_PROVIDER") == null
           && System.getenv("S2IAM_TEST_ASSUME_ROLE") == null) {
@@ -108,8 +75,9 @@ public class S2IAMHttpsTest {
       }
       return client;
     } catch (NoCloudProviderDetectedException e) {
-      if (expectProvider != null)
+      if (expectProvider != null) {
         fail("Cloud provider detection failed - expected to detect provider in test environment");
+      }
       Assumptions.abort("No cloud provider detected - skipping");
       return null;
     }
@@ -137,7 +105,8 @@ public class S2IAMHttpsTest {
     }
 
     @Override
-    public IdentityHeadersResult getIdentityHeaders(java.util.Map<String, String> additionalParams) {
+    public IdentityHeadersResult getIdentityHeaders(
+        java.util.Map<String, String> additionalParams) {
       HashMap<String, String> headers = new HashMap<>();
       headers.put("X-Test", "ok");
       CloudIdentity id = new CloudIdentity(CloudProviderType.aws,

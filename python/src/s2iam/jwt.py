@@ -6,11 +6,7 @@ from typing import Any, Optional
 
 import aiohttp
 
-from .models import (
-    CloudProviderClient,
-    JWTType,
-    Logger,
-)
+from .models import CloudProviderClient, JWTType, Logger
 
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
 

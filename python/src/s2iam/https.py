@@ -12,7 +12,5 @@ def validate_auth_server_url(raw_url: str, *, allow_http: bool = False) -> None:
     if scheme == "http" and allow_http:
         return
     if scheme == "http":
-        raise ValueError(
-            "authentication server URL must use HTTPS; pass allow_http=True for testing"
-        )
+        raise ValueError("authentication server URL must use HTTPS; pass allow_http=True for testing")
     raise ValueError(f"authentication server URL must use HTTPS (got scheme {scheme!r})")
