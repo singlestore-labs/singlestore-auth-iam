@@ -27,7 +27,7 @@ The `singlestore-auth-iam` library provides a seamless way to authenticate with 
 - **Automatic detection**: Discovers cloud provider and obtains credentials automatically  
 - **Role assumption**: Assume different roles/service accounts for enhanced security
 - **Command-line tool**: Standalone CLI for scripts and CI/CD pipelines
-- **Direct HTTP API**: OpenAPI spec for customers integrating without client libraries — see [API docs](docs/api/README.md) ([Markdown](docs/api/api.md), [HTML](docs/api/api.html))
+- **Direct HTTP API**: OpenAPI spec for customers integrating without client libraries — see [API docs](docs/api/README.md) ([Markdown](docs/api/api.md), [HTML (rendered)](https://singlestore-labs.github.io/singlestore-auth-iam/))
 
 ### Future Plans
 - Additional language support: Node.js and C++ (planned)

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf8" />
+  <title>SingleStore Cloud IAM Authentication API</title>
+  <!-- needed for adaptive design -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+    }
+  </style>
+  <script src="https://cdn.redocly.com/redoc/v2.2.0/bundles/redoc.standalone.js"></script><style data-styled="true" data-styled-version="6.4.2">.kktglN{width:calc(100% - 40%);padding:0 40px;}/*!sc*/
+@media print,screen and (max-width: 75rem){.kktglN{width:100%;padding:40px 40px;}}/*!sc*/
+.kmAAAV{width:calc(100% - 40%);padding:0 40px;}/*!sc*/
+@media print,screen and (max-width: 75rem){.kmAAAV{width:100%;padding:0px 40px;}}/*!sc*/
+data-styled.g5[id="sc-hKVpXn"]{content:"kktglN,kmAAAV,"}/*!sc*/
+.jleRXN{padding:40px 0;}/*!sc*/
+.jleRXN:last-child{min-height:calc(100vh + 1px);}/*!sc*/
+.jleRXN>.jleRXN:last-child{min-height:initial;}/*!sc*/
+@media print,screen and (max-width: 75rem){.jleRXN{padding:0;}}/*!sc*/
+.grDwca{padding:40px 0;position:relative;}/*!sc*/
+.grDwca:last-child{min-height:calc(100vh + 1px);}/*!sc*/
+.grDwca>.grDwca:last-child{min-height:initial;}/*!sc*/
+@media print,screen and (max-width: 75rem){.grDwca{padding:0;}}/*!sc*/
+.grDwca:not(:last-of-type):after{position:absolute;bottom:0;width:100%;display:block;content:'';border-bottom:1px solid rgba(0, 0, 0, 0.2);}/*!sc*/
+data-styled.g6[id="sc-eCQgVK"]{content:"jleRXN,grDwca,"}/*!sc*/
+.fpMlmc{width:40%;color:#ffffff;background-color:#263238;padding:0 40px;}/*!sc*/
+@media print,screen and (max-width: 75rem){.fpMlmc{width:100%;padding:40px 40px;}}/*!sc*/
+data-styled.g7[id="sc-jSppWd"]{content:"fpMlmc,"}/*!sc*/
+.bdQQyo{background-color:#263238;}/*!sc*/
+data-styled.g8[id="sc-gKkgUA"]{content:"bdQQyo,"}/*!sc*/
+.lhRBUS{display:flex;width:100%;padding:0;}/*!sc*/
+@media print,screen and (max-width: 75rem){.lhRBUS{flex-direction:column;}}/*!sc*/
+data-styled.g9[id="sc-iCECmn"]{content:"lhRBUS,"}/*!sc*/
+.eRMVDe{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#333333;}/*!sc*/
+data-styled.g10[id="sc-fuztkK"]{content:"eRMVDe,"}/*!sc*/
+.MOVBZ{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#333333;margin:0 0 20px;}/*!sc*/
+data-styled.g11[id="sc-qdQOe"]{content:"MOVBZ,"}/*!sc*/
+.iamDfj{color:#ffffff;}/*!sc*/
+data-styled.g13[id="sc-kEbgWM"]{content:"iamDfj,"}/*!sc*/
+.kcvrhp{border-bottom:1px solid rgba(38, 50, 56, 0.3);margin:1em 0 1em 0;color:rgba(38, 50, 56, 0.5);font-weight:normal;text-transform:uppercase;font-size:0.929em;line-height:20px;}/*!sc*/
+data-styled.g14[id="sc-iqkkDd"]{content:"kcvrhp,"}/*!sc*/
+.jmoZom{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.jmoZom:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+h1:hover>.jmoZom::before,h2:hover>.jmoZom::before,.jmoZom:hover::before{visibility:visible;}/*!sc*/
+data-styled.g15[id="sc-crPgjm"]{content:"jmoZom,"}/*!sc*/
+.kdgFPv{height:18px;width:18px;min-width:18px;vertical-align:middle;float:right;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.bEEWJa{height:1.3em;width:1.3em;min-width:1.3em;vertical-align:middle;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.gngmNp{height:1.5em;width:1.5em;min-width:1.5em;vertical-align:middle;float:left;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.gngmNp polygon{fill:#1d8127;}/*!sc*/
+.hJoFRR{height:1.5em;width:1.5em;min-width:1.5em;vertical-align:middle;float:left;transition:transform 0.2s ease-out;transform:rotateZ(-90deg);}/*!sc*/
+.hJoFRR polygon{fill:#d41f1c;}/*!sc*/
+.bQKUih{height:20px;width:20px;min-width:20px;vertical-align:middle;float:right;transition:transform 0.2s ease-out;transform:rotateZ(0);}/*!sc*/
+.bQKUih polygon{fill:white;}/*!sc*/
+data-styled.g16[id="sc-dYjPD"]{content:"kdgFPv,bEEWJa,gngmNp,hJoFRR,bQKUih,"}/*!sc*/
+.jFNAwF{border-left:1px solid #7c7cbb;box-sizing:border-box;position:relative;padding:10px 10px 10px 0;}/*!sc*/
+@media screen and (max-width: 50rem){.jFNAwF{display:block;overflow:hidden;}}/*!sc*/
+tr:first-of-type>.jFNAwF,tr.last>.jFNAwF{border-left-width:0;background-position:top left;background-repeat:no-repeat;background-size:1px 100%;}/*!sc*/
+tr:first-of-type>.jFNAwF{background-image:linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 22px,
+      #7c7cbb 22px,
+      #7c7cbb 100%
+    );}/*!sc*/
+tr.last>.jFNAwF{background-image:linear-gradient(
+      to bottom,
+      #7c7cbb 0%,
+      #7c7cbb 22px,
+      transparent 22px,
+      transparent 100%
+    );}/*!sc*/
+tr.last+tr>.jFNAwF{border-left-color:transparent;}/*!sc*/
+tr.last:first-child>.jFNAwF{background:none;border-left-color:transparent;}/*!sc*/
+data-styled.g19[id="sc-hCcPtG"]{content:"jFNAwF,"}/*!sc*/
+.lcdEEX{vertical-align:top;line-height:20px;white-space:nowrap;font-size:13px;font-family:Courier,monospace;}/*!sc*/
+.lcdEEX.deprecated{text-decoration:line-through;color:#707070;}/*!sc*/
+data-styled.g21[id="sc-fFCZOx"]{content:"lcdEEX,"}/*!sc*/
+.gLpZiQ{border-bottom:1px solid #9fb4be;padding:10px 0;width:75%;box-sizing:border-box;}/*!sc*/
+tr.expanded .gLpZiQ{border-bottom:none;}/*!sc*/
+@media screen and (max-width: 50rem){.gLpZiQ{padding:0 20px;border-bottom:none;border-left:1px solid #7c7cbb;}tr.last>.gLpZiQ{border-left:none;}}/*!sc*/
+data-styled.g22[id="sc-bjLslk"]{content:"gLpZiQ,"}/*!sc*/
+.kkMuqc{color:#7c7cbb;font-family:Courier,monospace;margin-right:10px;}/*!sc*/
+.kkMuqc::before{content:'';display:inline-block;vertical-align:middle;width:10px;height:1px;background:#7c7cbb;}/*!sc*/
+.kkMuqc::after{content:'';display:inline-block;vertical-align:middle;width:1px;background:#7c7cbb;height:7px;}/*!sc*/
+data-styled.g23[id="sc-ieCSdj"]{content:"kkMuqc,"}/*!sc*/
+.bsjUmE{border-collapse:separate;border-radius:3px;font-size:14px;border-spacing:0;width:100%;}/*!sc*/
+.bsjUmE >tr{vertical-align:middle;}/*!sc*/
+@media screen and (max-width: 50rem){.bsjUmE{display:block;}.bsjUmE >tr,.bsjUmE >tbody>tr{display:block;}}/*!sc*/
+@media screen and (max-width: 50rem) and (-ms-high-contrast:none){.bsjUmE td{float:left;width:100%;}}/*!sc*/
+.bsjUmE .sc-dILkzW,.bsjUmE .sc-dILkzW .sc-dILkzW .sc-dILkzW,.bsjUmE .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW{margin:1em;margin-right:0;background:#fafafa;}/*!sc*/
+.bsjUmE .sc-dILkzW .sc-dILkzW,.bsjUmE .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW,.bsjUmE .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW .sc-dILkzW{background:#ffffff;}/*!sc*/
+data-styled.g25[id="sc-hHopjF"]{content:"bsjUmE,"}/*!sc*/
+.kibfTX >ul{list-style:none;padding:0;margin:0;margin:0 -5px;}/*!sc*/
+.kibfTX >ul >li{padding:5px 10px;display:inline-block;background-color:#11171a;border-bottom:1px solid rgba(0, 0, 0, 0.5);cursor:pointer;text-align:center;outline:none;color:#ccc;margin:0 5px 5px 5px;border:1px solid #07090b;border-radius:5px;min-width:60px;font-size:0.9em;font-weight:bold;}/*!sc*/
+.kibfTX >ul >li.react-tabs__tab--selected{color:#333333;background:#ffffff;}/*!sc*/
+.kibfTX >ul >li.react-tabs__tab--selected:focus{outline:auto;}/*!sc*/
+.kibfTX >ul >li:only-child{flex:none;min-width:100px;}/*!sc*/
+.kibfTX >ul >li.tab-success{color:#1d8127;}/*!sc*/
+.kibfTX >ul >li.tab-redirect{color:#ffa500;}/*!sc*/
+.kibfTX >ul >li.tab-info{color:#87ceeb;}/*!sc*/
+.kibfTX >ul >li.tab-error{color:#d41f1c;}/*!sc*/
+.kibfTX >.react-tabs__tab-panel{background:#11171a;}/*!sc*/
+.kibfTX >.react-tabs__tab-panel>div,.kibfTX >.react-tabs__tab-panel>pre{padding:20px;margin:0;}/*!sc*/
+.kibfTX >.react-tabs__tab-panel>div>pre{padding:0;}/*!sc*/
+data-styled.g31[id="sc-cxxQMU"]{content:"kibfTX,"}/*!sc*/
+.fiNpIH code[class*='language-'],.fiNpIH pre[class*='language-']{text-shadow:0 -0.1em 0.2em black;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none;}/*!sc*/
+@media print{.fiNpIH code[class*='language-'],.fiNpIH pre[class*='language-']{text-shadow:none;}}/*!sc*/
+.fiNpIH pre[class*='language-']{padding:1em;margin:0.5em 0;overflow:auto;}/*!sc*/
+.fiNpIH .token.comment,.fiNpIH .token.prolog,.fiNpIH .token.doctype,.fiNpIH .token.cdata{color:hsl(30, 20%, 50%);}/*!sc*/
+.fiNpIH .token.punctuation{opacity:0.7;}/*!sc*/
+.fiNpIH .namespace{opacity:0.7;}/*!sc*/
+.fiNpIH .token.property,.fiNpIH .token.tag,.fiNpIH .token.number,.fiNpIH .token.constant,.fiNpIH .token.symbol{color:#4a8bb3;}/*!sc*/
+.fiNpIH .token.boolean{color:#e64441;}/*!sc*/
+.fiNpIH .token.selector,.fiNpIH .token.attr-name,.fiNpIH .token.string,.fiNpIH .token.char,.fiNpIH .token.builtin,.fiNpIH .token.inserted{color:#a0fbaa;}/*!sc*/
+.fiNpIH .token.selector+a,.fiNpIH .token.attr-name+a,.fiNpIH .token.string+a,.fiNpIH .token.char+a,.fiNpIH .token.builtin+a,.fiNpIH .token.inserted+a,.fiNpIH .token.selector+a:visited,.fiNpIH .token.attr-name+a:visited,.fiNpIH .token.string+a:visited,.fiNpIH .token.char+a:visited,.fiNpIH .token.builtin+a:visited,.fiNpIH .token.inserted+a:visited{color:#4ed2ba;text-decoration:underline;}/*!sc*/
+.fiNpIH .token.property.string{color:white;}/*!sc*/
+.fiNpIH .token.operator,.fiNpIH .token.entity,.fiNpIH .token.url,.fiNpIH .token.variable{color:hsl(40, 90%, 60%);}/*!sc*/
+.fiNpIH .token.atrule,.fiNpIH .token.attr-value,.fiNpIH .token.keyword{color:hsl(350, 40%, 70%);}/*!sc*/
+.fiNpIH .token.regex,.fiNpIH .token.important{color:#e90;}/*!sc*/
+.fiNpIH .token.important,.fiNpIH .token.bold{font-weight:bold;}/*!sc*/
+.fiNpIH .token.italic{font-style:italic;}/*!sc*/
+.fiNpIH .token.entity{cursor:help;}/*!sc*/
+.fiNpIH .token.deleted{color:red;}/*!sc*/
+data-styled.g33[id="sc-iJSMbW"]{content:"fiNpIH,"}/*!sc*/
+.dzKJV{opacity:0.7;transition:opacity 0.3s ease;text-align:right;}/*!sc*/
+.dzKJV:focus-within{opacity:1;}/*!sc*/
+.dzKJV >button{background-color:transparent;border:0;color:inherit;padding:2px 10px;font-family:Roboto,sans-serif;font-size:14px;line-height:1.5em;cursor:pointer;outline:0;}/*!sc*/
+.dzKJV >button :hover,.dzKJV >button :focus{background:rgba(255, 255, 255, 0.1);}/*!sc*/
+data-styled.g34[id="sc-giQkEn"]{content:"dzKJV,"}/*!sc*/
+.iOXjCz{position:relative;}/*!sc*/
+data-styled.g38[id="sc-kLEbxe"]{content:"iOXjCz,"}/*!sc*/
+.ewCFMV{font-family:Roboto,sans-serif;font-weight:400;line-height:1.5em;}/*!sc*/
+.ewCFMV p:last-child{margin-bottom:0;}/*!sc*/
+.ewCFMV h1{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#32329f;margin-top:0;}/*!sc*/
+.ewCFMV h2{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#333333;}/*!sc*/
+.ewCFMV code{color:#e53935;background-color:rgba(38, 50, 56, 0.05);font-family:Courier,monospace;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.1);padding:0 5px;font-size:13px;font-weight:400;word-break:break-word;}/*!sc*/
+.ewCFMV pre{font-family:Courier,monospace;white-space:pre;background-color:#11171a;color:white;padding:20px;overflow-x:auto;line-height:normal;border-radius:0;border:1px solid rgba(38, 50, 56, 0.1);}/*!sc*/
+.ewCFMV pre code{background-color:transparent;color:white;padding:0;}/*!sc*/
+.ewCFMV pre code:before,.ewCFMV pre code:after{content:none;}/*!sc*/
+.ewCFMV blockquote{margin:0;margin-bottom:1em;padding:0 15px;color:#777;border-left:4px solid #ddd;}/*!sc*/
+.ewCFMV img{max-width:100%;box-sizing:content-box;}/*!sc*/
+.ewCFMV ul,.ewCFMV ol{padding-left:2em;margin:0;margin-bottom:1em;}/*!sc*/
+.ewCFMV ul ul,.ewCFMV ol ul,.ewCFMV ul ol,.ewCFMV ol ol{margin-bottom:0;margin-top:0;}/*!sc*/
+.ewCFMV table{display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all;border-collapse:collapse;border-spacing:0;margin-top:1.5em;margin-bottom:1.5em;}/*!sc*/
+.ewCFMV table tr{background-color:#fff;border-top:1px solid #ccc;}/*!sc*/
+.ewCFMV table tr:nth-child(2n){background-color:#fafafa;}/*!sc*/
+.ewCFMV table th,.ewCFMV table td{padding:6px 13px;border:1px solid #ddd;}/*!sc*/
+.ewCFMV table th{text-align:left;font-weight:bold;}/*!sc*/
+.ewCFMV .share-link{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.ewCFMV .share-link:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+.ewCFMV h1:hover>.share-link::before,.ewCFMV h2:hover>.share-link::before,.ewCFMV .share-link:hover::before{visibility:visible;}/*!sc*/
+.ewCFMV a{text-decoration:auto;color:#32329f;}/*!sc*/
+.ewCFMV a:visited{color:#32329f;}/*!sc*/
+.ewCFMV a:hover{color:#6868cf;text-decoration:auto;}/*!sc*/
+.bAoMjv{font-family:Roboto,sans-serif;font-weight:400;line-height:1.5em;}/*!sc*/
+.bAoMjv p:last-child{margin-bottom:0;}/*!sc*/
+.bAoMjv p:first-child{margin-top:0;}/*!sc*/
+.bAoMjv p:last-child{margin-bottom:0;}/*!sc*/
+.bAoMjv h1{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.85714em;line-height:1.6em;color:#32329f;margin-top:0;}/*!sc*/
+.bAoMjv h2{font-family:Montserrat,sans-serif;font-weight:400;font-size:1.57143em;line-height:1.6em;color:#333333;}/*!sc*/
+.bAoMjv code{color:#e53935;background-color:rgba(38, 50, 56, 0.05);font-family:Courier,monospace;border-radius:2px;border:1px solid rgba(38, 50, 56, 0.1);padding:0 5px;font-size:13px;font-weight:400;word-break:break-word;}/*!sc*/
+.bAoMjv pre{font-family:Courier,monospace;white-space:pre;background-color:#11171a;color:white;padding:20px;overflow-x:auto;line-height:normal;border-radius:0;border:1px solid rgba(38, 50, 56, 0.1);}/*!sc*/
+.bAoMjv pre code{background-color:transparent;color:white;padding:0;}/*!sc*/
+.bAoMjv pre code:before,.bAoMjv pre code:after{content:none;}/*!sc*/
+.bAoMjv blockquote{margin:0;margin-bottom:1em;padding:0 15px;color:#777;border-left:4px solid #ddd;}/*!sc*/
+.bAoMjv img{max-width:100%;box-sizing:content-box;}/*!sc*/
+.bAoMjv ul,.bAoMjv ol{padding-left:2em;margin:0;margin-bottom:1em;}/*!sc*/
+.bAoMjv ul ul,.bAoMjv ol ul,.bAoMjv ul ol,.bAoMjv ol ol{margin-bottom:0;margin-top:0;}/*!sc*/
+.bAoMjv table{display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all;border-collapse:collapse;border-spacing:0;margin-top:1.5em;margin-bottom:1.5em;}/*!sc*/
+.bAoMjv table tr{background-color:#fff;border-top:1px solid #ccc;}/*!sc*/
+.bAoMjv table tr:nth-child(2n){background-color:#fafafa;}/*!sc*/
+.bAoMjv table th,.bAoMjv table td{padding:6px 13px;border:1px solid #ddd;}/*!sc*/
+.bAoMjv table th{text-align:left;font-weight:bold;}/*!sc*/
+.bAoMjv .share-link{cursor:pointer;margin-left:-20px;padding:0;line-height:1;width:20px;display:inline-block;outline:0;}/*!sc*/
+.bAoMjv .share-link:before{content:'';width:15px;height:15px;background-size:contain;background-image:url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgeD0iMCIgeT0iMCIgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiBlbmFibGUtYmFja2dyb3VuZD0ibmV3IDAgMCA1MTIgNTEyIiB4bWw6c3BhY2U9InByZXNlcnZlIj48cGF0aCBmaWxsPSIjMDEwMTAxIiBkPSJNNDU5LjcgMjMzLjRsLTkwLjUgOTAuNWMtNTAgNTAtMTMxIDUwLTE4MSAwIC03LjktNy44LTE0LTE2LjctMTkuNC0yNS44bDQyLjEtNDIuMWMyLTIgNC41LTMuMiA2LjgtNC41IDIuOSA5LjkgOCAxOS4zIDE1LjggMjcuMiAyNSAyNSA2NS42IDI0LjkgOTAuNSAwbDkwLjUtOTAuNWMyNS0yNSAyNS02NS42IDAtOTAuNSAtMjQuOS0yNS02NS41LTI1LTkwLjUgMGwtMzIuMiAzMi4yYy0yNi4xLTEwLjItNTQuMi0xMi45LTgxLjYtOC45bDY4LjYtNjguNmM1MC01MCAxMzEtNTAgMTgxIDBDNTA5LjYgMTAyLjMgNTA5LjYgMTgzLjQgNDU5LjcgMjMzLjR6TTIyMC4zIDM4Mi4ybC0zMi4yIDMyLjJjLTI1IDI0LjktNjUuNiAyNC45LTkwLjUgMCAtMjUtMjUtMjUtNjUuNiAwLTkwLjVsOTAuNS05MC41YzI1LTI1IDY1LjUtMjUgOTAuNSAwIDcuOCA3LjggMTIuOSAxNy4yIDE1LjggMjcuMSAyLjQtMS40IDQuOC0yLjUgNi44LTQuNWw0Mi4xLTQyYy01LjQtOS4yLTExLjYtMTgtMTkuNC0yNS44IC01MC01MC0xMzEtNTAtMTgxIDBsLTkwLjUgOTAuNWMtNTAgNTAtNTAgMTMxIDAgMTgxIDUwIDUwIDEzMSA1MCAxODEgMGw2OC42LTY4LjZDMjc0LjYgMzk1LjEgMjQ2LjQgMzkyLjMgMjIwLjMgMzgyLjJ6Ii8+PC9zdmc+Cg==');opacity:0.5;visibility:hidden;display:inline-block;vertical-align:middle;}/*!sc*/
+.bAoMjv h1:hover>.share-link::before,.bAoMjv h2:hover>.share-link::before,.bAoMjv .share-link:hover::before{visibility:visible;}/*!sc*/
+.bAoMjv a{text-decoration:auto;color:#32329f;}/*!sc*/
+.bAoMjv a:visited{color:#32329f;}/*!sc*/
+.bAoMjv a:hover{color:#6868cf;text-decoration:auto;}/*!sc*/
+data-styled.g43[id="sc-cBEgGa"]{content:"ewCFMV,bAoMjv,"}/*!sc*/
+.dDDioG{display:inline;}/*!sc*/
+data-styled.g44[id="sc-ciCrSJ"]{content:"dDDioG,"}/*!sc*/
+.feYhXE{position:relative;}/*!sc*/
+data-styled.g45[id="sc-jcgtOs"]{content:"feYhXE,"}/*!sc*/
+.hHzuQA:hover>.sc-giQkEn{opacity:1;}/*!sc*/
+data-styled.g50[id="sc-cTZdpT"]{content:"hHzuQA,"}/*!sc*/
+.jgTAJz{font-family:Courier,monospace;font-size:13px;white-space:pre;contain:content;overflow-x:auto;}/*!sc*/
+.jgTAJz .redoc-json code>.collapser{display:none;pointer-events:none;}/*!sc*/
+.jgTAJz .callback-function{color:gray;}/*!sc*/
+.jgTAJz .collapser:after{content:'-';cursor:pointer;}/*!sc*/
+.jgTAJz .collapsed>.collapser:after{content:'+';cursor:pointer;}/*!sc*/
+.jgTAJz .ellipsis:after{content:' … ';}/*!sc*/
+.jgTAJz .collapsible{margin-left:2em;}/*!sc*/
+.jgTAJz .hoverable{padding-top:1px;padding-bottom:1px;padding-left:2px;padding-right:2px;border-radius:2px;}/*!sc*/
+.jgTAJz .hovered{background-color:rgba(235, 238, 249, 1);}/*!sc*/
+.jgTAJz .collapser{background-color:transparent;border:0;color:#fff;font-family:Courier,monospace;font-size:13px;padding-right:6px;padding-left:6px;padding-top:0;padding-bottom:0;display:flex;align-items:center;justify-content:center;width:15px;height:15px;position:absolute;top:4px;left:-1.5em;cursor:default;user-select:none;-webkit-user-select:none;padding:2px;}/*!sc*/
+.jgTAJz .collapser:focus{outline-color:#fff;outline-style:dotted;outline-width:1px;}/*!sc*/
+.jgTAJz ul{list-style-type:none;padding:0px;margin:0px 0px 0px 26px;}/*!sc*/
+.jgTAJz li{position:relative;display:block;}/*!sc*/
+.jgTAJz .hoverable{display:inline-block;}/*!sc*/
+.jgTAJz .selected{outline-style:solid;outline-width:1px;outline-style:dotted;}/*!sc*/
+.jgTAJz .collapsed>.collapsible{display:none;}/*!sc*/
+.jgTAJz .ellipsis{display:none;}/*!sc*/
+.jgTAJz .collapsed>.ellipsis{display:inherit;}/*!sc*/
+data-styled.g51[id="sc-jNDflC"]{content:"jgTAJz,"}/*!sc*/
+.kgKexQ{padding:0.9em;background-color:rgba(38,50,56,0.4);margin:0 0 10px 0;display:block;font-family:Montserrat,sans-serif;font-size:0.929em;line-height:1.5em;}/*!sc*/
+data-styled.g52[id="sc-dPqFhK"]{content:"kgKexQ,"}/*!sc*/
+.BuCyN{font-family:Montserrat,sans-serif;font-size:12px;position:absolute;z-index:1;top:-11px;left:12px;font-weight:600;color:rgba(255,255,255,0.7);}/*!sc*/
+data-styled.g53[id="sc-bBzIOb"]{content:"BuCyN,"}/*!sc*/
+.bMFMGt{position:relative;}/*!sc*/
+data-styled.g54[id="sc-cNSlRw"]{content:"bMFMGt,"}/*!sc*/
+.jUCYlq{margin-top:15px;}/*!sc*/
+data-styled.g57[id="sc-hUheUT"]{content:"jUCYlq,"}/*!sc*/
+.jMRTsl{vertical-align:middle;font-size:13px;line-height:20px;}/*!sc*/
+data-styled.g59[id="sc-gSILEF"]{content:"jMRTsl,"}/*!sc*/
+.NncTE{color:rgba(102,102,102,0.9);}/*!sc*/
+data-styled.g60[id="sc-lbpDNm"]{content:"NncTE,"}/*!sc*/
+.kUjPnZ{color:#666;}/*!sc*/
+data-styled.g61[id="sc-iNyHtD"]{content:"kUjPnZ,"}/*!sc*/
+.OXDYs{border-radius:2px;word-break:break-word;background-color:rgba(51,51,51,0.05);color:rgba(51,51,51,0.9);padding:0 5px;border:1px solid rgba(51,51,51,0.1);font-family:Courier,monospace;}/*!sc*/
+.sc-lbFCLI+.sc-lbFCLI{margin-left:0;}/*!sc*/
+data-styled.g67[id="sc-lbFCLI"]{content:"OXDYs,"}/*!sc*/
+.fcDywd:after{content:' and ';font-weight:normal;}/*!sc*/
+.fcDywd:last-child:after{content:none;}/*!sc*/
+.fcDywd a{text-decoration:auto;color:#32329f;}/*!sc*/
+.fcDywd a:visited{color:#32329f;}/*!sc*/
+.fcDywd a:hover{color:#6868cf;text-decoration:auto;}/*!sc*/
+data-styled.g81[id="sc-kHHcot"]{content:"fcDywd,"}/*!sc*/
+.buStdZ{white-space:nowrap;}/*!sc*/
+.buStdZ:after{content:' or ';white-space:pre;}/*!sc*/
+.buStdZ:last-child:after,.buStdZ:only-child:after{content:none;}/*!sc*/
+.buStdZ a{text-decoration:auto;color:#32329f;}/*!sc*/
+.buStdZ a:visited{color:#32329f;}/*!sc*/
+.buStdZ a:hover{color:#6868cf;text-decoration:auto;}/*!sc*/
+data-styled.g82[id="sc-hPfayn"]{content:"buStdZ,"}/*!sc*/
+.jyZZjT{flex:1 1 auto;cursor:pointer;}/*!sc*/
+data-styled.g83[id="sc-dtnsVa"]{content:"jyZZjT,"}/*!sc*/
+.hrJrPf{width:75%;text-overflow:ellipsis;border-radius:4px;overflow:hidden;}/*!sc*/
+@media screen and (max-width: 50rem){.hrJrPf{margin-top:10px;}}/*!sc*/
+data-styled.g84[id="sc-dalEhJ"]{content:"hrJrPf,"}/*!sc*/
+.kjOznX{display:inline-block;margin:0;}/*!sc*/
+data-styled.g85[id="sc-jTPGds"]{content:"kjOznX,"}/*!sc*/
+.gWSlua{width:100%;display:flex;margin:1em 0;flex-direction:row;}/*!sc*/
+@media screen and (max-width: 50rem){.gWSlua{flex-direction:column;}}/*!sc*/
+data-styled.g86[id="sc-jQQpTv"]{content:"gWSlua,"}/*!sc*/
+.doIyiy{margin-top:0;margin-bottom:0.5em;}/*!sc*/
+data-styled.g92[id="sc-eGZRwK"]{content:"doIyiy,"}/*!sc*/
+.eDoICR{border:1px solid #32329f;color:#32329f;font-weight:normal;margin-left:0.5em;padding:4px 8px 4px;display:inline-block;text-decoration:none;cursor:pointer;}/*!sc*/
+data-styled.g93[id="sc-ctiVdb"]{content:"eDoICR,"}/*!sc*/
+.kKdLWh::before{content:'|';display:inline-block;opacity:0.5;width:15px;text-align:center;}/*!sc*/
+.kKdLWh:last-child::after{display:none;}/*!sc*/
+data-styled.g94[id="sc-dFBygw"]{content:"kKdLWh,"}/*!sc*/
+.kLFTAn{overflow:hidden;}/*!sc*/
+data-styled.g95[id="sc-brKBMN"]{content:"kLFTAn,"}/*!sc*/
+.jlnLBZ{display:flex;flex-wrap:wrap;margin-left:-15px;}/*!sc*/
+data-styled.g96[id="sc-gILgRS"]{content:"jlnLBZ,"}/*!sc*/
+.fngfqY{width:9ex;display:inline-block;height:13px;line-height:13px;background-color:#333;border-radius:3px;background-repeat:no-repeat;background-position:6px 4px;font-size:7px;font-family:Verdana,sans-serif;color:white;text-transform:uppercase;text-align:center;font-weight:bold;vertical-align:middle;margin-right:6px;margin-top:2px;}/*!sc*/
+.fngfqY.get{background-color:#2F8132;}/*!sc*/
+.fngfqY.post{background-color:#186FAF;}/*!sc*/
+.fngfqY.put{background-color:#95507c;}/*!sc*/
+.fngfqY.options{background-color:#947014;}/*!sc*/
+.fngfqY.patch{background-color:#bf581d;}/*!sc*/
+.fngfqY.delete{background-color:#cc3333;}/*!sc*/
+.fngfqY.basic{background-color:#707070;}/*!sc*/
+.fngfqY.link{background-color:#07818F;}/*!sc*/
+.fngfqY.head{background-color:#A23DAD;}/*!sc*/
+.fngfqY.hook{background-color:#32329f;}/*!sc*/
+.fngfqY.schema{background-color:#707070;}/*!sc*/
+data-styled.g100[id="sc-dlgOLa"]{content:"fngfqY,"}/*!sc*/
+.liDfSP{margin:0;padding:0;}/*!sc*/
+.liDfSP:first-child{padding-bottom:32px;}/*!sc*/
+.sc-XpSrr .sc-XpSrr{font-size:0.929em;}/*!sc*/
+.kpPLca{margin:0;padding:0;display:none;}/*!sc*/
+.kpPLca:first-child{padding-bottom:32px;}/*!sc*/
+.sc-XpSrr .sc-XpSrr{font-size:0.929em;}/*!sc*/
+data-styled.g101[id="sc-XpSrr"]{content:"liDfSP,kpPLca,"}/*!sc*/
+.dqWjwS{list-style:none inside none;overflow:hidden;text-overflow:ellipsis;padding:0;}/*!sc*/
+data-styled.g102[id="sc-ilnrqe"]{content:"dqWjwS,"}/*!sc*/
+.foVlMD{cursor:pointer;color:#333333;margin:0;padding:12.5px 20px;display:flex;justify-content:space-between;font-family:Montserrat,sans-serif;font-size:0.929em;text-transform:none;background-color:#fafafa;}/*!sc*/
+.foVlMD:hover{color:#32329f;background-color:#e1e1e1;}/*!sc*/
+.foVlMD .sc-dYjPD{height:1.5em;width:1.5em;}/*!sc*/
+.foVlMD .sc-dYjPD polygon{fill:#333333;}/*!sc*/
+.kdhHzp{cursor:pointer;color:#333333;margin:0;padding:12.5px 20px;display:flex;justify-content:space-between;font-family:Montserrat,sans-serif;background-color:#fafafa;}/*!sc*/
+.kdhHzp:hover{color:#32329f;background-color:#ededed;}/*!sc*/
+.kdhHzp .sc-dYjPD{height:1.5em;width:1.5em;}/*!sc*/
+.kdhHzp .sc-dYjPD polygon{fill:#333333;}/*!sc*/
+data-styled.g103[id="sc-uMZhz"]{content:"foVlMD,kdhHzp,"}/*!sc*/
+.jjkUis{display:inline-block;vertical-align:middle;width:calc(100% - 38px);overflow:hidden;text-overflow:ellipsis;}/*!sc*/
+data-styled.g104[id="sc-bitxrY"]{content:"jjkUis,"}/*!sc*/
+.Vousf{font-size:0.8em;margin-top:10px;text-align:center;position:fixed;width:260px;bottom:0;background:#fafafa;}/*!sc*/
+.Vousf a,.Vousf a:visited,.Vousf a:hover{color:#333333!important;padding:5px 0;border-top:1px solid #e1e1e1;text-decoration:none;display:flex;align-items:center;justify-content:center;}/*!sc*/
+.Vousf img{width:15px;margin-right:5px;}/*!sc*/
+@media screen and (max-width: 50rem){.Vousf{width:100%;}}/*!sc*/
+data-styled.g105[id="sc-eHoOIp"]{content:"Vousf,"}/*!sc*/
+.jIgktP{cursor:pointer;position:relative;margin-bottom:5px;}/*!sc*/
+data-styled.g111[id="sc-bQSAzj"]{content:"jIgktP,"}/*!sc*/
+.dwrzNd{font-family:Courier,monospace;margin-left:10px;flex:1;overflow-x:hidden;text-overflow:ellipsis;}/*!sc*/
+data-styled.g112[id="sc-fXwuWv"]{content:"dwrzNd,"}/*!sc*/
+.bGLtOO{outline:0;color:inherit;width:100%;text-align:left;cursor:pointer;padding:10px 30px 10px 20px;border-radius:4px 4px 0 0;background-color:#11171a;display:flex;white-space:nowrap;align-items:center;border:1px solid transparent;border-bottom:0;transition:border-color 0.25s ease;}/*!sc*/
+.bGLtOO ..sc-fXwuWv{color:#ffffff;}/*!sc*/
+.bGLtOO:focus{box-shadow:inset 0 2px 2px rgba(0, 0, 0, 0.45),0 2px 0 rgba(128, 128, 128, 0.25);}/*!sc*/
+data-styled.g113[id="sc-FpjRO"]{content:"bGLtOO,"}/*!sc*/
+.hZhzEb{font-size:0.929em;line-height:20px;background-color:#186FAF;color:#ffffff;padding:3px 10px;text-transform:uppercase;font-family:Montserrat,sans-serif;margin:0;}/*!sc*/
+.fNCgAJ{font-size:0.929em;line-height:20px;background-color:#2F8132;color:#ffffff;padding:3px 10px;text-transform:uppercase;font-family:Montserrat,sans-serif;margin:0;}/*!sc*/
+data-styled.g114[id="sc-jWMFtl"]{content:"hZhzEb,fNCgAJ,"}/*!sc*/
+.hrgtQx{position:absolute;width:100%;z-index:100;background:#fafafa;color:#263238;box-sizing:border-box;box-shadow:0 0 6px rgba(0, 0, 0, 0.33);overflow:hidden;border-bottom-left-radius:4px;border-bottom-right-radius:4px;transition:all 0.25s ease;visibility:hidden;transform:translateY(-50%) scaleY(0);}/*!sc*/
+data-styled.g115[id="sc-eEFuoE"]{content:"hrgtQx,"}/*!sc*/
+.wMSlO{padding:10px;}/*!sc*/
+data-styled.g116[id="sc-fmtEmb"]{content:"wMSlO,"}/*!sc*/
+.eoUbRN{padding:5px;border:1px solid #ccc;background:#fff;word-break:break-all;color:#32329f;}/*!sc*/
+.eoUbRN >span{color:#333333;}/*!sc*/
+data-styled.g117[id="sc-ljIcGq"]{content:"eoUbRN,"}/*!sc*/
+.jjICjb{display:block;border:0;width:100%;text-align:left;padding:10px;border-radius:2px;margin-bottom:4px;line-height:1.5em;cursor:pointer;color:#1d8127;background-color:rgba(29,129,39,0.07);}/*!sc*/
+.jjICjb:focus{outline:auto #1d8127;}/*!sc*/
+.MFjEV{display:block;border:0;width:100%;text-align:left;padding:10px;border-radius:2px;margin-bottom:4px;line-height:1.5em;cursor:pointer;color:#d41f1c;background-color:rgba(212,31,28,0.07);}/*!sc*/
+.MFjEV:focus{outline:auto #d41f1c;}/*!sc*/
+data-styled.g120[id="sc-htBWof"]{content:"jjICjb,MFjEV,"}/*!sc*/
+.bOOaMM{vertical-align:top;}/*!sc*/
+data-styled.g123[id="sc-gVpmpR"]{content:"bOOaMM,"}/*!sc*/
+.iUPTWo{font-size:1.3em;padding:0.2em 0;margin:3em 0 1.1em;color:#333333;font-weight:normal;}/*!sc*/
+data-styled.g124[id="sc-fXmTIC"]{content:"iUPTWo,"}/*!sc*/
+.kAvFBt{margin-bottom:30px;}/*!sc*/
+data-styled.g129[id="sc-eXKroj"]{content:"kAvFBt,"}/*!sc*/
+.jDeAKF{user-select:none;width:20px;height:20px;align-self:center;display:flex;flex-direction:column;color:#32329f;}/*!sc*/
+data-styled.g130[id="sc-iFUzrA"]{content:"jDeAKF,"}/*!sc*/
+.fDiwLH{width:260px;background-color:#fafafa;overflow:hidden;display:flex;flex-direction:column;backface-visibility:hidden;height:100vh;position:sticky;position:-webkit-sticky;top:0;}/*!sc*/
+@media screen and (max-width: 50rem){.fDiwLH{position:fixed;z-index:20;width:100%;background:#fafafa;display:none;}}/*!sc*/
+@media print{.fDiwLH{display:none;}}/*!sc*/
+data-styled.g131[id="sc-iruNHB"]{content:"fDiwLH,"}/*!sc*/
+.choFGS{outline:none;user-select:none;background-color:#f2f2f2;color:#32329f;display:none;cursor:pointer;position:fixed;right:20px;z-index:100;border-radius:50%;box-shadow:0 0 20px rgba(0, 0, 0, 0.3);bottom:44px;width:60px;height:60px;padding:0 20px;}/*!sc*/
+@media screen and (max-width: 50rem){.choFGS{display:flex;}}/*!sc*/
+.choFGS svg{color:#0065FB;}/*!sc*/
+@media print{.choFGS{display:none;}}/*!sc*/
+data-styled.g132[id="sc-eVYbGh"]{content:"choFGS,"}/*!sc*/
+.jReRer{font-family:Roboto,sans-serif;font-size:14px;font-weight:400;line-height:1.5em;color:#333333;display:flex;position:relative;text-align:left;-webkit-font-smoothing:antialiased;font-smoothing:antialiased;text-rendering:optimizeSpeed!important;tap-highlight-color:rgba(0, 0, 0, 0);text-size-adjust:100%;}/*!sc*/
+.jReRer *{box-sizing:border-box;-webkit-tap-highlight-color:rgba(255, 255, 255, 0);}/*!sc*/
+data-styled.g133[id="sc-kTmAaw"]{content:"jReRer,"}/*!sc*/
+.idEVKR{z-index:1;position:relative;overflow:hidden;width:calc(100% - 260px);contain:layout;}/*!sc*/
+@media print,screen and (max-width: 50rem){.idEVKR{width:100%;}}/*!sc*/
+data-styled.g134[id="sc-dwkskT"]{content:"idEVKR,"}/*!sc*/
+.gYmjCt{background:#263238;position:absolute;top:0;bottom:0;right:0;width:calc((100% - 260px) * 0.4);}/*!sc*/
+@media print,screen and (max-width: 75rem){.gYmjCt{display:none;}}/*!sc*/
+data-styled.g135[id="sc-jtyQFi"]{content:"gYmjCt,"}/*!sc*/
+.hGeDiU{padding:5px 0;}/*!sc*/
+data-styled.g136[id="sc-ekVkVN"]{content:"hGeDiU,"}/*!sc*/
+.fARvpA{width:calc(100% - 40px);box-sizing:border-box;margin:0 20px;padding:5px 10px 5px 20px;border:0;border-bottom:1px solid #e1e1e1;font-family:Roboto,sans-serif;font-weight:bold;font-size:13px;color:#333333;background-color:transparent;outline:none;}/*!sc*/
+data-styled.g137[id="sc-kijJqc"]{content:"fARvpA,"}/*!sc*/
+.fsAVUu{position:absolute;left:20px;height:1.8em;width:0.9em;}/*!sc*/
+.fsAVUu path{fill:#333333;}/*!sc*/
+data-styled.g138[id="sc-cLhBAz"]{content:"fsAVUu,"}/*!sc*/
+</style>
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+</head>
+
+<body>
+  
+      <div id="redoc"><div class="sc-kTmAaw jReRer redoc-wrap"><div class="sc-iruNHB fDiwLH menu-content" style="top:0px;height:calc(100vh - 0px)"><div role="search" class="sc-ekVkVN hGeDiU"><svg class="sc-cLhBAz fsAVUu search-icon" version="1.1" viewBox="0 0 1000 1000" x="0px" xmlns="http://www.w3.org/2000/svg" y="0px"><path d="M968.2,849.4L667.3,549c83.9-136.5,66.7-317.4-51.7-435.6C477.1-25,252.5-25,113.9,113.4c-138.5,138.3-138.5,362.6,0,501C219.2,730.1,413.2,743,547.6,666.5l301.9,301.4c43.6,43.6,76.9,14.9,104.2-12.4C981,928.3,1011.8,893,968.2,849.4z M524.5,522c-88.9,88.7-233,88.7-321.8,0c-88.9-88.7-88.9-232.6,0-321.3c88.9-88.7,233-88.7,321.8,0C613.4,289.4,613.4,433.3,524.5,522z"></path></svg><input placeholder="Search..." aria-label="Search" type="text" class="sc-kijJqc fARvpA search-input" value=""/></div><div class="sc-kLEbxe iOXjCz scrollbar-container undefined"><ul role="menu" class="sc-XpSrr liDfSP"><li tabindex="0" depth="1" data-item-id="tag/IAM" role="menuitem" class="sc-ilnrqe dqWjwS"><label class="sc-uMZhz foVlMD -depth1"><span width="calc(100% - 38px)" title="IAM" class="sc-bitxrY jjkUis">IAM</span><svg class="sc-dYjPD kdgFPv" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></label><ul class="sc-XpSrr kpPLca"><li tabindex="0" depth="2" data-item-id="tag/IAM/operation/exchangeDatabaseJWT" role="menuitem" class="sc-ilnrqe dqWjwS"><label class="sc-uMZhz kdhHzp -depth2"><span type="post" class="sc-dlgOLa fngfqY operation-type post">post</span><span tabindex="0" width="calc(100% - 38px)" class="sc-bitxrY jjkUis">Exchange cloud identity for a database (engine) JWT</span></label></li><li tabindex="0" depth="2" data-item-id="tag/IAM/operation/exchangeAPIJWT" role="menuitem" class="sc-ilnrqe dqWjwS"><label class="sc-uMZhz kdhHzp -depth2"><span type="post" class="sc-dlgOLa fngfqY operation-type post">post</span><span tabindex="0" width="calc(100% - 38px)" class="sc-bitxrY jjkUis">Exchange cloud identity for a management API JWT</span></label></li><li tabindex="0" depth="2" data-item-id="tag/IAM/operation/getCustomerJWKS" role="menuitem" class="sc-ilnrqe dqWjwS"><label class="sc-uMZhz kdhHzp -depth2"><span type="get" class="sc-dlgOLa fngfqY operation-type get">get</span><span tabindex="0" width="calc(100% - 38px)" class="sc-bitxrY jjkUis">JSON Web Key Set for validating issued JWTs</span></label></li></ul></li></ul><div class="sc-eHoOIp Vousf"><a target="_blank" rel="noopener noreferrer" href="https://redocly.com/redoc/">API docs by Redocly</a></div></div></div><div class="sc-eVYbGh choFGS"><div class="sc-iFUzrA jDeAKF"><svg class="" style="transform:translate(2px, -4px) rotate(180deg);transition:transform 0.2s ease" viewBox="0 0 926.23699 573.74994" version="1.1" x="0px" y="0px" width="15" height="15"><g transform="translate(904.92214,-879.1482)"><path d="
+          m -673.67664,1221.6502 -231.2455,-231.24803 55.6165,
+          -55.627 c 30.5891,-30.59485 56.1806,-55.627 56.8701,-55.627 0.6894,
+          0 79.8637,78.60862 175.9427,174.68583 l 174.6892,174.6858 174.6892,
+          -174.6858 c 96.079,-96.07721 175.253196,-174.68583 175.942696,
+          -174.68583 0.6895,0 26.281,25.03215 56.8701,
+          55.627 l 55.6165,55.627 -231.245496,231.24803 c -127.185,127.1864
+          -231.5279,231.248 -231.873,231.248 -0.3451,0 -104.688,
+          -104.0616 -231.873,-231.248 z
+        " fill="currentColor"></path></g></svg><svg class="" style="transform:translate(2px, 4px);transition:transform 0.2s ease" viewBox="0 0 926.23699 573.74994" version="1.1" x="0px" y="0px" width="15" height="15"><g transform="translate(904.92214,-879.1482)"><path d="
+          m -673.67664,1221.6502 -231.2455,-231.24803 55.6165,
+          -55.627 c 30.5891,-30.59485 56.1806,-55.627 56.8701,-55.627 0.6894,
+          0 79.8637,78.60862 175.9427,174.68583 l 174.6892,174.6858 174.6892,
+          -174.6858 c 96.079,-96.07721 175.253196,-174.68583 175.942696,
+          -174.68583 0.6895,0 26.281,25.03215 56.8701,
+          55.627 l 55.6165,55.627 -231.245496,231.24803 c -127.185,127.1864
+          -231.5279,231.248 -231.873,231.248 -0.3451,0 -104.688,
+          -104.0616 -231.873,-231.248 z
+        " fill="currentColor"></path></g></svg></div></div><div class="sc-dwkskT idEVKR api-content"><div class="sc-eCQgVK jleRXN"><div class="sc-iCECmn lhRBUS"><div class="sc-hKVpXn kktglN api-info"><h1 class="sc-fuztkK sc-eGZRwK eRMVDe doIyiy">SingleStore Cloud IAM Authentication API<!-- --> <span>(<!-- -->0.1.0<!-- -->)</span></h1><p>Download OpenAPI specification<!-- -->:<a download="openapi.json" target="_blank" class="sc-ctiVdb eDoICR">Download</a></p><div class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"><div class="sc-brKBMN kLFTAn"><div class="sc-gILgRS jlnLBZ"> <!-- --> <span class="sc-dFBygw kKdLWh">License:<!-- --> <a href="https://www.singlestore.com/terms/">Proprietary</a></span> </div></div></div><div data-role="redoc-summary" html="" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"></div><div data-role="redoc-description" html="&lt;p&gt;HTTP API for exchanging cloud provider identity credentials for SingleStore JWTs.&lt;/p&gt;
+&lt;p&gt;Customers may call these endpoints directly with their own HTTP client instead of
+using the &lt;code&gt;s2iam&lt;/code&gt; client libraries (Go, Python, Java). Obtain cloud-provider
+credentials on the machine or workload making the request, then POST them to
+the authentication service using the headers documented below.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Production host:&lt;/strong&gt; &lt;code&gt;https://authsvc.singlestore.com&lt;/code&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Status&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Database (engine) JWTs: available; APIs may change before GA.&lt;/li&gt;
+&lt;li&gt;Management API JWTs: available; APIs may change before GA.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Related endpoints&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;JWT signing keys (JWKS): &lt;code&gt;GET /auth/oidc/op/Customer/.well-known/jwks.json&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;Validate returned JWTs against this JWKS after exchange.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Authentication (overview)&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Send credentials for &lt;strong&gt;one&lt;/strong&gt; cloud provider on each request:&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Provider&lt;/th&gt;
+&lt;th&gt;Headers&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;&lt;tr&gt;
+&lt;td&gt;AWS&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;X-AWS-Access-Key-ID&lt;/code&gt;, &lt;code&gt;X-AWS-Secret-Access-Key&lt;/code&gt;, &lt;code&gt;X-AWS-Session-Token&lt;/code&gt; (all three required)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;GCP&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;Authorization: Bearer &amp;lt;identity-token&amp;gt;&lt;/code&gt; (workload identity JWT)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Azure&lt;/td&gt;
+&lt;td&gt;&lt;code&gt;Authorization: Bearer &amp;lt;access-token&amp;gt;&lt;/code&gt; (managed identity token)&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;p&gt;See the &lt;strong&gt;Authentication&lt;/strong&gt; section below and per-endpoint examples for curl samples.&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"><p>HTTP API for exchanging cloud provider identity credentials for SingleStore JWTs.</p>
+<p>Customers may call these endpoints directly with their own HTTP client instead of
+using the <code>s2iam</code> client libraries (Go, Python, Java). Obtain cloud-provider
+credentials on the machine or workload making the request, then POST them to
+the authentication service using the headers documented below.</p>
+<p><strong>Production host:</strong> <code>https://authsvc.singlestore.com</code></p>
+<p><strong>Status</strong></p>
+<ul>
+<li>Database (engine) JWTs: available; APIs may change before GA.</li>
+<li>Management API JWTs: available; APIs may change before GA.</li>
+</ul>
+<p><strong>Related endpoints</strong></p>
+<ul>
+<li>JWT signing keys (JWKS): <code>GET /auth/oidc/op/Customer/.well-known/jwks.json</code></li>
+<li>Validate returned JWTs against this JWKS after exchange.</li>
+</ul>
+<p><strong>Authentication (overview)</strong></p>
+<p>Send credentials for <strong>one</strong> cloud provider on each request:</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Headers</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AWS</td>
+<td><code>X-AWS-Access-Key-ID</code>, <code>X-AWS-Secret-Access-Key</code>, <code>X-AWS-Session-Token</code> (all three required)</td>
+</tr>
+<tr>
+<td>GCP</td>
+<td><code>Authorization: Bearer &lt;identity-token&gt;</code> (workload identity JWT)</td>
+</tr>
+<tr>
+<td>Azure</td>
+<td><code>Authorization: Bearer &lt;access-token&gt;</code> (managed identity token)</td>
+</tr>
+</tbody></table>
+<p>See the <strong>Authentication</strong> section below and per-endpoint examples for curl samples.</p>
+</div></div></div></div><div id="tag/IAM" data-section-id="tag/IAM" class="sc-eCQgVK jleRXN"><div class="sc-iCECmn lhRBUS"><div class="sc-hKVpXn kktglN"><h2 class="sc-qdQOe MOVBZ"><a class="sc-crPgjm jmoZom" href="#tag/IAM" aria-label="tag/IAM"></a>IAM</h2></div></div><div class="sc-hKVpXn kmAAAV"><div class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV redoc-markdown " html="&lt;p&gt;Cloud IAM credential exchange&lt;/p&gt;
+"><p>Cloud IAM credential exchange</p>
+</div></div></div><div id="tag/IAM/operation/exchangeDatabaseJWT" data-section-id="tag/IAM/operation/exchangeDatabaseJWT" class="sc-eCQgVK grDwca"><div data-section-id="operation/exchangeDatabaseJWT" id="operation/exchangeDatabaseJWT" class="sc-iCECmn lhRBUS"><div class="sc-hKVpXn kktglN"><h2 class="sc-qdQOe MOVBZ"><a class="sc-crPgjm jmoZom" href="#tag/IAM/operation/exchangeDatabaseJWT" aria-label="tag/IAM/operation/exchangeDatabaseJWT"></a>Exchange cloud identity for a database (engine) JWT<!-- --> </h2><div class="sc-eXKroj kAvFBt"><div html="&lt;p&gt;Verifies the caller&amp;#39;s cloud provider identity and returns a signed JWT
+suitable for SingleStore engine / database access.&lt;/p&gt;
+&lt;p&gt;Send an empty body. Authentication is performed exclusively via HTTP
+headers carrying cloud provider credentials (see &lt;code&gt;components.securitySchemes&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;The optional &lt;code&gt;workspaceGroupID&lt;/code&gt; query parameter is sent by the reference
+Go client for database JWT requests. The server verifies identity from
+headers; callers using custom clients may include it for forward compatibility.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Example requests (use one provider):&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;AWS:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/database&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Access-Key-ID: AKIA...&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Secret-Access-Key: ...&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Session-Token: ...&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;GCP:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/database&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;Authorization: Bearer &amp;lt;identity-token&gt;&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Azure:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/database&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;Authorization: Bearer &amp;lt;access-token&gt;&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"><p>Verifies the caller&#39;s cloud provider identity and returns a signed JWT
+suitable for SingleStore engine / database access.</p>
+<p>Send an empty body. Authentication is performed exclusively via HTTP
+headers carrying cloud provider credentials (see <code>components.securitySchemes</code>).</p>
+<p>The optional <code>workspaceGroupID</code> query parameter is sent by the reference
+Go client for database JWT requests. The server verifies identity from
+headers; callers using custom clients may include it for forward compatibility.</p>
+<p><strong>Example requests (use one provider):</strong></p>
+<p>AWS:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/database'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Access-Key-ID: AKIA...'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Secret-Access-Key: ...'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Session-Token: ...'</span>
+</code></pre>
+<p>GCP:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/database'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'Authorization: Bearer &lt;identity-token>'</span>
+</code></pre>
+<p>Azure:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/database'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'Authorization: Bearer &lt;access-token>'</span>
+</code></pre>
+</div></div><div class="sc-jQQpTv gWSlua"><div class="sc-dtnsVa jyZZjT"><h5 class="sc-iqkkDd sc-jTPGds kcvrhp kjOznX">Authorizations:</h5><svg class="sc-dYjPD bEEWJa" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></div><div class="sc-dalEhJ hrJrPf"><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>awsCredentials</i></span></span><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>gcpIdentityToken</i></span></span><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>azureIdentityToken</i></span></span></div></div><div><h5 class="sc-iqkkDd kcvrhp">query<!-- --> Parameters</h5><table class="sc-hHopjF bsjUmE"><tbody><tr class="last "><td kind="field" title="workspaceGroupID" class="sc-hCcPtG sc-fFCZOx jFNAwF lcdEEX"><span class="sc-ieCSdj kkMuqc"></span><span class="property-name">workspaceGroupID</span></td><td class="sc-bjLslk gLpZiQ"><div><div><span class="sc-gSILEF sc-lbpDNm jMRTsl NncTE"></span><span class="sc-gSILEF sc-iNyHtD jMRTsl kUjPnZ">string</span></div> <div><span class="sc-gSILEF jMRTsl"> <!-- -->Example:<!-- --> </span> <span class="sc-gSILEF sc-lbFCLI jMRTsl OXDYs">workspaceGroupID=wg-0123456789abcdef</span></div><div><div html="&lt;p&gt;Target workspace group (reference client sends this for database JWTs).&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH bAoMjv"><p>Target workspace group (reference client sends this for database JWTs).</p>
+</div></div></div></td></tr></tbody></table></div><div><h3 class="sc-fXmTIC iUPTWo">Responses</h3><div><button class="sc-htBWof jjICjb"><svg class="sc-dYjPD gngmNp" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">200<!-- --> </strong><div html="&lt;p&gt;JWT issued successfully&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>JWT issued successfully</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">401<!-- --> </strong><div html="&lt;p&gt;Cloud provider authentication failed&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>Cloud provider authentication failed</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">500<!-- --> </strong><div html="&lt;p&gt;Failed to create JWT&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>Failed to create JWT</p>
+</div></button></div></div></div><div class="sc-jSppWd sc-gKkgUA fpMlmc bdQQyo"><div class="sc-bQSAzj jIgktP"><button class="sc-FpjRO bGLtOO"><span type="post" class="sc-jWMFtl hZhzEb http-verb post">post</span><span class="sc-fXwuWv dwrzNd">/auth/iam/database</span><svg class="sc-dYjPD bQKUih" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-eEFuoE hrgtQx"><div class="sc-fmtEmb wMSlO"><div html="&lt;p&gt;Production authentication service&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH bAoMjv"><p>Production authentication service</p>
+</div><div tabindex="0" role="button"><div class="sc-ljIcGq eoUbRN"><span>https://authsvc.singlestore.com</span>/auth/iam/database</div></div></div></div></div><div><h3 class="sc-kEbgWM iamDfj"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxxQMU kibfTX" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-success react-tabs__tab--selected" role="tab" id="tab:R4smq:0" aria-selected="true" aria-disabled="false" aria-controls="panel:R4smq:0" tabindex="0" data-rttab="true">200</li><li class="tab-error" role="tab" id="tab:R4smq:1" aria-selected="false" aria-disabled="false" aria-controls="panel:R4smq:1" data-rttab="true">401</li><li class="tab-error" role="tab" id="tab:R4smq:2" aria-selected="false" aria-disabled="false" aria-controls="panel:R4smq:2" data-rttab="true">500</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel:R4smq:0" aria-labelledby="tab:R4smq:0"><div><div class="sc-cNSlRw bMFMGt"><span class="sc-bBzIOb BuCyN">Content type</span><div class="sc-dPqFhK kgKexQ">application/json</div></div><div class="sc-hUheUT jUCYlq"><div class="sc-cTZdpT hHzuQA"><div class="sc-giQkEn dzKJV"><button><div class="sc-jcgtOs feYhXE">Copy</div></button></div><div class="sc-iJSMbW fiNpIH sc-jNDflC jgTAJz"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"jwt"</span>: <span class="token string">&quot;eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"expires_at"</span>: <span class="token string">&quot;2026-06-09T21:00:00Z&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"audience"</span>: <span class="token string">&quot;engine&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4smq:1" aria-labelledby="tab:R4smq:1"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4smq:2" aria-labelledby="tab:R4smq:2"></div></div></div></div></div></div><div id="tag/IAM/operation/exchangeAPIJWT" data-section-id="tag/IAM/operation/exchangeAPIJWT" class="sc-eCQgVK grDwca"><div data-section-id="operation/exchangeAPIJWT" id="operation/exchangeAPIJWT" class="sc-iCECmn lhRBUS"><div class="sc-hKVpXn kktglN"><h2 class="sc-qdQOe MOVBZ"><a class="sc-crPgjm jmoZom" href="#tag/IAM/operation/exchangeAPIJWT" aria-label="tag/IAM/operation/exchangeAPIJWT"></a>Exchange cloud identity for a management API JWT<!-- --> </h2><div class="sc-eXKroj kAvFBt"><div html="&lt;p&gt;Verifies the caller&amp;#39;s cloud provider identity, resolves a matching SingleStore
+cloud-principal user, and returns a signed JWT for management API access.&lt;/p&gt;
+&lt;p&gt;Send an empty body. Authentication is performed via cloud provider headers.&lt;/p&gt;
+&lt;p&gt;The verified identity must be linked to an active cloud-principal user in
+SingleStore; otherwise the server returns &lt;code&gt;404&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Example requests (use one provider):&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;AWS:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/api&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Access-Key-ID: AKIA...&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Secret-Access-Key: ...&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;X-AWS-Session-Token: ...&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;GCP:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/api&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;Authorization: Bearer &amp;lt;identity-token&gt;&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Azure:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;&lt;span class=&quot;token function&quot;&gt;curl&lt;/span&gt; &lt;span class=&quot;token parameter variable&quot;&gt;-X&lt;/span&gt; POST &lt;span class=&quot;token string&quot;&gt;&#x27;https://authsvc.singlestore.com/auth/iam/api&#x27;&lt;/span&gt; &lt;span class=&quot;token punctuation&quot;&gt;\&lt;/span&gt;
+  &lt;span class=&quot;token parameter variable&quot;&gt;-H&lt;/span&gt; &lt;span class=&quot;token string&quot;&gt;&#x27;Authorization: Bearer &amp;lt;access-token&gt;&#x27;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"><p>Verifies the caller&#39;s cloud provider identity, resolves a matching SingleStore
+cloud-principal user, and returns a signed JWT for management API access.</p>
+<p>Send an empty body. Authentication is performed via cloud provider headers.</p>
+<p>The verified identity must be linked to an active cloud-principal user in
+SingleStore; otherwise the server returns <code>404</code>.</p>
+<p><strong>Example requests (use one provider):</strong></p>
+<p>AWS:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/api'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Access-Key-ID: AKIA...'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Secret-Access-Key: ...'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'X-AWS-Session-Token: ...'</span>
+</code></pre>
+<p>GCP:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/api'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'Authorization: Bearer &lt;identity-token>'</span>
+</code></pre>
+<p>Azure:</p>
+<pre><code class="language-shell"><span class="token function">curl</span> <span class="token parameter variable">-X</span> POST <span class="token string">'https://authsvc.singlestore.com/auth/iam/api'</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-H</span> <span class="token string">'Authorization: Bearer &lt;access-token>'</span>
+</code></pre>
+</div></div><div class="sc-jQQpTv gWSlua"><div class="sc-dtnsVa jyZZjT"><h5 class="sc-iqkkDd sc-jTPGds kcvrhp kjOznX">Authorizations:</h5><svg class="sc-dYjPD bEEWJa" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></div><div class="sc-dalEhJ hrJrPf"><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>awsCredentials</i></span></span><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>gcpIdentityToken</i></span></span><span class="sc-hPfayn buStdZ"><span class="sc-kHHcot fcDywd"><i>azureIdentityToken</i></span></span></div></div><div><h3 class="sc-fXmTIC iUPTWo">Responses</h3><div><button class="sc-htBWof jjICjb"><svg class="sc-dYjPD gngmNp" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">200<!-- --> </strong><div html="&lt;p&gt;JWT issued successfully&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>JWT issued successfully</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">401<!-- --> </strong><div html="&lt;p&gt;Cloud provider authentication failed&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>Cloud provider authentication failed</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">404<!-- --> </strong><div html="&lt;p&gt;No cloud-principal user matches the verified identity&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>No cloud-principal user matches the verified identity</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">500<!-- --> </strong><div html="&lt;p&gt;Internal error&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>Internal error</p>
+</div></button></div></div></div><div class="sc-jSppWd sc-gKkgUA fpMlmc bdQQyo"><div class="sc-bQSAzj jIgktP"><button class="sc-FpjRO bGLtOO"><span type="post" class="sc-jWMFtl hZhzEb http-verb post">post</span><span class="sc-fXwuWv dwrzNd">/auth/iam/api</span><svg class="sc-dYjPD bQKUih" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-eEFuoE hrgtQx"><div class="sc-fmtEmb wMSlO"><div html="&lt;p&gt;Production authentication service&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH bAoMjv"><p>Production authentication service</p>
+</div><div tabindex="0" role="button"><div class="sc-ljIcGq eoUbRN"><span>https://authsvc.singlestore.com</span>/auth/iam/api</div></div></div></div></div><div><h3 class="sc-kEbgWM iamDfj"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxxQMU kibfTX" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-success react-tabs__tab--selected" role="tab" id="tab:R4sqq:0" aria-selected="true" aria-disabled="false" aria-controls="panel:R4sqq:0" tabindex="0" data-rttab="true">200</li><li class="tab-error" role="tab" id="tab:R4sqq:1" aria-selected="false" aria-disabled="false" aria-controls="panel:R4sqq:1" data-rttab="true">401</li><li class="tab-error" role="tab" id="tab:R4sqq:2" aria-selected="false" aria-disabled="false" aria-controls="panel:R4sqq:2" data-rttab="true">404</li><li class="tab-error" role="tab" id="tab:R4sqq:3" aria-selected="false" aria-disabled="false" aria-controls="panel:R4sqq:3" data-rttab="true">500</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel:R4sqq:0" aria-labelledby="tab:R4sqq:0"><div><div class="sc-cNSlRw bMFMGt"><span class="sc-bBzIOb BuCyN">Content type</span><div class="sc-dPqFhK kgKexQ">application/json</div></div><div class="sc-hUheUT jUCYlq"><div class="sc-cTZdpT hHzuQA"><div class="sc-giQkEn dzKJV"><button><div class="sc-jcgtOs feYhXE">Copy</div></button></div><div class="sc-iJSMbW fiNpIH sc-jNDflC jgTAJz"><div class="redoc-json"><code><button class="collapser" aria-label="collapse"></button><span class="token punctuation">{</span><span class="ellipsis"></span><ul class="obj collapsible"><li><div class="hoverable "><span class="property token string">"jwt"</span>: <span class="token string">&quot;eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"expires_at"</span>: <span class="token string">&quot;2026-06-09T21:00:00Z&quot;</span><span class="token punctuation">,</span></div></li><li><div class="hoverable "><span class="property token string">"audience"</span>: <span class="token string">&quot;portal&quot;</span></div></li></ul><span class="token punctuation">}</span></code></div></div></div></div></div></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4sqq:1" aria-labelledby="tab:R4sqq:1"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4sqq:2" aria-labelledby="tab:R4sqq:2"></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4sqq:3" aria-labelledby="tab:R4sqq:3"></div></div></div></div></div></div><div id="tag/IAM/operation/getCustomerJWKS" data-section-id="tag/IAM/operation/getCustomerJWKS" class="sc-eCQgVK grDwca"><div data-section-id="operation/getCustomerJWKS" id="operation/getCustomerJWKS" class="sc-iCECmn lhRBUS"><div class="sc-hKVpXn kktglN"><h2 class="sc-qdQOe MOVBZ"><a class="sc-crPgjm jmoZom" href="#tag/IAM/operation/getCustomerJWKS" aria-label="tag/IAM/operation/getCustomerJWKS"></a>JSON Web Key Set for validating issued JWTs<!-- --> </h2><div class="sc-eXKroj kAvFBt"><div html="&lt;p&gt;Public signing keys for JWTs issued by the Customer OIDC provider.
+Use this document to verify &lt;code&gt;jwt&lt;/code&gt; values returned by the IAM exchange endpoints.&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV"><p>Public signing keys for JWTs issued by the Customer OIDC provider.
+Use this document to verify <code>jwt</code> values returned by the IAM exchange endpoints.</p>
+</div></div><div><h3 class="sc-fXmTIC iUPTWo">Responses</h3><div><button class="sc-htBWof jjICjb"><svg class="sc-dYjPD gngmNp" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">200<!-- --> </strong><div html="&lt;p&gt;JWKS document&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>JWKS document</p>
+</div></button></div><div><button class="sc-htBWof MFjEV"><svg class="sc-dYjPD hJoFRR" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg><strong class="sc-gVpmpR bOOaMM">404<!-- --> </strong><div html="&lt;p&gt;JWKS not found&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH ewCFMV sc-ciCrSJ dDDioG"><p>JWKS not found</p>
+</div></button></div></div></div><div class="sc-jSppWd sc-gKkgUA fpMlmc bdQQyo"><div class="sc-bQSAzj jIgktP"><button class="sc-FpjRO bGLtOO"><span type="get" class="sc-jWMFtl fNCgAJ http-verb get">get</span><span class="sc-fXwuWv dwrzNd">/auth/oidc/op/Customer/.well-known/jwks.json</span><svg class="sc-dYjPD bQKUih" style="margin-right:-25px" version="1.1" viewBox="0 0 24 24" x="0" xmlns="http://www.w3.org/2000/svg" y="0" aria-hidden="true"><polygon points="17.3 8.3 12 13.6 6.7 8.3 5.3 9.7 12 16.4 18.7 9.7 "></polygon></svg></button><div aria-hidden="true" class="sc-eEFuoE hrgtQx"><div class="sc-fmtEmb wMSlO"><div html="&lt;p&gt;Production authentication service&lt;/p&gt;
+" class="sc-iJSMbW sc-cBEgGa fiNpIH bAoMjv"><p>Production authentication service</p>
+</div><div tabindex="0" role="button"><div class="sc-ljIcGq eoUbRN"><span>https://authsvc.singlestore.com</span>/auth/oidc/op/Customer/.well-known/jwks.json</div></div></div></div></div><div><h3 class="sc-kEbgWM iamDfj"> <!-- -->Response samples<!-- --> </h3><div class="sc-cxxQMU kibfTX" data-rttabs="true"><ul class="react-tabs__tab-list" role="tablist"><li class="tab-success react-tabs__tab--selected" role="tab" id="tab:R4suq:0" aria-selected="true" aria-disabled="false" aria-controls="panel:R4suq:0" tabindex="0" data-rttab="true">200</li><li class="tab-error" role="tab" id="tab:R4suq:1" aria-selected="false" aria-disabled="false" aria-controls="panel:R4suq:1" data-rttab="true">404</li></ul><div class="react-tabs__tab-panel react-tabs__tab-panel--selected" role="tabpanel" id="panel:R4suq:0" aria-labelledby="tab:R4suq:0"><div><div class="sc-cNSlRw bMFMGt"><span class="sc-bBzIOb BuCyN">Content type</span><div class="sc-dPqFhK kgKexQ">application/json</div></div><div class="sc-hUheUT jUCYlq"><div class="sc-cTZdpT hHzuQA"><div class="sc-giQkEn dzKJV"><button><div class="sc-jcgtOs feYhXE">Copy</div></button></div><div class="sc-iJSMbW fiNpIH sc-jNDflC jgTAJz"><div class="redoc-json"><code><span class="token punctuation">{ }</span></code></div></div></div></div></div></div><div class="react-tabs__tab-panel" role="tabpanel" id="panel:R4suq:1" aria-labelledby="tab:R4suq:1"></div></div></div></div></div></div></div><div class="sc-jtyQFi gYmjCt"></div></div></div>
+      <script>
+      const __redoc_state = {"menu":{"activeItemIdx":-1},"spec":{"data":{"openapi":"3.0.3","info":{"title":"SingleStore Cloud IAM Authentication API","version":"0.1.0","license":{"name":"Proprietary","url":"https://www.singlestore.com/terms/"},"description":"HTTP API for exchanging cloud provider identity credentials for SingleStore JWTs.\n\nCustomers may call these endpoints directly with their own HTTP client instead of\nusing the `s2iam` client libraries (Go, Python, Java). Obtain cloud-provider\ncredentials on the machine or workload making the request, then POST them to\nthe authentication service using the headers documented below.\n\n**Production host:** `https://authsvc.singlestore.com`\n\n**Status**\n- Database (engine) JWTs: available; APIs may change before GA.\n- Management API JWTs: available; APIs may change before GA.\n\n**Related endpoints**\n- JWT signing keys (JWKS): `GET /auth/oidc/op/Customer/.well-known/jwks.json`\n- Validate returned JWTs against this JWKS after exchange.\n\n**Authentication (overview)**\n\nSend credentials for **one** cloud provider on each request:\n\n| Provider | Headers |\n|----------|---------|\n| AWS | `X-AWS-Access-Key-ID`, `X-AWS-Secret-Access-Key`, `X-AWS-Session-Token` (all three required) |\n| GCP | `Authorization: Bearer <identity-token>` (workload identity JWT) |\n| Azure | `Authorization: Bearer <access-token>` (managed identity token) |\n\nSee the **Authentication** section below and per-endpoint examples for curl samples.\n"},"servers":[{"url":"https://authsvc.singlestore.com","description":"Production authentication service"}],"tags":[{"name":"IAM","description":"Cloud IAM credential exchange"}],"paths":{"/auth/iam/database":{"post":{"operationId":"exchangeDatabaseJWT","tags":["IAM"],"summary":"Exchange cloud identity for a database (engine) JWT","description":"Verifies the caller's cloud provider identity and returns a signed JWT\nsuitable for SingleStore engine / database access.\n\nSend an empty body. Authentication is performed exclusively via HTTP\nheaders carrying cloud provider credentials (see `components.securitySchemes`).\n\nThe optional `workspaceGroupID` query parameter is sent by the reference\nGo client for database JWT requests. The server verifies identity from\nheaders; callers using custom clients may include it for forward compatibility.\n\n**Example requests (use one provider):**\n\nAWS:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \\\n  -H 'X-AWS-Access-Key-ID: AKIA...' \\\n  -H 'X-AWS-Secret-Access-Key: ...' \\\n  -H 'X-AWS-Session-Token: ...'\n```\n\nGCP:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \\\n  -H 'Authorization: Bearer <identity-token>'\n```\n\nAzure:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \\\n  -H 'Authorization: Bearer <access-token>'\n```\n","parameters":[{"name":"workspaceGroupID","in":"query","required":false,"description":"Target workspace group (reference client sends this for database JWTs).","schema":{"type":"string","example":"wg-0123456789abcdef"}}],"security":[{"awsCredentials":[]},{"gcpIdentityToken":[]},{"azureIdentityToken":[]}],"responses":{"200":{"description":"JWT issued successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServiceIdentityJWT"},"examples":{"database":{"value":{"jwt":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example","expires_at":"2026-06-09T21:00:00Z","audience":"engine"}}}}}},"401":{"description":"Cloud provider authentication failed","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"},"example":{"message":"cloud provider authentication failed"}}}},"500":{"description":"Failed to create JWT","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}}}},"/auth/iam/api":{"post":{"operationId":"exchangeAPIJWT","tags":["IAM"],"summary":"Exchange cloud identity for a management API JWT","description":"Verifies the caller's cloud provider identity, resolves a matching SingleStore\ncloud-principal user, and returns a signed JWT for management API access.\n\nSend an empty body. Authentication is performed via cloud provider headers.\n\nThe verified identity must be linked to an active cloud-principal user in\nSingleStore; otherwise the server returns `404`.\n\n**Example requests (use one provider):**\n\nAWS:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \\\n  -H 'X-AWS-Access-Key-ID: AKIA...' \\\n  -H 'X-AWS-Secret-Access-Key: ...' \\\n  -H 'X-AWS-Session-Token: ...'\n```\n\nGCP:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \\\n  -H 'Authorization: Bearer <identity-token>'\n```\n\nAzure:\n```shell\ncurl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \\\n  -H 'Authorization: Bearer <access-token>'\n```\n","security":[{"awsCredentials":[]},{"gcpIdentityToken":[]},{"azureIdentityToken":[]}],"responses":{"200":{"description":"JWT issued successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServiceIdentityJWT"},"examples":{"api":{"value":{"jwt":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example","expires_at":"2026-06-09T21:00:00Z","audience":"portal"}}}}}},"401":{"description":"Cloud provider authentication failed","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}},"404":{"description":"No cloud-principal user matches the verified identity","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"},"example":{"message":"no cloud principal user matches the provided identity"}}}},"500":{"description":"Internal error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}}}},"/auth/oidc/op/Customer/.well-known/jwks.json":{"get":{"operationId":"getCustomerJWKS","tags":["IAM"],"summary":"JSON Web Key Set for validating issued JWTs","description":"Public signing keys for JWTs issued by the Customer OIDC provider.\nUse this document to verify `jwt` values returned by the IAM exchange endpoints.\n","security":[],"responses":{"200":{"description":"JWKS document","content":{"application/json":{"schema":{"type":"object","description":"RFC 7517 JSON Web Key Set","additionalProperties":true}}}},"404":{"description":"JWKS not found","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Error"}}}}}}}},"components":{"securitySchemes":{"awsCredentials":{"type":"apiKey","in":"header","name":"X-AWS-Access-Key-ID","description":"**AWS.** Send temporary credentials using all three headers:\n`X-AWS-Access-Key-ID`, `X-AWS-Secret-Access-Key`, and `X-AWS-Session-Token`.\n\nObtain credentials from the instance/task role, IRSA, or STS AssumeRole on\nthe calling workload before POSTing to this API.\n"},"gcpIdentityToken":{"type":"apiKey","in":"header","name":"Authorization","description":"**GCP.** Send `Authorization: Bearer <identity-token>` where the token is a\nworkload identity JWT.\n\nRequest the identity token with audience `https://authsvc.singlestore.com`\n(or the audience configured for your environment).\n"},"azureIdentityToken":{"type":"apiKey","in":"header","name":"Authorization","description":"**Azure.** Send `Authorization: Bearer <access-token>` where the token is a\nmanaged identity access token.\n\nAcquire the token from the instance metadata service or Azure Identity SDK\nfor the managed identity attached to the calling workload.\n"}},"schemas":{"ServiceIdentityJWT":{"type":"object","required":["jwt","expires_at","audience"],"properties":{"jwt":{"type":"string","description":"Signed JWT string"},"expires_at":{"type":"string","format":"date-time","description":"JWT expiration time (RFC 3339)"},"audience":{"type":"string","description":"Intended audience (`engine` for database, `portal` for management API)","enum":["engine","portal"]}}},"Error":{"type":"object","properties":{"message":{"type":"string"}},"additionalProperties":true}}}}},"searchIndex":{"store":["tag/IAM","tag/IAM/operation/exchangeDatabaseJWT","tag/IAM/operation/exchangeAPIJWT","tag/IAM/operation/getCustomerJWKS"],"index":{"version":"2.3.9","fields":["title","description"],"fieldVectors":[["title/0",[0,0.53]],["description/0",[0,0.573,1,0.14,2,1.113,3,0.169]],["title/1",[1,0.08,3,0.097,4,0.097,5,0.641,6,0.641,7,0.192]],["description/1",[1,0.095,2,0.502,4,0.115,5,0.755,6,0.502,7,0.226,8,0.389,9,0.502,10,0.467,11,0.258,12,0.258,13,0.872,14,0.502,15,1.286,16,0.502,17,0.502,18,0.502,19,0.502,20,0.502,21,0.502,22,0.872,23,0.502,24,0.872,25,0.755,26,0.872,27,0.872,28,0.872,29,0.872,30,0.872,31,0.872,32,0.872,33,0.872,34,0.872,35,0.872,36,1.312,37,0.755,38,0.502,39,0.872,40,0.389,41,0.502,42,0.872,43,0.872,44,0.872,45,0.502,46,0.502,47,0.502,48,0.908,49,0.908,50,0.908,51,0.908,52,1.577,53,1.083,54,0.502,55,0.502,56,0.502,57,0.502,58,0.502,59,0.755,60,0.755,61,0.502,62,0.502,63,0.502,64,0.872]],["title/2",[1,0.08,3,0.097,4,0.097,7,0.192,65,0.641,66,0.641]],["description/2",[1,0.101,4,0.123,7,0.164,8,0.415,9,0.549,10,0.493,11,0.415,12,0.282,14,0.807,15,1.295,16,0.549,17,0.549,18,0.549,19,0.549,20,0.549,21,0.549,23,0.549,25,0.549,37,0.549,38,0.549,40,0.282,45,0.549,46,0.549,47,0.549,48,0.957,49,0.957,50,0.957,51,0.957,53,1.125,54,0.549,55,0.549,56,0.549,57,0.549,58,0.549,59,0.807,60,0.807,61,0.549,62,0.549,63,0.549,65,0.549,66,0.549,67,0.953,68,0.953,69,1.402,70,1.402,71,0.953,72,0.953,73,0.953,74,0.953,75,1.663,76,0.953]],["title/3",[7,0.178,77,1.035,78,1.035,79,0.596,80,1.035,81,1.035,82,0.596]],["description/3",[0,0.486,3,0.144,7,0.35,8,0.486,10,0.486,11,0.486,12,0.486,40,0.486,41,0.945,79,0.945,82,0.945,83,1.642,84,1.642,85,1.642,86,1.642,87,1.642,88,1.642]]],"invertedIndex":[["",{"_index":15,"title":{},"description":{"1":{},"2":{}}}],["404",{"_index":74,"title":{},"description":{"2":{}}}],["access",{"_index":16,"title":{},"description":{"1":{},"2":{}}}],["access-token",{"_index":63,"title":{},"description":{"1":{},"2":{}}}],["activ",{"_index":72,"title":{},"description":{"2":{}}}],["akia",{"_index":55,"title":{},"description":{"1":{},"2":{}}}],["api",{"_index":66,"title":{"2":{}},"description":{"2":{}}}],["auth/iam/api",{"_index":76,"title":{},"description":{"2":{}}}],["auth/iam/databas",{"_index":64,"title":{},"description":{"1":{}}}],["auth/oidc/op/customer/.well-known/jwks.json",{"_index":88,"title":{},"description":{"3":{}}}],["authent",{"_index":20,"title":{},"description":{"1":{},"2":{}}}],["author",{"_index":59,"title":{},"description":{"1":{},"2":{}}}],["aw",{"_index":47,"title":{},"description":{"1":{},"2":{}}}],["azur",{"_index":62,"title":{},"description":{"1":{},"2":{}}}],["bearer",{"_index":60,"title":{},"description":{"1":{},"2":{}}}],["bodi",{"_index":19,"title":{},"description":{"1":{},"2":{}}}],["caller",{"_index":39,"title":{},"description":{"1":{}}}],["caller'",{"_index":9,"title":{},"description":{"1":{},"2":{}}}],["carri",{"_index":26,"title":{},"description":{"1":{}}}],["client",{"_index":36,"title":{},"description":{"1":{}}}],["cloud",{"_index":1,"title":{"1":{},"2":{}},"description":{"0":{},"1":{},"2":{}}}],["cloud-princip",{"_index":69,"title":{},"description":{"2":{}}}],["compat",{"_index":44,"title":{},"description":{"1":{}}}],["components.securityschem",{"_index":28,"title":{},"description":{"1":{}}}],["credenti",{"_index":2,"title":{},"description":{"0":{},"1":{}}}],["curl",{"_index":49,"title":{},"description":{"1":{},"2":{}}}],["custom",{"_index":41,"title":{},"description":{"1":{},"3":{}}}],["databas",{"_index":5,"title":{"1":{}},"description":{"1":{}}}],["document",{"_index":85,"title":{},"description":{"3":{}}}],["empti",{"_index":18,"title":{},"description":{"1":{},"2":{}}}],["endpoint",{"_index":87,"title":{},"description":{"3":{}}}],["engin",{"_index":6,"title":{"1":{}},"description":{"1":{}}}],["exampl",{"_index":45,"title":{},"description":{"1":{},"2":{}}}],["exchang",{"_index":3,"title":{"1":{},"2":{}},"description":{"0":{},"3":{}}}],["exclus",{"_index":22,"title":{},"description":{"1":{}}}],["forward",{"_index":43,"title":{},"description":{"1":{}}}],["gcp",{"_index":58,"title":{},"description":{"1":{},"2":{}}}],["go",{"_index":35,"title":{},"description":{"1":{}}}],["h",{"_index":53,"title":{},"description":{"1":{},"2":{}}}],["header",{"_index":25,"title":{},"description":{"1":{},"2":{}}}],["http",{"_index":24,"title":{},"description":{"1":{}}}],["https://authsvc.singlestore.com/auth/iam/api",{"_index":75,"title":{},"description":{"2":{}}}],["https://authsvc.singlestore.com/auth/iam/databas",{"_index":52,"title":{},"description":{"1":{}}}],["iam",{"_index":0,"title":{"0":{}},"description":{"0":{},"3":{}}}],["ident",{"_index":4,"title":{"1":{},"2":{}},"description":{"1":{},"2":{}}}],["identity-token",{"_index":61,"title":{},"description":{"1":{},"2":{}}}],["includ",{"_index":42,"title":{},"description":{"1":{}}}],["issu",{"_index":82,"title":{"3":{}},"description":{"3":{}}}],["json",{"_index":77,"title":{"3":{}},"description":{}}],["jwt",{"_index":7,"title":{"1":{},"2":{},"3":{}},"description":{"1":{},"2":{},"3":{}}}],["key",{"_index":79,"title":{"3":{}},"description":{"3":{}}}],["link",{"_index":71,"title":{},"description":{"2":{}}}],["manag",{"_index":65,"title":{"2":{}},"description":{"2":{}}}],["match",{"_index":68,"title":{},"description":{"2":{}}}],["oidc",{"_index":84,"title":{},"description":{"3":{}}}],["on",{"_index":46,"title":{},"description":{"1":{},"2":{}}}],["option",{"_index":29,"title":{},"description":{"1":{}}}],["otherwis",{"_index":73,"title":{},"description":{"2":{}}}],["paramet",{"_index":32,"title":{},"description":{"1":{}}}],["perform",{"_index":21,"title":{},"description":{"1":{},"2":{}}}],["post",{"_index":51,"title":{},"description":{"1":{},"2":{}}}],["provid",{"_index":10,"title":{},"description":{"1":{},"2":{},"3":{}}}],["public",{"_index":83,"title":{},"description":{"3":{}}}],["queri",{"_index":31,"title":{},"description":{"1":{}}}],["refer",{"_index":34,"title":{},"description":{"1":{}}}],["request",{"_index":37,"title":{},"description":{"1":{},"2":{}}}],["resolv",{"_index":67,"title":{},"description":{"2":{}}}],["return",{"_index":11,"title":{},"description":{"1":{},"2":{},"3":{}}}],["see",{"_index":27,"title":{},"description":{"1":{}}}],["send",{"_index":17,"title":{},"description":{"1":{},"2":{}}}],["sent",{"_index":33,"title":{},"description":{"1":{}}}],["server",{"_index":38,"title":{},"description":{"1":{},"2":{}}}],["set",{"_index":80,"title":{"3":{}},"description":{}}],["shell",{"_index":48,"title":{},"description":{"1":{},"2":{}}}],["sign",{"_index":12,"title":{},"description":{"1":{},"2":{},"3":{}}}],["singlestor",{"_index":14,"title":{},"description":{"1":{},"2":{}}}],["suitabl",{"_index":13,"title":{},"description":{"1":{}}}],["us",{"_index":40,"title":{},"description":{"1":{},"2":{},"3":{}}}],["user",{"_index":70,"title":{},"description":{"2":{}}}],["valid",{"_index":81,"title":{"3":{}},"description":{}}],["valu",{"_index":86,"title":{},"description":{"3":{}}}],["verifi",{"_index":8,"title":{},"description":{"1":{},"2":{},"3":{}}}],["via",{"_index":23,"title":{},"description":{"1":{},"2":{}}}],["web",{"_index":78,"title":{"3":{}},"description":{}}],["workspacegroupid",{"_index":30,"title":{},"description":{"1":{}}}],["x",{"_index":50,"title":{},"description":{"1":{},"2":{}}}],["x-aws-access-key-id",{"_index":54,"title":{},"description":{"1":{},"2":{}}}],["x-aws-secret-access-key",{"_index":56,"title":{},"description":{"1":{},"2":{}}}],["x-aws-session-token",{"_index":57,"title":{},"description":{"1":{},"2":{}}}]],"pipeline":[]}},"options":{}};
+
+      var container = document.getElementById('redoc');
+      Redoc.hydrate(__redoc_state, container);
+
+      </script>
+</body>
+
+</html>
