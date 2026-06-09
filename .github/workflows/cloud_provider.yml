@@ -41,6 +41,10 @@ permissions:
 
 jobs:
   test:
+    # One concurrent SSH test run per physical host across all workflow runs.
+    concurrency:
+      group: cloud-test-host-${{ matrix.hostname }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: cloud-VMs
     strategy:
