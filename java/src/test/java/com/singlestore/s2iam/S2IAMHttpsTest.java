@@ -36,6 +36,11 @@ public class S2IAMHttpsTest {
   }
 
   @Test
+  void validateAuthServerURL_acceptsUppercaseHttps() throws Exception {
+    S2IAM.validateAuthServerURL("HTTPS://example.com/auth/iam/api", false);
+  }
+
+  @Test
   void getJWT_rejectsHttpWithoutAllowHttp() {
     FakeProvider fake = new FakeProvider();
     S2IAMException ex = assertThrows(S2IAMException.class,

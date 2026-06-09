@@ -345,13 +345,13 @@ public final class S2IAM {
       throw new S2IAMException("invalid server URL: " + rawUrl, e);
     }
     String scheme = uri.getScheme();
-    if ("https".equals(scheme)) {
+    if ("https".equalsIgnoreCase(scheme)) {
       return;
     }
-    if ("http".equals(scheme) && allowHttp) {
+    if ("http".equalsIgnoreCase(scheme) && allowHttp) {
       return;
     }
-    if ("http".equals(scheme)) {
+    if ("http".equalsIgnoreCase(scheme)) {
       throw new S2IAMException(
           "authentication server URL must use HTTPS; use Options.withAllowHttp() for testing");
     }
