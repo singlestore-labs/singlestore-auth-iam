@@ -3,13 +3,15 @@
 This directory documents the authentication service HTTP API for customers who prefer
 to integrate without the `s2iam` client libraries.
 
-## Source of truth
+## Published documentation
 
-- [`openapi.yaml`](openapi.yaml) — OpenAPI 3.0 specification
+- [API reference (Markdown)](api.md)
+- [API reference (HTML)](api.html)
+- [OpenAPI spec](openapi.yaml) — source of truth
 
-## Generate documentation
+## Regenerate documentation
 
-From the repository root (requires Node.js/npm for `npx`):
+After editing `openapi.yaml`, regenerate and commit the outputs:
 
 ```bash
 make docs-api          # HTML + Markdown
@@ -18,7 +20,7 @@ make docs-api-md       # Markdown only (Widdershins)
 make docs-api-lint     # Validate the OpenAPI spec
 ```
 
-Generated files are written to `docs/generated/` (gitignored).
+Requires Node.js/npm for `npx`.
 
 ## Quick reference
 
@@ -31,5 +33,5 @@ Generated files are written to `docs/generated/` (gitignored).
 **Host:** `https://authsvc.singlestore.com`
 
 Authentication uses cloud provider credentials in request headers (AWS key triple,
-GCP identity token, or Azure managed-identity bearer token). See the OpenAPI spec
-for details and examples.
+GCP identity token, or Azure managed-identity bearer token). See the [API reference](api.md)
+for details.

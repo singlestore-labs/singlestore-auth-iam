@@ -71,7 +71,7 @@ help:
 	@echo "  make clean                                Clean build artifacts"
 	@echo ""
 	@echo "API Documentation:"
-	@echo "  make docs-api                             Generate HTML + Markdown from OpenAPI"
+	@echo "  make docs-api                             Regenerate docs/api/api.html and api.md"
 	@echo "  make docs-api-html                        Generate HTML (Redoc) only"
 	@echo "  make docs-api-md                          Generate Markdown (Widdershins) only"
 	@echo "  make docs-api-lint                        Validate docs/api/openapi.yaml"
@@ -314,7 +314,7 @@ format-python:
 
 # API documentation (OpenAPI → HTML/Markdown; requires Node.js for npx)
 OPENAPI_SPEC := docs/api/openapi.yaml
-DOCS_GEN_DIR := docs/generated
+DOCS_GEN_DIR := docs/api
 REDOCLY_CLI_VERSION ?= 1.28.2
 WIDDERSHINS_VERSION ?= 4.0.1
 
