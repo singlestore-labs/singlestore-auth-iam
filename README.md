@@ -9,8 +9,7 @@ This repository contains tools for the SingleStore IAM authentication system.
 
 ## Current Status
 
-JWTs for engine access are ready for testing.
-JWTs for the management API are not yet available.
+JWTs for engine (database) access and the management API are available.
 APIs and language bindings may change before this is considered generally available.
 
 Current language support: Go, Python, Java, shell.

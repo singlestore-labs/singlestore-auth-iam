@@ -28,8 +28,8 @@ the authentication service using the headers documented below.
 **Production host:** `https://authsvc.singlestore.com`
 
 **Status**
-- Database (engine) JWTs: available for testing; APIs may change before GA.
-- Management API JWTs: not yet generally available.
+- Database (engine) JWTs: available; APIs may change before GA.
+- Management API JWTs: available; APIs may change before GA.
 
 **Related endpoints**
 - JWT signing keys (JWKS): `GET /auth/oidc/op/Customer/.well-known/jwks.json`
@@ -160,7 +160,8 @@ cloud-principal user, and returns a signed JWT for management API access.
 
 Send an empty body. Authentication is performed via cloud provider headers.
 
-**Note:** Management API JWTs are not yet generally available.
+The verified identity must be linked to an active cloud-principal user in
+SingleStore; otherwise the server returns `404`.
 
 > Example responses
 

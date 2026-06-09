@@ -32,6 +32,9 @@ Requires Node.js/npm for `npx`.
 
 **Host:** `https://authsvc.singlestore.com`
 
+Database (engine) and management API JWTs are both available. APIs may change
+before general availability.
+
 Authentication uses cloud provider credentials in request headers (AWS key triple,
 GCP identity token, or Azure managed-identity bearer token). See the [API reference](api.md)
 for details.
