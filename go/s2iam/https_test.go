@@ -59,7 +59,7 @@ func TestValidateAuthServerURL(t *testing.T) {
 func TestGetAPIJWT_RejectsHTTPWithoutAllowHTTP(t *testing.T) {
 	t.Parallel()
 
-	_, err := GetAPIJWT(t.Context(), WithServerURL("http://localhost:8080/auth/iam/:jwtType"))
+	_, err := GetAPIJWT(context.Background(), WithServerURL("http://localhost:8080/auth/iam/:jwtType"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "authentication server URL must use HTTPS")
 }
@@ -89,7 +89,7 @@ func TestGetJWT_HTTPURLEnforcement(t *testing.T) {
 
 	serverURL := server.URL + "/auth/iam/:jwtType"
 	stub := httpsTestStubProvider{}
-	ctx := t.Context()
+	ctx := context.Background()
 
 	t.Run("rejects http without allowHTTP", func(t *testing.T) {
 		t.Parallel()
