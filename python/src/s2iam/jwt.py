@@ -35,6 +35,7 @@ async def get_jwt(
             Only used for database JWTs. When None, the JWT may have broader access.
         timeout (float): Timeout in seconds for the request
         server_url (Optional[str]): Override the default server URL
+        allow_http (bool): Permit http:// server URLs (for local testing only; default False)
         logger (Optional[Logger]): Logger instance for debug output
 
     Returns:
@@ -136,6 +137,7 @@ async def get_jwt_database(
     Args:
         workspace_group_id: Workspace group ID (optional - can be None or empty string)
         server_url: Authentication server URL (defaults to production)
+        allow_http: Permit http:// server URLs (for local testing only; default False)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
@@ -176,6 +178,7 @@ async def get_jwt_api(
 
     Args:
         server_url: Authentication server URL (defaults to production)
+        allow_http: Permit http:// server URLs (for local testing only; default False)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT

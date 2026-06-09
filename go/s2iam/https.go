@@ -18,7 +18,7 @@ func validateAuthServerURL(rawURL string, allowHTTP bool) (*url.URL, error) {
 		if allowHTTP {
 			return uri, nil
 		}
-		return nil, errors.New("authentication server URL must use HTTPS; use WithAllowHTTP for testing")
+		return nil, errors.New("authentication server URL must use HTTPS; use WithAllowHTTP() for testing")
 	default:
 		return nil, errors.Errorf("authentication server URL must use HTTPS (got scheme %q)", uri.Scheme)
 	}
