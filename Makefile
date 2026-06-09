@@ -315,6 +315,9 @@ format-python:
 # API documentation (OpenAPI → HTML/Markdown; requires Node.js for npx)
 OPENAPI_SPEC := docs/api/openapi.yaml
 DOCS_GEN_DIR := docs/api
+# Rendered HTML via Redoc viewer + raw openapi.yaml (works without GitHub Pages).
+DOCS_HTML_URL := https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/singlestore-labs/singlestore-auth-iam/main/docs/api/openapi.yaml
+# Optional self-hosted URL after enabling GitHub Pages (see docs/api/README.md).
 DOCS_PAGES_URL := https://singlestore-labs.github.io/singlestore-auth-iam/
 REDOCLY_CLI_VERSION ?= 1.28.2
 WIDDERSHINS_VERSION ?= 4.0.1
@@ -330,8 +333,8 @@ docs-api-html: $(OPENAPI_SPEC)
 	@mkdir -p $(DOCS_GEN_DIR)
 	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) build-docs $(OPENAPI_SPEC) -o $(DOCS_GEN_DIR)/api.html
 	cp $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
-	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (Pages entrypoint)"
-	@echo "  Published URL (after GitHub Pages deploy): $(DOCS_PAGES_URL)"
+	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (for optional GitHub Pages deploy)"
+	@echo "  Rendered HTML link (Redoc viewer): $(DOCS_HTML_URL)"
 
 docs-api-md: $(OPENAPI_SPEC)
 	@echo "Generating API Markdown (Widdershins)..."
