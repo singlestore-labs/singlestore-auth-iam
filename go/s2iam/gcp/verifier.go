@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,21 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"google.golang.org/api/idtoken"
 )
+
+var (
+	gcpServiceAccountRE   = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+@[a-zA-Z0-9\-_.]+\.iam\.gserviceaccount\.com$`)
+	gcpNumericPrincipalRE = regexp.MustCompile(`^\d{10,}$`)
+)
+
+func validatePrincipal(principal string) error {
+	if principal == "" {
+		return errors.New("principal must not be empty")
+	}
+	if gcpServiceAccountRE.MatchString(principal) || gcpNumericPrincipalRE.MatchString(principal) {
+		return nil
+	}
+	return errors.Errorf("invalid GCP principal: %q", principal)
+}
 
 // GCPVerifier implements the models.CloudProviderVerifier interface for GCP
 type GCPVerifier struct {
@@ -232,6 +248,10 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 		if logger != nil {
 			logger.Logf("DEBUG: Using subject claim as identifier: %s", sub)
 		}
+	}
+
+	if err := validatePrincipal(identifier); err != nil {
+		return nil, err
 	}
 
 	// Extract region and resource type from google section if available

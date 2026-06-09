@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,6 +16,18 @@ const (
 	// Azure OIDC well-known configuration
 	defaultAzureTenant = "common"
 )
+
+var azurePrincipalRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+func validatePrincipal(principal string) error {
+	if principal == "" {
+		return errors.New("principal must not be empty")
+	}
+	if !azurePrincipalRE.MatchString(principal) {
+		return errors.Errorf("invalid Azure principal: %q", principal)
+	}
+	return nil
+}
 
 // AzureVerifier implements the CloudProviderVerifier interface for Azure
 type AzureVerifier struct {
@@ -209,6 +222,12 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 			logger.Logf("Failed to extract principal ID: %v", err)
 		}
 		return nil, errors.Errorf("failed to extract principal ID: %w", err)
+	}
+	if err := validatePrincipal(principalID); err != nil {
+		if logger != nil {
+			logger.Logf("Invalid Azure principal: %v", err)
+		}
+		return nil, err
 	}
 
 	// Extract additional information
