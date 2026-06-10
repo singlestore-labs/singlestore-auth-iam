@@ -52,6 +52,7 @@ help:
 	@echo "    make ssh-acquire-lock                   Acquire per-host cloud test lock on HOST"
 	@echo "    make ssh-release-lock                   Release per-host cloud test lock on HOST"
 	@echo "    make ssh-clear-lock                     Clear stale per-host cloud test lock on HOST"
+	@echo "      Local test: HOST=localhost make ssh-acquire-lock (no SSH; LOCK_* optional)"
 	@echo ""
 	@echo "Development Setup:"
 	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python + Java)"
@@ -77,6 +78,11 @@ help:
 	@echo "Required for Remote Testing:"
 	@echo "  HOST=user@hostname                        Target host for remote testing"
 	@echo "  ENV_VARS=\"VAR1=val1 VAR2=val2\"           Environment variables for remote tests"
+	@echo ""
+	@echo "Per-host Cloud Test Lock (ssh-acquire/release/clear-lock):"
+	@echo "  LOCK_DIR=/tmp/s2iam-cloud-test.lock.d     Lock directory on HOST (default)"
+	@echo "  LOCK_RUN_ID LOCK_RUN_ATTEMPT LOCK_REF     Optional metadata for lock info file"
+	@echo "  LOCK_MATRIX LOCK_HOSTNAME                 Optional metadata for lock info file"
 	@echo ""
 	@echo "For Cloud Provider Specific Targets (set externally):"
 	@echo "  AWS_POSITIVE_HOST=user@hostname           AWS positive test host"
@@ -316,6 +322,8 @@ SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
 LOCK_DIR ?= /tmp/s2iam-cloud-test.lock.d
 LOCK_MAX_WAIT_SECONDS ?= 7200
 LOCK_INTERVAL ?= 30
+# Hostname portion of HOST (user@host -> host); localhost skips SSH for local lock testing.
+HOST_SHORT := $(lastword $(subst @, ,$(HOST)))
 
 # SSH operations (low-level operations for copying code and running tests)
 # CI target - copy code to remote host
@@ -374,48 +382,34 @@ ssh-cleanup-remote: check-host
 
 # Per-host cloud test locks (atomic mkdir on LOCK_DIR; info file for debugging).
 # Runner-side targets: lock is acquired before ssh-copy-to-remote deploys this Makefile.
+# HOST=localhost (or 127.0.0.1) runs lock commands locally without SSH.
 ssh-acquire-lock: check-host
 	@echo "Acquiring lock on $(HOST) at $(LOCK_DIR)..."
-	@set -euo pipefail; \
-	max_wait=$(LOCK_MAX_WAIT_SECONDS); \
-	interval=$(LOCK_INTERVAL); \
-	elapsed=0; \
-	while ! ssh $(SSH_OPTS) $(HOST) "mkdir '$(LOCK_DIR)' 2>/dev/null"; do \
-		echo "Lock held on $(HOST); waiting $${interval}s..."; \
-		ssh $(SSH_OPTS) $(HOST) "cat '$(LOCK_DIR)/info' 2>/dev/null || echo '(no lock info)'" || true; \
-		sleep "$${interval}"; \
-		elapsed=$$((elapsed + interval)); \
-		if [ "$${elapsed}" -ge "$${max_wait}" ]; then \
-			echo "Timed out waiting for lock on $(HOST) after $${max_wait}s"; \
-			exit 1; \
-		fi; \
+	@bash -eu -o pipefail -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; \
+	max_wait=$(LOCK_MAX_WAIT_SECONDS); interval=$(LOCK_INTERVAL); elapsed=0; \
+	while ! _run "mkdir '"'"'$(LOCK_DIR)'"'"' 2>/dev/null"; do \
+	  echo "Lock held on $(HOST); waiting $$interval s..."; \
+	  _run "cat '"'"'$(LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'" || true; \
+	  sleep "$$interval"; elapsed=$$((elapsed + interval)); \
+	  if [ "$$elapsed" -ge "$$max_wait" ]; then echo "Timed out waiting for lock on $(HOST) after $$max_wait s"; exit 1; fi; \
 	done; \
-	ssh $(SSH_OPTS) $(HOST) "printf '%s\n' \
-		'run_id=$(LOCK_RUN_ID)' \
-		'run_attempt=$(LOCK_RUN_ATTEMPT)' \
-		'ref=$(LOCK_REF)' \
-		'matrix=$(LOCK_MATRIX)' \
-		'hostname=$(LOCK_HOSTNAME)' \
-		\"acquired_utc=\$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
-		> '$(LOCK_DIR)/info'"; \
-	echo "Lock acquired on $(HOST)"
+	_run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; \
+	echo "Lock acquired on $(HOST)"'
 
 ssh-release-lock: check-host
 	@echo "Releasing lock on $(HOST)..."
-	ssh $(SSH_OPTS) $(HOST) "rm -rf '$(LOCK_DIR)'"
+	@bash -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"'
 	@echo "Lock released on $(HOST)"
 
 ssh-clear-lock: check-host
-	@set -euo pipefail; \
-	ssh $(SSH_OPTS) $(HOST) " \
-		if [ -d '$(LOCK_DIR)' ]; then \
-			echo 'Stale lock on $(LOCK_HOSTNAME):'; \
-			cat '$(LOCK_DIR)/info' 2>/dev/null || echo '(no lock info)'; \
-			rm -rf '$(LOCK_DIR)'; \
-			echo 'Lock cleared.'; \
-		else \
-			echo 'No lock present on $(LOCK_HOSTNAME).'; \
-		fi \
-	"
+	@bash -eu -o pipefail -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; \
+	if _run "[ -d '"'"'$(LOCK_DIR)'"'"' ]"; then \
+	  echo "Stale lock on $(LOCK_HOSTNAME):"; \
+	  _run "cat '"'"'$(LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
+	  _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"; \
+	  echo "Lock cleared."; \
+	else \
+	  echo "No lock present on $(LOCK_HOSTNAME)."; \
+	fi'
 
 
