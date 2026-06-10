@@ -5,6 +5,7 @@ to integrate without the `s2iam` client libraries.
 
 ## Published documentation
 
+- [Authentication guide](AUTHENTICATION.md) — how to obtain cloud credentials, curl examples, common mistakes
 - [API reference (HTML)](https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/singlestore-labs/singlestore-auth-iam/main/docs/api/openapi.yaml) — rendered via Redoc (reads `openapi.yaml` from this repo)
 - [API reference (Markdown)](api.md) — readable in the GitHub repo browser
 - [OpenAPI spec](openapi.yaml) — source of truth
@@ -48,5 +49,6 @@ Database (engine) and management API JWTs are both available. APIs may change
 before general availability.
 
 Authentication uses cloud provider credentials in request headers (AWS key triple,
-GCP identity token, or Azure managed-identity bearer token). See the [API reference](api.md)
-for details.
+GCP identity token, or Azure managed-identity bearer token). See the
+[Authentication guide](AUTHENTICATION.md) for credential acquisition and curl examples,
+or the [API reference](api.md) for endpoint schemas.

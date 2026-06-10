@@ -35,17 +35,18 @@ the authentication service using the headers documented below.
 - JWT signing keys (JWKS): `GET /auth/oidc/op/Customer/.well-known/jwks.json`
 - Validate returned JWTs against this JWKS after exchange.
 
-**Authentication (overview)**
+**Authentication model**
 
-Send credentials for **one** cloud provider on each request:
+This is a two-phase exchange:
 
-| Provider | Headers |
-|----------|---------|
-| AWS | `X-AWS-Access-Key-ID`, `X-AWS-Secret-Access-Key`, `X-AWS-Session-Token` (all three required) |
-| GCP | `Authorization: Bearer <identity-token>` (workload identity JWT) |
-| Azure | `Authorization: Bearer <access-token>` (managed identity token) |
+1. **Inbound (request):** Send credentials for **one** cloud provider (AWS, GCP, or
+   Azure) in HTTP headers. These prove who the caller is in the cloud.
+2. **Outbound (response):** On success, the JSON body contains a SingleStore JWT
+   (`jwt` field). Use that token for downstream SingleStore services — it is **not**
+   sent back on the `Authorization` header of this request.
 
-See the **Authentication** section below and per-endpoint examples for curl samples.
+Pick exactly one provider per request. See [AUTHENTICATION.md](AUTHENTICATION.md)
+for credential acquisition, audience requirements, curl examples, and common mistakes.
 
 Base URLs:
 
@@ -55,26 +56,32 @@ License: <a href="https://www.singlestore.com/terms/">Proprietary</a>
 
 # Authentication
 
-* API Key (awsCredentials)
-    - Parameter Name: **X-AWS-Access-Key-ID**, in: header. **AWS.** Send temporary credentials using all three headers:
-`X-AWS-Access-Key-ID`, `X-AWS-Secret-Access-Key`, and `X-AWS-Session-Token`.
+* API Key (awsAccessKeyId)
+    - Parameter Name: **X-AWS-Access-Key-ID**, in: header. **AWS (required with secret and session token).** Temporary access key ID from
+the instance/task role, IRSA, or STS AssumeRole on the calling workload.
+All three AWS headers must be present on the same request.
 
-Obtain credentials from the instance/task role, IRSA, or STS AssumeRole on
-the calling workload before POSTing to this API.
+* API Key (awsSecretAccessKey)
+    - Parameter Name: **X-AWS-Secret-Access-Key**, in: header. **AWS (required with access key ID and session token).** Secret access key
+paired with the access key ID above.
 
-* API Key (gcpIdentityToken)
-    - Parameter Name: **Authorization**, in: header. **GCP.** Send `Authorization: Bearer <identity-token>` where the token is a
-workload identity JWT.
+* API Key (awsSessionToken)
+    - Parameter Name: **X-AWS-Session-Token**, in: header. **AWS (required with access key ID and secret).** Session token from temporary
+credentials (STS, instance profile, or IRSA). Long-lived IAM user keys without
+a session token are not supported for this API.
+
+- HTTP Authentication, scheme: bearer **GCP.** Cloud provider identity token sent as `Authorization: Bearer <token>`.
+This is a workload identity JWT obtained from the GCP metadata server or
+IAM Credentials API — **not** the SingleStore JWT returned in the response body.
 
 Request the identity token with audience `https://authsvc.singlestore.com`
 (or the audience configured for your environment).
 
-* API Key (azureIdentityToken)
-    - Parameter Name: **Authorization**, in: header. **Azure.** Send `Authorization: Bearer <access-token>` where the token is a
-managed identity access token.
+- HTTP Authentication, scheme: bearer **Azure.** Cloud provider access token sent as `Authorization: Bearer <token>`.
+This is a managed identity token from the Azure Instance Metadata Service or
+Azure Identity SDK — **not** the SingleStore JWT returned in the response body.
 
-Acquire the token from the instance metadata service or Azure Identity SDK
-for the managed identity attached to the calling workload.
+Acquire the token for resource `https://management.azure.com/`.
 
 <h1 id="singlestore-cloud-iam-authentication-api-iam">IAM</h1>
 
@@ -90,7 +97,9 @@ Cloud IAM credential exchange
 # You can also use wget
 curl -X POST https://authsvc.singlestore.com/auth/iam/database \
   -H 'Accept: application/json' \
-  -H 'X-AWS-Access-Key-ID: API_KEY'
+  -H 'X-AWS-Access-Key-ID: API_KEY' \
+  -H 'X-AWS-Secret-Access-Key: API_KEY' \
+  -H 'X-AWS-Session-Token: API_KEY'
 
 ```
 
@@ -106,27 +115,8 @@ The optional `workspaceGroupID` query parameter is sent by the reference
 Go client for database JWT requests. The server verifies identity from
 headers; callers using custom clients may include it for forward compatibility.
 
-**Example requests (use one provider):**
-
-AWS:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
-  -H 'X-AWS-Access-Key-ID: AKIA...' \
-  -H 'X-AWS-Secret-Access-Key: ...' \
-  -H 'X-AWS-Session-Token: ...'
-```
-
-GCP:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
-  -H 'Authorization: Bearer <identity-token>'
-```
-
-Azure:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
-  -H 'Authorization: Bearer <access-token>'
-```
+See [AUTHENTICATION.md](AUTHENTICATION.md) and the code samples below for
+per-provider curl examples.
 
 <h3 id="exchange-cloud-identity-for-a-database-(engine)-jwt-parameters">Parameters</h3>
 
@@ -172,7 +162,7 @@ curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
 
 <aside class="warning">
 To perform this operation, you must be authenticated by means of one of the following methods:
-awsCredentials, gcpIdentityToken, azureIdentityToken
+awsAccessKeyId & awsSecretAccessKey & awsSessionToken, gcpWorkloadIdentityToken, azureManagedIdentityToken
 </aside>
 
 ## Exchange cloud identity for a management API JWT
@@ -185,7 +175,9 @@ awsCredentials, gcpIdentityToken, azureIdentityToken
 # You can also use wget
 curl -X POST https://authsvc.singlestore.com/auth/iam/api \
   -H 'Accept: application/json' \
-  -H 'X-AWS-Access-Key-ID: API_KEY'
+  -H 'X-AWS-Access-Key-ID: API_KEY' \
+  -H 'X-AWS-Secret-Access-Key: API_KEY' \
+  -H 'X-AWS-Session-Token: API_KEY'
 
 ```
 
@@ -199,27 +191,8 @@ Send an empty body. Authentication is performed via cloud provider headers.
 The verified identity must be linked to an active cloud-principal user in
 SingleStore; otherwise the server returns `404`.
 
-**Example requests (use one provider):**
-
-AWS:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
-  -H 'X-AWS-Access-Key-ID: AKIA...' \
-  -H 'X-AWS-Secret-Access-Key: ...' \
-  -H 'X-AWS-Session-Token: ...'
-```
-
-GCP:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
-  -H 'Authorization: Bearer <identity-token>'
-```
-
-Azure:
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
-  -H 'Authorization: Bearer <access-token>'
-```
+See [AUTHENTICATION.md](AUTHENTICATION.md) and the code samples below for
+per-provider curl examples.
 
 > Example responses
 
@@ -260,7 +233,7 @@ curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
 
 <aside class="warning">
 To perform this operation, you must be authenticated by means of one of the following methods:
-awsCredentials, gcpIdentityToken, azureIdentityToken
+awsAccessKeyId & awsSecretAccessKey & awsSessionToken, gcpWorkloadIdentityToken, azureManagedIdentityToken
 </aside>
 
 ## JSON Web Key Set for validating issued JWTs
