@@ -39,20 +39,24 @@ permissions:
 # Python: Uses automated validation framework with coverage reporting (XML format)
 # Coverage from all environments (no CSP, AWS, Azure, GCP) is uploaded to Codecov
 
+# Two environments avoid double approval:
+# - cloud-VMs-gate (approve job): required reviewers only, no secrets. Create in
+#   Settings → Environments with the same reviewers as cloud-VMs if it does not exist.
+# - cloud-VMs (test job): SSH key secrets, no required reviewers (auto-proceeds after gate).
 jobs:
   approve:
-    # Single approval unlocks all matrix hosts for this workflow run.
+    # Single gate approval unlocks all matrix hosts for this workflow run.
     # Concurrency must not be acquired here; it would block other runs
     # while waiting for environment approval instead of during SSH testing.
     runs-on: ubuntu-latest
-    environment: cloud-VMs
+    environment: cloud-VMs-gate
     steps:
       - name: Approved for cloud VM testing
         run: echo "approved"
 
   test:
     needs: approve
-    # cloud-VMs on test supplies SSH secrets; approve ensures approval before test jobs queue for concurrency.
+    # cloud-VMs supplies SSH secrets; no reviewers so test proceeds after gate approval.
     environment: cloud-VMs
     # One concurrent SSH test run per physical host across all workflow runs.
     concurrency:
