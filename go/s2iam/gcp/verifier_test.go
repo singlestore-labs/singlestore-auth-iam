@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 )
 
 func TestValidatePrincipal(t *testing.T) {

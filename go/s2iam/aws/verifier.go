@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 

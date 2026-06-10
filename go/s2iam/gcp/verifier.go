@@ -12,7 +12,7 @@ import (
 
 	"github.com/memsql/errors"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/azure"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"google.golang.org/api/idtoken"
 )

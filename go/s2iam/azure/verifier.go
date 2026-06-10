@@ -9,7 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/memsql/errors"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
