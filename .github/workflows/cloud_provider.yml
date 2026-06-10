@@ -41,11 +41,11 @@ permissions:
 
 jobs:
   test:
-    # One concurrent SSH test run per physical host across all workflow runs.
-    # Concurrency is evaluated when the job queues (including while waiting for
-    # environment approval) — a known GitHub Actions limitation.
+    # Single test job with matrix over cloud VM hosts. SSH keys remain environment secrets.
+    # Per-matrix concurrency: one group for all matrix legs on this ref (not per host).
+    # Evaluated when jobs queue, including while waiting for environment approval.
     concurrency:
-      group: cloud-test-host-${{ matrix.hostname }}
+      group: cloud-provider-test-${{ github.ref }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: cloud-VMs
