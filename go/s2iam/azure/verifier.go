@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
@@ -20,6 +21,9 @@ const (
 var azurePrincipalRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func validatePrincipal(principal string) error {
+	if !gates.S2IAMValidatePrincipal.Enabled() {
+		return nil
+	}
 	if principal == "" {
 		return errors.New("principal must not be empty")
 	}

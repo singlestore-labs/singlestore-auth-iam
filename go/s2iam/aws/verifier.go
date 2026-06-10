@@ -10,12 +10,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
 var awsPrincipalRE = regexp.MustCompile(`^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:\d{12}:.+$`)
 
 func validatePrincipal(principal string) error {
+	if !gates.S2IAMValidatePrincipal.Enabled() {
+		return nil
+	}
 	if principal == "" {
 		return errors.New("principal must not be empty")
 	}
