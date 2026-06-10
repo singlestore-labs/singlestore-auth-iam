@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	gcpServiceAccountRE   = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+@[a-zA-Z0-9\-_.]+\.iam\.gserviceaccount\.com$`)
+	gcpServiceAccountRE   = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+@([a-zA-Z0-9\-_.]+\.iam\.gserviceaccount\.com|developer\.gserviceaccount\.com)$`)
 	gcpNumericPrincipalRE = regexp.MustCompile(`^\d{10,}$`)
 )
 
@@ -255,6 +255,9 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 	}
 
 	if err := validatePrincipal(identifier); err != nil {
+		if logger != nil {
+			logger.Logf("Invalid GCP principal: %v", err)
+		}
 		return nil, err
 	}
 
