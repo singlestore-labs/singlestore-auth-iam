@@ -40,13 +40,23 @@ permissions:
 # Coverage from all environments (no CSP, AWS, Azure, GCP) is uploaded to Codecov
 
 jobs:
+  approve:
+    # Single approval unlocks all matrix hosts for this workflow run.
+    # Concurrency must not be acquired here; it would block other runs
+    # while waiting for environment approval instead of during SSH testing.
+    runs-on: ubuntu-latest
+    environment: cloud-VMs
+    steps:
+      - name: Approved for cloud VM testing
+        run: echo "approved"
+
   test:
+    needs: approve
     # One concurrent SSH test run per physical host across all workflow runs.
     concurrency:
       group: cloud-test-host-${{ matrix.hostname }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    environment: cloud-VMs
     strategy:
       matrix:
         include:
