@@ -52,6 +52,8 @@ jobs:
 
   test:
     needs: approve
+    # cloud-VMs on test supplies SSH secrets; approve ensures approval before test jobs queue for concurrency.
+    environment: cloud-VMs
     # One concurrent SSH test run per physical host across all workflow runs.
     concurrency:
       group: cloud-test-host-${{ matrix.hostname }}
