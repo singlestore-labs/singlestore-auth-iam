@@ -102,6 +102,7 @@ async def validate_identity_and_jwt(
     token = await s2iam.get_jwt_database(
         workspace_group_id=workspace_group_id,
         server_url=server_url,
+        allow_http=True,
         provider=provider,
         additional_params=additional_params,
     )

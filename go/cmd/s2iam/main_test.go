@@ -128,6 +128,7 @@ func TestRun_Success(t *testing.T) {
 		JWTType:          "database",
 		WorkspaceGroupID: "test-workspace",
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
+		AllowHTTP:        true,
 		Timeout:          10 * time.Second,
 	}
 
@@ -201,6 +202,7 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 		JWTType:          "database",
 		WorkspaceGroupID: "test-workspace",
 		ServerURL:        server.URL + "/auth/iam/:jwtType",
+		AllowHTTP:        true,
 		EnvName:          "TOKEN",
 		EnvStatus:        "STATUS",
 		Timeout:          10 * time.Second,
@@ -253,10 +255,22 @@ func TestRealMain(t *testing.T) {
 				"cmd",
 				"--workspace-group-id", "test-workspace",
 				"--server-url", "http://mock-server/auth/iam/:jwtType", // Will be replaced if test runs
+				"--allow-http",
 			},
 			exitCode: 0,
 			wantErr:  false,
 			wantOut:  "test-jwt",
+		},
+		{
+			name: "rejects http server url without allow-http",
+			args: []string{
+				"cmd",
+				"--workspace-group-id", "test-workspace",
+				"--server-url", "http://mock-server/auth/iam/:jwtType", // Will be replaced if test runs
+			},
+			exitCode: 1,
+			wantErr:  true,
+			errMsg:   "authentication server URL must use HTTPS",
 		},
 	}
 
@@ -336,7 +350,13 @@ func TestRealMain(t *testing.T) {
 
 	// Update server URL in cloud tests
 	for i := range cloudTests {
-		cloudTests[i].args[len(cloudTests[i].args)-1] = server.URL + "/auth/iam/:jwtType"
+		args := cloudTests[i].args
+		for j := 0; j < len(args)-1; j++ {
+			if args[j] == "--server-url" {
+				args[j+1] = server.URL + "/auth/iam/:jwtType"
+				break
+			}
+		}
 	}
 
 	// Run cloud-dependent tests
@@ -367,6 +387,14 @@ func TestRealMain(t *testing.T) {
 			var buf bytes.Buffer
 			_, _ = buf.ReadFrom(r)
 			output := buf.String()
+
+			if tt.wantErr {
+				assert.Error(t, err, "Expected an error for test case: %s", tt.name)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+				return
+			}
 
 			assert.NoError(t, err, "Unexpected error for test case: %s: %v", tt.name, err)
 			assert.Contains(t, output, tt.wantOut)

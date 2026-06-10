@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -39,6 +38,7 @@ type jwtOptions struct {
 	JWTType              JWTType
 	WorkspaceGroupID     string
 	ServerURL            string
+	AllowHTTP            bool
 	Provider             models.CloudProviderClient
 	AdditionalParams     map[string]string
 	AssumeRoleIdentifier string
@@ -48,6 +48,13 @@ type jwtOptions struct {
 func WithServerURL(serverURL string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.ServerURL = serverURL
+	})
+}
+
+// WithAllowHTTP permits http:// authentication server URLs. Intended for local testing only.
+func WithAllowHTTP() JWTOption {
+	return jwtOption(func(o *jwtOptions) {
+		o.AllowHTTP = true
 	})
 }
 
@@ -100,6 +107,11 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 		return "", errors.New("server URL is required")
 	}
 
+	probeURL := strings.ReplaceAll(strings.ReplaceAll(jwtOpts.ServerURL, ":cloudProvider", "aws"), ":jwtType", string(jwtOpts.JWTType))
+	if _, err := validateAuthServerURL(probeURL, jwtOpts.AllowHTTP); err != nil {
+		return "", err
+	}
+
 	// Auto-detect provider if not specified
 	if jwtOpts.Provider == nil {
 		var err error
@@ -125,9 +137,9 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	targetURL = strings.ReplaceAll(targetURL, ":cloudProvider", string(identity.Provider))
 	targetURL = strings.ReplaceAll(targetURL, ":jwtType", string(jwtOpts.JWTType))
 
-	uri, err := url.Parse(targetURL)
+	uri, err := validateAuthServerURL(targetURL, jwtOpts.AllowHTTP)
 	if err != nil {
-		return "", errors.Errorf("invalid server URL: %w", err)
+		return "", err
 	}
 
 	// Add query parameters

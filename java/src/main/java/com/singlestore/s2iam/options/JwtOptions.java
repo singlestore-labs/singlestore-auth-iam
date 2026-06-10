@@ -12,6 +12,7 @@ public class JwtOptions extends ProviderOptions {
   public JWTType jwtType;
   public String workspaceGroupId;
   public String serverUrl;
+  public boolean allowHttp;
   public CloudProviderClient provider;
   public Map<String, String> additionalParams = new HashMap<>();
   public String assumeRoleIdentifier;

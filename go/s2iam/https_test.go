@@ -1,0 +1,55 @@
+package s2iam
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+type httpsTestStubProvider struct{}
+
+func (httpsTestStubProvider) Detect(context.Context) error { return nil }
+func (httpsTestStubProvider) FastDetect() error            { return nil }
+func (httpsTestStubProvider) GetType() models.CloudProviderType {
+	return models.ProviderAWS
+}
+func (p httpsTestStubProvider) AssumeRole(string) models.CloudProviderClient { return p }
+func (httpsTestStubProvider) GetIdentityHeaders(context.Context, map[string]string) (map[string]string, *models.CloudIdentity, error) {
+	return map[string]string{"X-Stub": "1"}, &models.CloudIdentity{
+		Provider:   models.ProviderAWS,
+		Identifier: "arn:aws:iam::123456789012:role/test",
+	}, nil
+}
+
+func TestGetJWT_HTTPURLEnforcement(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"jwt": "header.payload.sig"})
+	}))
+	t.Cleanup(server.Close)
+
+	serverURL := server.URL + "/auth/iam/:jwtType"
+	stub := httpsTestStubProvider{}
+	ctx := context.Background()
+
+	t.Run("rejects http without allowHTTP", func(t *testing.T) {
+		t.Parallel()
+		_, err := GetAPIJWT(ctx, WithServerURL(serverURL), WithProvider(stub))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "authentication server URL must use HTTPS")
+	})
+
+	t.Run("allows http with allowHTTP", func(t *testing.T) {
+		t.Parallel()
+		token, err := GetAPIJWT(ctx, WithServerURL(serverURL), WithAllowHTTP(), WithProvider(stub))
+		require.NoError(t, err)
+		assert.Equal(t, "header.payload.sig", token)
+	})
+}

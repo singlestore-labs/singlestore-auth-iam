@@ -6,6 +6,7 @@ import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
 import com.singlestore.s2iam.exceptions.S2IAMException;
 import com.singlestore.s2iam.options.ServerUrlOption;
+import com.singlestore.s2iam.options.Options;
 import java.nio.file.Path;
 import org.junit.jupiter.api.*;
 
@@ -51,7 +52,7 @@ public class S2IAMJwtErrorCasesTest {
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-empty-jwt");
     base.start();
     S2IAMException ex = assertThrows(S2IAMException.class,
-        () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url())));
+        () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url()), Options.withAllowHttp()));
     assertTrue(ex.getMessage().contains("empty"));
   }
 
@@ -77,7 +78,7 @@ public class S2IAMJwtErrorCasesTest {
     base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-error", "-error-code", "500");
     base.start();
     S2IAMException ex = assertThrows(S2IAMException.class,
-        () -> S2IAM.getAPIJWT(ServerUrlOption.of(url())));
+        () -> S2IAM.getAPIJWT(ServerUrlOption.of(url()), Options.withAllowHttp()));
     assertTrue(ex.getMessage().contains("500"));
   }
 

@@ -28,6 +28,7 @@ type Config struct {
 	AssumeRole string
 	Timeout    time.Duration
 	ServerURL  string
+	AllowHTTP  bool
 
 	// Output options
 	EnvName   string
@@ -80,6 +81,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.AssumeRole, "assume-role", "", "Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)")
 	flagSet.DurationVar(&config.Timeout, "timeout", 10*time.Second, "Timeout for operations")
 	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (uses default if not specified)")
+	flagSet.BoolVar(&config.AllowHTTP, "allow-http", false, "Allow http:// authentication server URLs (for testing only)")
 	flagSet.StringVar(&config.EnvName, "env-name", "", "Environment variable name for JWT output")
 	flagSet.StringVar(&config.EnvStatus, "env-status", "", "Environment variable name for status output")
 	flagSet.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
@@ -186,6 +188,9 @@ func run(config Config) error {
 
 	if config.ServerURL != "" {
 		opts = append(opts, s2iam.WithServerURL(config.ServerURL))
+	}
+	if config.AllowHTTP {
+		opts = append(opts, s2iam.WithAllowHTTP())
 	}
 
 	// Get JWT
