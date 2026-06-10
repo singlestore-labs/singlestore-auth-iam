@@ -24,7 +24,7 @@ export UNIQUE_DIR
  format format-go format-python format-java \
  ssh-copy-to-remote ssh-run-remote-tests \
  ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java \
- ssh-cleanup-remote
+ ssh-cleanup-remote ssh-acquire-lock ssh-release-lock ssh-clear-lock
 
 # Default target
 help:
@@ -49,6 +49,9 @@ help:
 	@echo "    make ssh-download-coverage-go           Download Go coverage only"
 	@echo "    make ssh-download-coverage-python       Download Python coverage only"
 	@echo "    make ssh-cleanup-remote                 Clean up remote directory on HOST"
+	@echo "    make ssh-acquire-lock                   Acquire per-host cloud test lock on HOST"
+	@echo "    make ssh-release-lock                   Release per-host cloud test lock on HOST"
+	@echo "    make ssh-clear-lock                     Clear stale per-host cloud test lock on HOST"
 	@echo ""
 	@echo "Development Setup:"
 	@echo "  make dev-setup-ubuntu                     Full dev setup Ubuntu/Debian (Go + Python + Java)"
@@ -310,6 +313,9 @@ clean:
 # Use := to evaluate once at parse time rather than each time it's used
 REMOTE_BASE_DIR ?= tests
 SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
+LOCK_DIR ?= /tmp/s2iam-cloud-test.lock.d
+LOCK_MAX_WAIT_SECONDS ?= 7200
+LOCK_INTERVAL ?= 30
 
 # SSH operations (low-level operations for copying code and running tests)
 # CI target - copy code to remote host
@@ -365,5 +371,51 @@ ssh-download-coverage-java: check-host
 ssh-cleanup-remote: check-host
 	@echo "Cleaning up remote directory on $(HOST)..."
 	ssh $(SSH_OPTS) $(HOST) "rm -rf $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)"
+
+# Per-host cloud test locks (atomic mkdir on LOCK_DIR; info file for debugging).
+# Runner-side targets: lock is acquired before ssh-copy-to-remote deploys this Makefile.
+ssh-acquire-lock: check-host
+	@echo "Acquiring lock on $(HOST) at $(LOCK_DIR)..."
+	@set -euo pipefail; \
+	max_wait=$(LOCK_MAX_WAIT_SECONDS); \
+	interval=$(LOCK_INTERVAL); \
+	elapsed=0; \
+	while ! ssh $(SSH_OPTS) $(HOST) "mkdir '$(LOCK_DIR)' 2>/dev/null"; do \
+		echo "Lock held on $(HOST); waiting $${interval}s..."; \
+		ssh $(SSH_OPTS) $(HOST) "cat '$(LOCK_DIR)/info' 2>/dev/null || echo '(no lock info)'" || true; \
+		sleep "$${interval}"; \
+		elapsed=$$((elapsed + interval)); \
+		if [ "$${elapsed}" -ge "$${max_wait}" ]; then \
+			echo "Timed out waiting for lock on $(HOST) after $${max_wait}s"; \
+			exit 1; \
+		fi; \
+	done; \
+	ssh $(SSH_OPTS) $(HOST) "printf '%s\n' \
+		'run_id=$(LOCK_RUN_ID)' \
+		'run_attempt=$(LOCK_RUN_ATTEMPT)' \
+		'ref=$(LOCK_REF)' \
+		'matrix=$(LOCK_MATRIX)' \
+		'hostname=$(LOCK_HOSTNAME)' \
+		\"acquired_utc=\$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
+		> '$(LOCK_DIR)/info'"; \
+	echo "Lock acquired on $(HOST)"
+
+ssh-release-lock: check-host
+	@echo "Releasing lock on $(HOST)..."
+	ssh $(SSH_OPTS) $(HOST) "rm -rf '$(LOCK_DIR)'"
+	@echo "Lock released on $(HOST)"
+
+ssh-clear-lock: check-host
+	@set -euo pipefail; \
+	ssh $(SSH_OPTS) $(HOST) " \
+		if [ -d '$(LOCK_DIR)' ]; then \
+			echo 'Stale lock on $(LOCK_HOSTNAME):'; \
+			cat '$(LOCK_DIR)/info' 2>/dev/null || echo '(no lock info)'; \
+			rm -rf '$(LOCK_DIR)'; \
+			echo 'Lock cleared.'; \
+		else \
+			echo 'No lock present on $(LOCK_HOSTNAME).'; \
+		fi \
+	"
 
 
