@@ -67,13 +67,20 @@ jobs:
           server-username: SONATYPE_USERNAME
           server-password: SONATYPE_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Build and publish to Maven Central
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USER }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         working-directory: java
         run: |
-          RELEASE_VERSION=${GITHUB_REF_NAME#v}
-          mvn versions:set -DnewVersion=$RELEASE_VERSION -DgenerateBackupPoms=false
-          mvn clean deploy -DskipTests -Prelease
+          set -euo pipefail
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "${RELEASE_VERSION}" ] || ! echo "${RELEASE_VERSION}" | grep -Eq '^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9.-]+)?$'; then
+            echo "Invalid release tag ${GITHUB_REF_NAME}; expected vMAJOR[.MINOR[.PATCH]][-qualifier]" >&2
+            exit 1
+          fi
+          mvn -B versions:set -DnewVersion="${RELEASE_VERSION}" -DgenerateBackupPoms=false
+          mvn -B clean deploy -DskipTests -Prelease

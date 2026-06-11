@@ -35,13 +35,13 @@
         </developer>
     </developers>
     <scm>
-        <connection>scm:git:git://github.com/singlestore-labs/singlestore-auth-iam.git</connection>
+        <connection>scm:git:https://github.com/singlestore-labs/singlestore-auth-iam.git</connection>
         <url>https://github.com/singlestore-labs/singlestore-auth-iam</url>
-        <developerConnection>scm:git:git@github.com/singlestore-labs/singlestore-auth-iam.git</developerConnection>
+        <developerConnection>scm:git:ssh://git@github.com/singlestore-labs/singlestore-auth-iam.git</developerConnection>
     </scm>
     <issueManagement>
-        <system>JIRA</system>
-        <url>https://memsql.atlassian.net/browse/PLAT</url>
+        <system>GitHub Issues</system>
+        <url>https://github.com/singlestore-labs/singlestore-auth-iam/issues</url>
     </issueManagement>
     <dependencies>
         <dependency>
@@ -164,6 +164,13 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
                         <version>3.1.0</version>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                            <passphrase>${env.GPG_PASSPHRASE}</passphrase>
+                        </configuration>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
