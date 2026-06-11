@@ -395,7 +395,13 @@ ssh-acquire-lock: check-host
 	    sleep "$$interval"; elapsed=$$((elapsed + interval)); \
 	    if [ "$$elapsed" -ge "$$max_wait" ]; then echo "Timed out waiting for lock on $(HOST) after $$max_wait s"; exit 1; fi; \
 	  else \
-	    rc=$$?; echo "Failed to acquire lock on $(HOST): mkdir failed and $(LOCK_DIR) is absent (exit $$rc; not lock contention)"; exit 1; \
+	    rc=$$?; \
+	    if [ $$rc -eq 1 ]; then \
+	      echo "Failed to acquire lock on $(HOST): mkdir failed and $(LOCK_DIR) is absent (not lock contention)"; \
+	    else \
+	      echo "Failed to check lock on $(HOST) (exit $$rc)"; \
+	    fi; \
+	    exit 1; \
 	  fi; \
 	done; \
 	_run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; \
@@ -409,14 +415,14 @@ ssh-release-lock: check-host
 ssh-clear-lock: check-host
 	@bash -eu -o pipefail -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; \
 	if _run "[ -d '"'"'$(LOCK_DIR)'"'"' ]"; then \
-	  echo "Stale lock on $(LOCK_HOSTNAME):"; \
+	  echo "Stale lock on $(HOST):"; \
 	  _run "cat '"'"'$(LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
 	  _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"; \
 	  echo "Lock cleared."; \
 	else \
 	  rc=$$?; \
-	  if [ $$rc -eq 1 ]; then echo "No lock present on $(LOCK_HOSTNAME)."; \
-	  else echo "Failed to check lock on $(LOCK_HOSTNAME) (exit $$rc)"; exit 1; fi; \
+	  if [ $$rc -eq 1 ]; then echo "No lock present on $(HOST)."; \
+	  else echo "Failed to check lock on $(HOST) (exit $$rc)"; exit 1; fi; \
 	fi'
 
 
