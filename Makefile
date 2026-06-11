@@ -404,7 +404,11 @@ ssh-acquire-lock: check-host
 	    exit 1; \
 	  fi; \
 	done; \
-	_run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; \
+	if ! _run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; then \
+	  _run "rm -rf '"'"'$(LOCK_DIR)'"'"'" 2>/dev/null || true; \
+	  echo "Failed to write lock info on $(HOST); lock directory removed"; \
+	  exit 1; \
+	fi; \
 	echo "Lock acquired on $(HOST)"'
 
 ssh-release-lock: check-host
