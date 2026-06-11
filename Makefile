@@ -405,8 +405,12 @@ ssh-acquire-lock: check-host
 	  fi; \
 	done; \
 	if ! _run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; then \
-	  _run "rm -rf '"'"'$(LOCK_DIR)'"'"'" 2>/dev/null || true; \
-	  echo "Failed to write lock info on $(HOST); lock directory removed"; \
+	  if _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"; then \
+	    echo "Failed to write lock info on $(HOST); lock directory removed"; \
+	  else \
+	    rm_rc=$$?; \
+	    echo "Failed to write lock info on $(HOST); could not remove lock directory (exit $$rm_rc)"; \
+	  fi; \
 	  exit 1; \
 	fi; \
 	echo "Lock acquired on $(HOST)"'
