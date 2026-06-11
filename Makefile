@@ -80,7 +80,7 @@ help:
 	@echo "  ENV_VARS=\"VAR1=val1 VAR2=val2\"           Environment variables for remote tests"
 	@echo ""
 	@echo "Per-host Cloud Test Lock (ssh-acquire/release/clear-lock):"
-	@echo "  LOCK_DIR=/tmp/s2iam-cloud-test.lock.d     Lock directory on HOST (default)"
+	@echo "  Lock path on HOST: /tmp/s2iam-cloud-test.lock.d (fixed)"
 	@echo "  LOCK_RUN_ID LOCK_RUN_ATTEMPT LOCK_REF     Optional metadata for lock info file"
 	@echo "  LOCK_MATRIX LOCK_HOSTNAME                 Optional metadata for lock info file"
 	@echo ""
@@ -319,7 +319,8 @@ clean:
 # Use := to evaluate once at parse time rather than each time it's used
 REMOTE_BASE_DIR ?= tests
 SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
-LOCK_DIR ?= /tmp/s2iam-cloud-test.lock.d
+# Fixed per-host cloud test lock path (not overridable).
+override S2IAM_CLOUD_TEST_LOCK_DIR := /tmp/s2iam-cloud-test.lock.d
 LOCK_MAX_WAIT_SECONDS ?= 7200
 LOCK_INTERVAL ?= 30
 # Hostname portion of HOST (user@host -> host); localhost skips SSH for local lock testing.
@@ -380,32 +381,32 @@ ssh-cleanup-remote: check-host
 	@echo "Cleaning up remote directory on $(HOST)..."
 	ssh $(SSH_OPTS) $(HOST) "rm -rf $(REMOTE_BASE_DIR)/$(UNIQUE_DIR)"
 
-# Per-host cloud test locks (atomic mkdir on LOCK_DIR; info file for debugging).
+# Per-host cloud test locks (atomic mkdir on S2IAM_CLOUD_TEST_LOCK_DIR; info file for debugging).
 # Runner-side targets: lock is acquired before ssh-copy-to-remote deploys this Makefile.
 # HOST=localhost (or 127.0.0.1) runs lock commands locally without SSH.
 ssh-acquire-lock: check-host
-	@echo "Acquiring lock on $(HOST) at $(LOCK_DIR)..."
+	@echo "Acquiring lock on $(HOST) at $(S2IAM_CLOUD_TEST_LOCK_DIR)..."
 	@bash -eu -o pipefail -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; \
 	max_wait=$(LOCK_MAX_WAIT_SECONDS); interval=$(LOCK_INTERVAL); elapsed=0; \
 	while true; do \
-	  if _run "mkdir '"'"'$(LOCK_DIR)'"'"' 2>/dev/null"; then break; fi; \
-	  if _run "[ -d '"'"'$(LOCK_DIR)'"'"' ]"; then \
+	  if _run "mkdir '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"' 2>/dev/null"; then break; fi; \
+	  if _run "[ -d '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"' ]"; then \
 	    echo "Lock held on $(HOST); waiting $$interval s..."; \
-	    _run "cat '"'"'$(LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
+	    _run "cat '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
 	    sleep "$$interval"; elapsed=$$((elapsed + interval)); \
 	    if [ "$$elapsed" -ge "$$max_wait" ]; then echo "Timed out waiting for lock on $(HOST) after $$max_wait s"; exit 1; fi; \
 	  else \
 	    rc=$$?; \
 	    if [ $$rc -eq 1 ]; then \
-	      echo "Failed to acquire lock on $(HOST): mkdir failed and $(LOCK_DIR) is absent (not lock contention)"; \
+	      echo "Failed to acquire lock on $(HOST): mkdir failed and $(S2IAM_CLOUD_TEST_LOCK_DIR) is absent (not lock contention)"; \
 	    else \
 	      echo "Failed to check lock on $(HOST) (exit $$rc)"; \
 	    fi; \
 	    exit 1; \
 	  fi; \
 	done; \
-	if ! _run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(LOCK_DIR)/info'"'"'"; then \
-	  if _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"; then \
+	if ! _run "printf '"'"'%s\n'"'"' '"'"'run_id=$(LOCK_RUN_ID)'"'"' '"'"'run_attempt=$(LOCK_RUN_ATTEMPT)'"'"' '"'"'ref=$(LOCK_REF)'"'"' '"'"'matrix=$(LOCK_MATRIX)'"'"' '"'"'hostname=$(LOCK_HOSTNAME)'"'"' \"acquired_utc=$$(date -u +%Y-%m-%dT%H:%M:%SZ)\" > '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)/info'"'"'"; then \
+	  if _run "rm -rf '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"'"; then \
 	    echo "Failed to write lock info on $(HOST); lock directory removed"; \
 	  else \
 	    rm_rc=$$?; \
@@ -417,15 +418,15 @@ ssh-acquire-lock: check-host
 
 ssh-release-lock: check-host
 	@echo "Releasing lock on $(HOST)..."
-	@bash -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"'
+	@bash -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; _run "rm -rf '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"'"'
 	@echo "Lock released on $(HOST)"
 
 ssh-clear-lock: check-host
 	@bash -eu -o pipefail -c '_run(){ case "$(HOST_SHORT)" in localhost|127.0.0.1|::1) bash -c "$$1";;*) ssh $(SSH_OPTS) $(HOST) "$$1";;esac;}; \
-	if _run "[ -d '"'"'$(LOCK_DIR)'"'"' ]"; then \
+	if _run "[ -d '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"' ]"; then \
 	  echo "Stale lock on $(HOST):"; \
-	  _run "cat '"'"'$(LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
-	  _run "rm -rf '"'"'$(LOCK_DIR)'"'"'"; \
+	  _run "cat '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)/info'"'"' 2>/dev/null || echo '"'"'(no lock info)'"'"'"; \
+	  _run "rm -rf '"'"'$(S2IAM_CLOUD_TEST_LOCK_DIR)'"'"'"; \
 	  echo "Lock cleared."; \
 	else \
 	  rc=$$?; \
