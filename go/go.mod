@@ -12,6 +12,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/memsql/errors v0.1.0
 	github.com/muir/gwrap v0.4.0
+	github.com/singlestore-labs/codegate v0.1.0
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/api v0.246.0
 )

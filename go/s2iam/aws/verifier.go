@@ -3,14 +3,31 @@ package aws
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
+
+var awsPrincipalRE = regexp.MustCompile(`^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:\d{12}:.+$`)
+
+func validatePrincipal(principal string) error {
+	if !gates.S2IAMValidatePrincipal.Enabled() {
+		return nil
+	}
+	if principal == "" {
+		return errors.New("principal must not be empty")
+	}
+	if !awsPrincipalRE.MatchString(principal) {
+		return errors.Errorf("invalid AWS principal: %q", principal)
+	}
+	return nil
+}
 
 // AWSVerifier implements the CloudProviderVerifier interface for AWS
 type AWSVerifier struct {
@@ -118,6 +135,13 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		if len(resourceParts) >= 2 {
 			resourceType = resourceParts[0]
 		}
+	}
+
+	if err := validatePrincipal(*getCallerIdentityOutput.Arn); err != nil {
+		if logger != nil {
+			logger.Logf("Invalid AWS principal: %v", err)
+		}
+		return nil, err
 	}
 
 	if logger != nil {

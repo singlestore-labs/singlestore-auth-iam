@@ -5,15 +5,35 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/azure"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"google.golang.org/api/idtoken"
 )
+
+var (
+	gcpServiceAccountRE   = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+@([a-zA-Z0-9\-_.]+\.iam\.gserviceaccount\.com|developer\.gserviceaccount\.com)$`)
+	gcpNumericPrincipalRE = regexp.MustCompile(`^\d{10,}$`)
+)
+
+func validatePrincipal(principal string) error {
+	if !gates.S2IAMValidatePrincipal.Enabled() {
+		return nil
+	}
+	if principal == "" {
+		return errors.New("principal must not be empty")
+	}
+	if gcpServiceAccountRE.MatchString(principal) || gcpNumericPrincipalRE.MatchString(principal) {
+		return nil
+	}
+	return errors.Errorf("invalid GCP principal: %q", principal)
+}
 
 // GCPVerifier implements the models.CloudProviderVerifier interface for GCP
 type GCPVerifier struct {
@@ -232,6 +252,13 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 		if logger != nil {
 			logger.Logf("DEBUG: Using subject claim as identifier: %s", sub)
 		}
+	}
+
+	if err := validatePrincipal(identifier); err != nil {
+		if logger != nil {
+			logger.Logf("Invalid GCP principal: %v", err)
+		}
+		return nil, err
 	}
 
 	// Extract region and resource type from google section if available
