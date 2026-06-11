@@ -1,6 +1,6 @@
 name: Cloud Provider Tests
 
-on: 
+on:
   pull_request:
     branches: [main]
   push:
@@ -11,6 +11,8 @@ permissions:
 
 # Self-hosted cloud test hosts for cloud provider testing.
 # Assuming Ubuntu environment on AWS EC2, GCP Compute Engine, or Azure VM.
+#
+# Host list: .github/cloud-test-hosts.json (shared with cloud_clear_stale_locks.yml).
 #
 # Base system setup (Ubuntu hosts expected):
 # copy over the Makefile and run: make dev-setup-ubuntu
@@ -38,44 +40,37 @@ permissions:
 # Go: Runs integration tests with coverage reporting (go coverage format)
 # Python: Uses automated validation framework with coverage reporting (XML format)
 # Coverage from all environments (no CSP, AWS, Azure, GCP) is uploaded to Codecov
+#
+# Per-host concurrency: each matrix leg acquires a remote lock on its VM after SSH
+# setup (post environment approval) via make ssh-acquire-lock (see Makefile).
+# Lock path on each host: /tmp/s2iam-cloud-test.lock.d/ (atomic mkdir; info file).
+# Release runs in an always() cleanup step (make ssh-release-lock). Stale locks
+# (runner kill, network drop) can be cleared via the "Clear Cloud Test Locks"
+# workflow (cloud_clear_stale_locks.yml; make ssh-clear-lock).
 
 jobs:
+  matrix-prep:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - id: set-matrix
+        run: |
+          matrix=$(jq -c '{include: .}' .github/cloud-test-hosts.json)
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
   test:
+    # Single test job with matrix over cloud VM hosts. SSH keys remain environment secrets.
+    # Per-host serialization uses remote locks on each VM (see header comment).
+    needs: matrix-prep
     runs-on: ubuntu-latest
     environment: cloud-VMs
     strategy:
-      matrix:
-        include:
-          - name: aws-positive
-            username: ubuntu
-            hostname: ec2-18-206-180-126.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
-          - name: aws-negative
-            username: ubuntu
-            hostname: ec2-35-173-183-101.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=aws"
-          - name: azure-positive
-            username: azureuser
-            hostname: 52.186.98.155
-            secret: AZURE_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
-          - name: azure-negative
-            username: azureuser
-            hostname: 74.235.105.73
-            secret: AZURE_NEGATIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=azure"
-          - name: gcp-positive
-            username: dsharnoff
-            hostname: 34.145.164.5
-            secret: GCP_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=gcp"
-          - name: gcp-negative
-            username: dsharnoff
-            hostname: 34.21.55.72
-            secret: GCP_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=gcp"
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
 
     env:
       TEST_HOSTNAME: ${{ matrix.hostname }}
@@ -96,6 +91,18 @@ jobs:
         chmod 600 ~/.ssh/key
         ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
         ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
+
+    - name: Acquire remote lock
+      id: lock
+      env:
+        LOCK_RUN_ID: ${{ github.run_id }}
+        LOCK_RUN_ATTEMPT: ${{ github.run_attempt }}
+        LOCK_REF: ${{ github.ref }}
+        LOCK_MATRIX: ${{ matrix.name }}
+        LOCK_HOSTNAME: ${{ matrix.hostname }}
+      run: |
+        make ssh-acquire-lock
+        echo "acquired=true" >> "${GITHUB_OUTPUT}"
 
     - name: Run remote tests via Make (copy, run, download, cleanup)
       env:
@@ -150,6 +157,10 @@ jobs:
       run: |
         set -e
         make ssh-cleanup-remote
+
+    - name: Release remote lock
+      if: always() && steps.lock.outputs.acquired == 'true'
+      run: make ssh-release-lock
 
     - name: Cleanup SSH key
       if: always()

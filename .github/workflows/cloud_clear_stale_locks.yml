@@ -1,0 +1,79 @@
+name: Clear Cloud Test Locks
+
+# Manually clear stale per-host locks on cloud test VMs when a Cloud Provider Tests
+# run did not release its lock (runner kill, network drop, etc.). Locks live at
+# /tmp/s2iam-cloud-test.lock.d/ on each VM (see Makefile ssh-clear-lock).
+#
+# Host list: .github/cloud-test-hosts.json (shared with cloud_provider.yml).
+#
+# Trigger: Actions → Clear Cloud Test Locks → Run workflow.
+# Leave hostname empty to clear all matrix hosts, or set one hostname to clear only that host.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hostname:
+        description: 'Clear lock on this host only (empty = all cloud test VMs)'
+        required: false
+        default: ''
+
+run-name: Clear cloud test locks${{ github.event.inputs.hostname != '' && format(' ({0})', github.event.inputs.hostname) || '' }}
+
+permissions:
+  contents: read
+
+jobs:
+  matrix-prep:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - id: set-matrix
+        run: |
+          matrix=$(jq -c '{include: .}' .github/cloud-test-hosts.json)
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
+  clear-stale-locks:
+    needs: matrix-prep
+    runs-on: ubuntu-latest
+    environment: cloud-VMs
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
+
+    env:
+      SSH_KEY_SECRET: ${{ matrix.secret }}
+      SSH_OPTS: "-i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+      HOST: ${{ matrix.username }}@${{ matrix.hostname }}
+
+    steps:
+    - name: Checkout repository
+      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
+      uses: actions/checkout@v5
+
+    - name: Skip host not selected
+      if: github.event.inputs.hostname != '' && github.event.inputs.hostname != matrix.hostname
+      run: echo "Skipping ${{ matrix.hostname }} (not selected)" && exit 0
+
+    - name: Setup SSH key
+      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
+        chmod 600 ~/.ssh/key
+        ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
+        ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
+
+    - name: Clear stale lock
+      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
+      env:
+        LOCK_HOSTNAME: ${{ matrix.hostname }}
+      run: make ssh-clear-lock
+
+    - name: Cleanup SSH key
+      if: always() && (github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname)
+      run: |
+        rm -f ~/.ssh/key
