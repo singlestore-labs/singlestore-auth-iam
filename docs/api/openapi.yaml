@@ -60,9 +60,9 @@ paths:
         optional and ignored by the production server; send no body or an empty
         JSON object.
 
-        The optional `workspaceGroupID` query parameter is sent by the reference
-        Go client for database JWT requests. The server verifies identity from
-        headers; callers using custom clients may include it for forward compatibility.
+        The required `workspaceGroupID` query parameter scopes the database JWT to
+        a workspace group. All reference client libraries (Go, Java) require a
+        non-empty value; include it on every database JWT request.
 
         See the
         [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
@@ -81,8 +81,10 @@ paths:
       parameters:
         - name: workspaceGroupID
           in: query
-          required: false
-          description: Target workspace group (reference client sends this for database JWTs).
+          required: true
+          description: |
+            Workspace group ID to scope the database JWT. Required for all
+            database JWT requests (matches Go and Java reference clients).
           schema:
             type: string
             example: wg-0123456789abcdef
@@ -96,19 +98,19 @@ paths:
         - lang: curl
           label: AWS
           source: |
-            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
               -H 'X-AWS-Access-Key-ID: ASIAIOSFODNN7EXAMPLE' \
               -H 'X-AWS-Secret-Access-Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' \
               -H 'X-AWS-Session-Token: IQoJb3JpZ2luX2VjE...'
         - lang: curl
           label: GCP
           source: |
-            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
               -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImV4YW1wbGUifQ...'
         - lang: curl
           label: Azure
           source: |
-            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
               -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...'
       responses:
         '200':
@@ -301,7 +303,7 @@ components:
   schemas:
     ServiceIdentityJWT:
       type: object
-      required: [jwt, expires_at, audience]
+      required: [jwt]
       properties:
         jwt:
           type: string
@@ -309,10 +311,14 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: JWT expiration time (RFC 3339)
+          description: |
+            JWT expiration time (RFC 3339). Present on production responses;
+            reference clients only require `jwt`.
         audience:
           type: string
-          description: Intended audience (`engine` for database, `portal` for management API)
+          description: |
+            Intended audience (`engine` for database, `portal` for management API).
+            Present on production responses; reference clients only require `jwt`.
           enum: [engine, portal]
     Error:
       type: object

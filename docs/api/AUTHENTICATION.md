@@ -15,7 +15,8 @@ Every IAM exchange endpoint follows the same pattern:
    This is *inbound* authentication — credentials flow **into** the auth service.
 
 2. **The service returns a SingleStore JWT in the JSON response body.** On `200 OK`,
-   the response includes a `jwt` field (plus `expires_at` and `audience`). This is
+   the response always includes a `jwt` field. Production responses may also include
+   `expires_at` and `audience`; reference clients only depend on `jwt`. This is
    *outbound* authentication — the token flows **out** to your application.
 
 The SingleStore JWT is **not** what you put on the `Authorization` header when calling
@@ -55,10 +56,18 @@ and [STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_Ass
 
 Long-lived IAM user access keys without a session token are not sufficient.
 
+### Database JWT: required `workspaceGroupID` query parameter
+
+Database JWT requests (`POST /auth/iam/database`) require a `workspaceGroupID`
+query parameter that identifies the target workspace group. Go and Java reference
+clients reject empty values; include it on every database JWT request.
+
+Management API JWT requests (`POST /auth/iam/api`) do not use this parameter.
+
 ### Example: database JWT
 
 ```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
   -H 'X-AWS-Access-Key-ID: ASIAIOSFODNN7EXAMPLE' \
   -H 'X-AWS-Secret-Access-Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' \
   -H 'X-AWS-Session-Token: IQoJb3JpZ2luX2VjE...'
@@ -110,7 +119,7 @@ the response body.
 ### Example: database JWT
 
 ```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
   -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImV4YW1wbGUifQ...'
 ```
 
@@ -164,7 +173,7 @@ JWT from the response body.
 ### Example: database JWT
 
 ```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database' \
+curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
   -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...'
 ```
 
@@ -185,6 +194,7 @@ curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
 | Wrong Azure resource / audience | Request token for `https://management.azure.com/` |
 | Putting the response `jwt` on `Authorization` for the exchange request | Send cloud provider credentials on the exchange; use the response `jwt` for downstream SingleStore services |
 | Mixing providers on one request | Pick AWS **or** GCP **or** Azure headers for each POST |
+| Omitting `workspaceGroupID` on database JWT requests | Add `?workspaceGroupID=<your-workspace-group-id>` to `/auth/iam/database` |
 | Confusing inbound vs outbound JWTs | Inbound = cloud provider token in headers; outbound = SingleStore `jwt` in JSON body |
 
 ## OpenAPI / Redoc "Authorize" button

@@ -333,6 +333,7 @@ docs-api-html: $(OPENAPI_SPEC)
 	cp $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
 	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (gitignored; deployed via GitHub Pages CI)"
 	@echo "  Rendered HTML link (Redoc viewer): $(DOCS_HTML_URL)"
+	@echo "  Self-hosted Pages URL (after Pages is enabled): $(DOCS_PAGES_URL)"
 
 docs-api-clean:
 	rm -f $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
