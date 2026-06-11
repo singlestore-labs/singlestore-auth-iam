@@ -5,12 +5,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      hostname:
-        description: 'Clear lock on this host only (empty = all matrix hosts)'
-        required: false
-        default: ''
 
 permissions:
   contents: read
@@ -49,12 +43,11 @@ permissions:
 # setup (post environment approval) via make ssh-acquire-lock (see Makefile).
 # Lock path on each host: /tmp/s2iam-cloud-test.lock.d/ (atomic mkdir; info file).
 # Release runs in an always() cleanup step (make ssh-release-lock). Stale locks
-# (runner kill, network drop) can be cleared via workflow_dispatch -> clear-stale-locks
-# (make ssh-clear-lock).
+# (runner kill, network drop) can be cleared via the "Clear Cloud Test Locks"
+# workflow (cloud_clear_stale_locks.yml; make ssh-clear-lock).
 
 jobs:
   test:
-    if: github.event_name != 'workflow_dispatch'
     # Single test job with matrix over cloud VM hosts. SSH keys remain environment secrets.
     # Per-host serialization uses remote locks on each VM (see header comment).
     runs-on: ubuntu-latest
@@ -185,72 +178,5 @@ jobs:
 
     - name: Cleanup SSH key
       if: always()
-      run: |
-        rm -f ~/.ssh/key
-
-  clear-stale-locks:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment: cloud-VMs
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: aws-positive
-            username: ubuntu
-            hostname: ec2-18-206-180-126.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-          - name: aws-negative
-            username: ubuntu
-            hostname: ec2-35-173-183-101.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-          - name: azure-positive
-            username: azureuser
-            hostname: 52.186.98.155
-            secret: AZURE_POSITIVE_KEY
-          - name: azure-negative
-            username: azureuser
-            hostname: 74.235.105.73
-            secret: AZURE_NEGATIVE_KEY
-          - name: gcp-positive
-            username: dsharnoff
-            hostname: 34.145.164.5
-            secret: GCP_POSITIVE_KEY
-          - name: gcp-negative
-            username: dsharnoff
-            hostname: 34.21.55.72
-            secret: GCP_POSITIVE_KEY
-
-    env:
-      SSH_KEY_SECRET: ${{ matrix.secret }}
-      SSH_OPTS: "-i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10"
-      HOST: ${{ matrix.username }}@${{ matrix.hostname }}
-
-    steps:
-    - name: Checkout repository
-      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
-      uses: actions/checkout@v5
-
-    - name: Skip host not selected
-      if: github.event.inputs.hostname != '' && github.event.inputs.hostname != matrix.hostname
-      run: echo "Skipping ${{ matrix.hostname }} (not selected)" && exit 0
-
-    - name: Setup SSH key
-      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
-        chmod 600 ~/.ssh/key
-        ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
-        ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
-
-    - name: Clear stale lock
-      if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
-      env:
-        LOCK_HOSTNAME: ${{ matrix.hostname }}
-      run: make ssh-clear-lock
-
-    - name: Cleanup SSH key
-      if: always() && (github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname)
       run: |
         rm -f ~/.ssh/key
