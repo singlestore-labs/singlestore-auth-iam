@@ -12,6 +12,8 @@ permissions:
 # Self-hosted cloud test hosts for cloud provider testing.
 # Assuming Ubuntu environment on AWS EC2, GCP Compute Engine, or Azure VM.
 #
+# Host list: .github/cloud-test-hosts.json (shared with cloud_clear_stale_locks.yml).
+#
 # Base system setup (Ubuntu hosts expected):
 # copy over the Makefile and run: make dev-setup-ubuntu
 #
@@ -47,44 +49,27 @@ permissions:
 # workflow (cloud_clear_stale_locks.yml; make ssh-clear-lock).
 
 jobs:
+  matrix-prep:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - id: set-matrix
+        run: |
+          matrix=$(jq -c '{include: .}' .github/cloud-test-hosts.json)
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+
   test:
     # Single test job with matrix over cloud VM hosts. SSH keys remain environment secrets.
     # Per-host serialization uses remote locks on each VM (see header comment).
+    needs: matrix-prep
     runs-on: ubuntu-latest
     environment: cloud-VMs
     strategy:
-      matrix:
-        include:
-          - name: aws-positive
-            username: ubuntu
-            hostname: ec2-18-206-180-126.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_ASSUME_ROLE=arn:aws:iam::503396375767:role/NoPermissionsRole"
-          - name: aws-negative
-            username: ubuntu
-            hostname: ec2-35-173-183-101.compute-1.amazonaws.com
-            secret: AWS_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=aws"
-          - name: azure-positive
-            username: azureuser
-            hostname: 52.186.98.155
-            secret: AZURE_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=azure"
-          - name: azure-negative
-            username: azureuser
-            hostname: 74.235.105.73
-            secret: AZURE_NEGATIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=azure"
-          - name: gcp-positive
-            username: dsharnoff
-            hostname: 34.145.164.5
-            secret: GCP_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER=gcp"
-          - name: gcp-negative
-            username: dsharnoff
-            hostname: 34.21.55.72
-            secret: GCP_POSITIVE_KEY
-            env_vars: "S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=gcp"
+      matrix: ${{ fromJSON(needs.matrix-prep.outputs.matrix) }}
 
     env:
       TEST_HOSTNAME: ${{ matrix.hostname }}
