@@ -33,7 +33,8 @@ info:
        (`jwt` field). Use that token for downstream SingleStore services — it is **not**
        sent back on the `Authorization` header of this request.
 
-    Pick exactly one provider per request. See [AUTHENTICATION.md](AUTHENTICATION.md)
+    Pick exactly one provider per request. See the
+    [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
     for credential acquisition, audience requirements, curl examples, and common mistakes.
 
 servers:
@@ -54,15 +55,29 @@ paths:
         Verifies the caller's cloud provider identity and returns a signed JWT
         suitable for SingleStore engine / database access.
 
-        Send an empty body. Authentication is performed exclusively via HTTP
-        headers carrying cloud provider credentials (see `components.securitySchemes`).
+        Authentication is performed exclusively via HTTP headers carrying cloud
+        provider credentials (see `components.securitySchemes`). A request body is
+        optional and ignored by the production server; send no body or an empty
+        JSON object.
 
         The optional `workspaceGroupID` query parameter is sent by the reference
         Go client for database JWT requests. The server verifies identity from
         headers; callers using custom clients may include it for forward compatibility.
 
-        See [AUTHENTICATION.md](AUTHENTICATION.md) and the code samples below for
-        per-provider curl examples.
+        See the
+        [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
+        and the code samples below for per-provider curl examples.
+      requestBody:
+        required: false
+        description: |
+          Optional and ignored by the production server. The Go and Java reference
+          clients send no body; the Python client may send a JSON identity payload
+          for debugging, but the server derives identity from headers only.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
       parameters:
         - name: workspaceGroupID
           in: query
@@ -132,13 +147,27 @@ paths:
         Verifies the caller's cloud provider identity, resolves a matching SingleStore
         cloud-principal user, and returns a signed JWT for management API access.
 
-        Send an empty body. Authentication is performed via cloud provider headers.
+        Authentication is performed via cloud provider headers. A request body is
+        optional and ignored by the production server; send no body or an empty
+        JSON object.
 
         The verified identity must be linked to an active cloud-principal user in
         SingleStore; otherwise the server returns `404`.
 
-        See [AUTHENTICATION.md](AUTHENTICATION.md) and the code samples below for
-        per-provider curl examples.
+        See the
+        [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
+        and the code samples below for per-provider curl examples.
+      requestBody:
+        required: false
+        description: |
+          Optional and ignored by the production server. The Go and Java reference
+          clients send no body; the Python client may send a JSON identity payload
+          for debugging, but the server derives identity from headers only.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
       security:
         - awsAccessKeyId: []
           awsSecretAccessKey: []

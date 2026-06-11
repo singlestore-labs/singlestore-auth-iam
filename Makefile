@@ -311,7 +311,7 @@ format-python:
 	cd python && python3 -m black src/ tests/
 	cd python && python3 -m isort src tests
 
-# API documentation (OpenAPI → HTML/Markdown; requires Node.js for npx)
+# API documentation (OpenAPI → Redoc HTML; requires Node.js for npx)
 OPENAPI_SPEC := docs/api/openapi.yaml
 DOCS_GEN_DIR := docs/api
 # Rendered HTML via Redoc viewer + raw openapi.yaml (works without GitHub Pages).
