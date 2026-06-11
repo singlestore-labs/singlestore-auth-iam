@@ -6,6 +6,7 @@ on:
     paths:
       - 'docs/api/**'
       - '.github/workflows/api-docs-pages.yml'
+      - 'Makefile'
   workflow_dispatch:
 
 permissions:
@@ -26,6 +27,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate API HTML
+        run: make docs-api-html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

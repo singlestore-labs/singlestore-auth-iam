@@ -178,3 +178,7 @@ java/target/
 
 # test junk
 go/s2iam_test_server_info*.json
+
+# Generated API docs (build with make docs-api-html or CI Pages deploy)
+docs/api/api.html
+docs/api/index.html

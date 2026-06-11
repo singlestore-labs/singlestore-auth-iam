@@ -22,7 +22,7 @@ export UNIQUE_DIR
  dev-setup-common \
  lint lint-go lint-python lint-java \
  format format-go format-python format-java \
- docs-api docs-api-html docs-api-md docs-api-lint docs-api-clean \
+ docs-api docs-api-html docs-api-lint docs-api-clean \
  ssh-copy-to-remote ssh-run-remote-tests \
  ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java \
  ssh-cleanup-remote ssh-acquire-lock ssh-release-lock ssh-clear-lock
@@ -71,11 +71,10 @@ help:
 	@echo "  make clean                                Clean build artifacts"
 	@echo ""
 	@echo "API Documentation:"
-	@echo "  make docs-api                             Regenerate docs/api/api.html and api.md"
-	@echo "  make docs-api-html                        Generate HTML (Redoc) only"
-	@echo "  make docs-api-md                          Generate Markdown (Widdershins) only"
+	@echo "  make docs-api                             Generate docs/api/api.html (Redoc; not checked in)"
+	@echo "  make docs-api-html                        Same as docs-api"
 	@echo "  make docs-api-lint                        Validate docs/api/openapi.yaml"
-	@echo "  make docs-api-clean                       Remove generated API docs"
+	@echo "  make docs-api-clean                       Remove generated HTML"
 	@echo ""
 	@echo "Environment Variables for Cloud Testing:"
 	@echo "  S2IAM_TEST_CLOUD_PROVIDER=gcp|azure|aws  Enable positive cloud tests"
@@ -320,9 +319,8 @@ DOCS_HTML_URL := https://redocly.github.io/redoc/?url=https://raw.githubusercont
 # Optional self-hosted URL after enabling GitHub Pages (see docs/api/README.md).
 DOCS_PAGES_URL := https://singlestore-labs.github.io/singlestore-auth-iam/
 REDOCLY_CLI_VERSION ?= 1.28.2
-WIDDERSHINS_VERSION ?= 4.0.1
 
-docs-api: docs-api-html docs-api-md
+docs-api: docs-api-html
 
 docs-api-lint: $(OPENAPI_SPEC)
 	@echo "Validating OpenAPI spec..."
@@ -333,22 +331,11 @@ docs-api-html: $(OPENAPI_SPEC)
 	@mkdir -p $(DOCS_GEN_DIR)
 	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) build-docs $(OPENAPI_SPEC) -o $(DOCS_GEN_DIR)/api.html
 	cp $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
-	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (for optional GitHub Pages deploy)"
+	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (gitignored; deployed via GitHub Pages CI)"
 	@echo "  Rendered HTML link (Redoc viewer): $(DOCS_HTML_URL)"
 
-docs-api-md: $(OPENAPI_SPEC)
-	@echo "Generating API Markdown (Widdershins)..."
-	@mkdir -p $(DOCS_GEN_DIR)
-	npx --yes widdershins@$(WIDDERSHINS_VERSION) $(OPENAPI_SPEC) \
-		-o $(DOCS_GEN_DIR)/api.md \
-		--language_tabs 'shell:curl' \
-		--summary \
-		--search=false \
-		--expandBody=true
-	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.md"
-
 docs-api-clean:
-	rm -f $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html $(DOCS_GEN_DIR)/api.md
+	rm -f $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
 
 # Clean targets
 clean:

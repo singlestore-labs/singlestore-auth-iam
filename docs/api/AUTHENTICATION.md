@@ -2,7 +2,7 @@
 
 This guide explains how to authenticate directly against the SingleStore Cloud IAM
 HTTP API without the `s2iam` client libraries. For endpoint schemas and response
-codes, see the [OpenAPI spec](openapi.yaml) and [API reference](api.md).
+codes, see the [OpenAPI spec](openapi.yaml) and the [Redoc HTML reference](https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/singlestore-labs/singlestore-auth-iam/main/docs/api/openapi.yaml).
 
 **Production host:** `https://authsvc.singlestore.com`
 
