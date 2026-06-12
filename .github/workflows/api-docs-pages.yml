@@ -1,0 +1,81 @@
+name: Deploy API docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/api/**'
+      - '.github/workflows/api-docs-pages.yml'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-docs-pages
+  cancel-in-progress: false
+
+jobs:
+  check-pages:
+    permissions:
+      contents: read
+      pages: read
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check whether GitHub Pages is enabled
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.repos.getPages({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              core.setOutput('enabled', 'true');
+            } catch (error) {
+              if (error.status === 404) {
+                core.info('GitHub Pages is not enabled; skipping deploy.');
+                core.setOutput('enabled', 'false');
+              } else {
+                throw error;
+              }
+            }
+
+  deploy:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    needs: check-pages
+    if: needs.check-pages.outputs.enabled == 'true'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate API HTML
+        run: make docs-api-html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload API docs
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/api
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

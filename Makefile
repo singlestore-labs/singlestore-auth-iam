@@ -22,6 +22,7 @@ export UNIQUE_DIR
  dev-setup-common \
  lint lint-go lint-python lint-java \
  format format-go format-python format-java \
+ docs-api docs-api-html docs-api-lint docs-api-clean \
  ssh-copy-to-remote ssh-run-remote-tests \
  ssh-download-coverage ssh-download-coverage-go ssh-download-coverage-python ssh-download-coverage-java \
  ssh-cleanup-remote ssh-acquire-lock ssh-release-lock ssh-clear-lock
@@ -68,6 +69,12 @@ help:
 	@echo "  make lint                                 Run all linters"
 	@echo "  make format                               Format all code"
 	@echo "  make clean                                Clean build artifacts"
+	@echo ""
+	@echo "API Documentation:"
+	@echo "  make docs-api                             Generate docs/api/api.html (Redoc; not checked in)"
+	@echo "  make docs-api-html                        Same as docs-api"
+	@echo "  make docs-api-lint                        Validate docs/api/openapi.yaml"
+	@echo "  make docs-api-clean                       Remove generated HTML"
 	@echo ""
 	@echo "Environment Variables for Cloud Testing:"
 	@echo "  S2IAM_TEST_CLOUD_PROVIDER=gcp|azure|aws  Enable positive cloud tests"
@@ -303,6 +310,33 @@ format-python:
 	@echo "Formatting Python code..."
 	cd python && python3 -m black src/ tests/
 	cd python && python3 -m isort src tests
+
+# API documentation (OpenAPI → Redoc HTML; requires Node.js for npx)
+OPENAPI_SPEC := docs/api/openapi.yaml
+DOCS_GEN_DIR := docs/api
+# Rendered HTML via Redoc viewer + raw openapi.yaml (works without GitHub Pages).
+DOCS_HTML_URL := https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/singlestore-labs/singlestore-auth-iam/main/docs/api/openapi.yaml
+# Optional self-hosted URL after enabling GitHub Pages (see docs/api/README.md).
+DOCS_PAGES_URL := https://singlestore-labs.github.io/singlestore-auth-iam/
+REDOCLY_CLI_VERSION ?= 1.28.2
+
+docs-api: docs-api-html
+
+docs-api-lint: $(OPENAPI_SPEC)
+	@echo "Validating OpenAPI spec..."
+	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) lint $(OPENAPI_SPEC)
+
+docs-api-html: $(OPENAPI_SPEC)
+	@echo "Generating API HTML (Redoc)..."
+	@mkdir -p $(DOCS_GEN_DIR)
+	npx --yes @redocly/cli@$(REDOCLY_CLI_VERSION) build-docs $(OPENAPI_SPEC) -o $(DOCS_GEN_DIR)/api.html
+	cp $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
+	@echo "✓ Wrote $(DOCS_GEN_DIR)/api.html and index.html (gitignored; deployed via GitHub Pages CI)"
+	@echo "  Rendered HTML link (Redoc viewer): $(DOCS_HTML_URL)"
+	@echo "  Self-hosted Pages URL (after Pages is enabled): $(DOCS_PAGES_URL)"
+
+docs-api-clean:
+	rm -f $(DOCS_GEN_DIR)/api.html $(DOCS_GEN_DIR)/index.html
 
 # Clean targets
 clean:

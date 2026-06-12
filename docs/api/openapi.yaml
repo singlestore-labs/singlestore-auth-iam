@@ -1,0 +1,328 @@
+openapi: 3.0.3
+info:
+  title: SingleStore Cloud IAM Authentication API
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    HTTP API for exchanging cloud provider identity credentials for SingleStore JWTs.
+
+    Customers may call these endpoints directly with their own HTTP client instead of
+    using the `s2iam` client libraries (Go, Python, Java). Obtain cloud-provider
+    credentials on the machine or workload making the request, then POST them to
+    the authentication service using the headers documented below.
+
+    **Production host:** `https://authsvc.singlestore.com`
+
+    **Status**
+    - Database (engine) JWTs: available; APIs may change before GA.
+    - Management API JWTs: available; APIs may change before GA.
+
+    **Related endpoints**
+    - JWT signing keys (JWKS): `GET /auth/oidc/op/Customer/.well-known/jwks.json`
+    - Validate returned JWTs against this JWKS after exchange.
+
+    **Authentication model**
+
+    This is a two-phase exchange:
+
+    1. **Inbound (request):** Send credentials for **one** cloud provider (AWS, GCP, or
+       Azure) in HTTP headers. These prove who the caller is in the cloud.
+    2. **Outbound (response):** On success, the JSON body contains a SingleStore JWT
+       (`jwt` field). Use that token for downstream SingleStore services — it is **not**
+       sent back on the `Authorization` header of this request.
+
+    Pick exactly one provider per request. See the
+    [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
+    for credential acquisition, audience requirements, curl examples, and common mistakes.
+
+servers:
+  - url: https://authsvc.singlestore.com
+    description: Production authentication service
+
+tags:
+  - name: IAM
+    description: Cloud IAM credential exchange
+
+paths:
+  /auth/iam/database:
+    post:
+      operationId: exchangeDatabaseJWT
+      tags: [IAM]
+      summary: Exchange cloud identity for a database (engine) JWT
+      description: |
+        Verifies the caller's cloud provider identity and returns a signed JWT
+        suitable for SingleStore engine / database access.
+
+        Authentication is performed exclusively via HTTP headers carrying cloud
+        provider credentials (see `components.securitySchemes`). A request body is
+        optional and ignored by the production server; send no body or an empty
+        JSON object.
+
+        The required `workspaceGroupID` query parameter scopes the database JWT to
+        a workspace group. All reference client libraries (Go, Java) require a
+        non-empty value; include it on every database JWT request.
+
+        See the
+        [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
+        and the code samples below for per-provider curl examples.
+      requestBody:
+        required: false
+        description: |
+          Optional and ignored by the production server. The Go and Java reference
+          clients send no body; the Python client may send a JSON identity payload
+          for debugging, but the server derives identity from headers only.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      parameters:
+        - name: workspaceGroupID
+          in: query
+          required: true
+          description: |
+            Workspace group ID to scope the database JWT. Required for all
+            database JWT requests (matches Go and Java reference clients).
+          schema:
+            type: string
+            example: wg-0123456789abcdef
+      security:
+        - awsAccessKeyId: []
+          awsSecretAccessKey: []
+          awsSessionToken: []
+        - gcpWorkloadIdentityToken: []
+        - azureManagedIdentityToken: []
+      x-codeSamples:
+        - lang: curl
+          label: AWS
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
+              -H 'X-AWS-Access-Key-ID: ASIAIOSFODNN7EXAMPLE' \
+              -H 'X-AWS-Secret-Access-Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' \
+              -H 'X-AWS-Session-Token: IQoJb3JpZ2luX2VjE...'
+        - lang: curl
+          label: GCP
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
+              -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImV4YW1wbGUifQ...'
+        - lang: curl
+          label: Azure
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=wg-0123456789abcdef' \
+              -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...'
+      responses:
+        '200':
+          description: JWT issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceIdentityJWT'
+              examples:
+                database:
+                  value:
+                    jwt: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example
+                    expires_at: '2026-06-09T21:00:00Z'
+                    audience: engine
+        '401':
+          description: Cloud provider authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: cloud provider authentication failed
+        '500':
+          description: Failed to create JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/iam/api:
+    post:
+      operationId: exchangeAPIJWT
+      tags: [IAM]
+      summary: Exchange cloud identity for a management API JWT
+      description: |
+        Verifies the caller's cloud provider identity, resolves a matching SingleStore
+        cloud-principal user, and returns a signed JWT for management API access.
+
+        Authentication is performed via cloud provider headers. A request body is
+        optional and ignored by the production server; send no body or an empty
+        JSON object.
+
+        The verified identity must be linked to an active cloud-principal user in
+        SingleStore; otherwise the server returns `404`.
+
+        See the
+        [authentication guide](https://github.com/singlestore-labs/singlestore-auth-iam/blob/main/docs/api/AUTHENTICATION.md)
+        and the code samples below for per-provider curl examples.
+      requestBody:
+        required: false
+        description: |
+          Optional and ignored by the production server. The Go and Java reference
+          clients send no body; the Python client may send a JSON identity payload
+          for debugging, but the server derives identity from headers only.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      security:
+        - awsAccessKeyId: []
+          awsSecretAccessKey: []
+          awsSessionToken: []
+        - gcpWorkloadIdentityToken: []
+        - azureManagedIdentityToken: []
+      x-codeSamples:
+        - lang: curl
+          label: AWS
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
+              -H 'X-AWS-Access-Key-ID: ASIAIOSFODNN7EXAMPLE' \
+              -H 'X-AWS-Secret-Access-Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' \
+              -H 'X-AWS-Session-Token: IQoJb3JpZ2luX2VjE...'
+        - lang: curl
+          label: GCP
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
+              -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImV4YW1wbGUifQ...'
+        - lang: curl
+          label: Azure
+          source: |
+            curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
+              -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...'
+      responses:
+        '200':
+          description: JWT issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceIdentityJWT'
+              examples:
+                api:
+                  value:
+                    jwt: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.example
+                    expires_at: '2026-06-09T21:00:00Z'
+                    audience: portal
+        '401':
+          description: Cloud provider authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No cloud-principal user matches the verified identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: no cloud principal user matches the provided identity
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/oidc/op/Customer/.well-known/jwks.json:
+    get:
+      operationId: getCustomerJWKS
+      tags: [IAM]
+      summary: JSON Web Key Set for validating issued JWTs
+      description: |
+        Public signing keys for JWTs issued by the Customer OIDC provider.
+        Use this document to verify `jwt` values returned by the IAM exchange endpoints.
+      security: []
+      responses:
+        '200':
+          description: JWKS document
+          content:
+            application/json:
+              schema:
+                type: object
+                description: RFC 7517 JSON Web Key Set
+                additionalProperties: true
+        '404':
+          description: JWKS not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    awsAccessKeyId:
+      type: apiKey
+      in: header
+      name: X-AWS-Access-Key-ID
+      description: |
+        **AWS (required with secret and session token).** Temporary access key ID from
+        the instance/task role, IRSA, or STS AssumeRole on the calling workload.
+        All three AWS headers must be present on the same request.
+    awsSecretAccessKey:
+      type: apiKey
+      in: header
+      name: X-AWS-Secret-Access-Key
+      description: |
+        **AWS (required with access key ID and session token).** Secret access key
+        paired with the access key ID above.
+    awsSessionToken:
+      type: apiKey
+      in: header
+      name: X-AWS-Session-Token
+      description: |
+        **AWS (required with access key ID and secret).** Session token from temporary
+        credentials (STS, instance profile, or IRSA). Long-lived IAM user keys without
+        a session token are not supported for this API.
+    gcpWorkloadIdentityToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        **GCP.** Cloud provider identity token sent as `Authorization: Bearer <token>`.
+        This is a workload identity JWT obtained from the GCP metadata server or
+        IAM Credentials API — **not** the SingleStore JWT returned in the response body.
+
+        Request the identity token with audience `https://authsvc.singlestore.com`
+        (or the audience configured for your environment).
+    azureManagedIdentityToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        **Azure.** Cloud provider access token sent as `Authorization: Bearer <token>`.
+        This is a managed identity token from the Azure Instance Metadata Service or
+        Azure Identity SDK — **not** the SingleStore JWT returned in the response body.
+
+        Acquire the token for resource `https://management.azure.com/`.
+
+  schemas:
+    ServiceIdentityJWT:
+      type: object
+      required: [jwt]
+      properties:
+        jwt:
+          type: string
+          description: Signed JWT string
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            JWT expiration time (RFC 3339). Present on production responses;
+            reference clients only require `jwt`.
+        audience:
+          type: string
+          description: |
+            Intended audience (`engine` for database, `portal` for management API).
+            Present on production responses; reference clients only require `jwt`.
+          enum: [engine, portal]
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      additionalProperties: true

@@ -9,8 +9,7 @@ This repository contains tools for the SingleStore IAM authentication system.
 
 ## Current Status
 
-JWTs for engine access are ready for testing.
-JWTs for the management API are not yet available.
+JWTs for engine (database) access and the management API are available.
 APIs and language bindings may change before this is considered generally available.
 
 Current language support: Go, Python, Java, shell.
@@ -28,6 +27,7 @@ The `singlestore-auth-iam` library provides a seamless way to authenticate with 
 - **Automatic detection**: Discovers cloud provider and obtains credentials automatically  
 - **Role assumption**: Assume different roles/service accounts for enhanced security
 - **Command-line tool**: Standalone CLI for scripts and CI/CD pipelines
+- **Direct HTTP API**: OpenAPI spec for customers integrating without client libraries — see [API docs](docs/api/README.md) ([OpenAPI](docs/api/openapi.yaml), [HTML (Redoc)](https://redocly.github.io/redoc/?url=https://raw.githubusercontent.com/singlestore-labs/singlestore-auth-iam/main/docs/api/openapi.yaml))
 
 ### Future Plans
 - Additional language support: Node.js and C++ (planned)
