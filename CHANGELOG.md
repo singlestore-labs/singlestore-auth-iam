@@ -5,13 +5,22 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+## [v0.4.0] - 2026-06-12
 ### Added
+- OpenAPI specification for the IAM HTTP API (`docs/api/openapi.yaml`) with authentication guide (`docs/api/AUTHENTICATION.md`), local `make docs-api-lint` / `make docs-api-html` targets, and GitHub Pages deployment workflow.
+- Go CSP verifier positive principal format validation (AWS caller identity ARN, Azure UUID, GCP service account email or numeric principal), gated by `S2IAMValidatePrincipal` codegate (enabled by default).
+- `--allow-http` CLI flag for local and integration testing against HTTP servers.
 - Structured Java detection attempt statuses (`DetectAttemptStatus`) and accompanying test.
 - Minimal Java install section in root README.
+- Maven Central release workflow for the Java client (`v*` tag push, `-Prelease` profile with GPG signing and Sonatype Central publishing).
+- PyPI Trusted Publishing workflow for the Python package (`v*` tag push via GitHub OIDC; no long-lived API token in repository secrets).
 
 ### Changed
+- Require HTTPS for authentication server URLs by default across Go, Java, and Python; opt in with `WithAllowHTTP()` (Go), `Options.withAllowHttp()` (Java), or `allow_http=True` (Python). Server URL scheme is validated before cloud provider detection.
 - Simplified Java concurrent detection error attribution (removed index inference; provider wrapped in exception).
 - Removed verbose cloud detection overview from README to keep focus on user API.
+- Cloud provider CI tests serialized per VM host via remote locks; hosts defined in `.github/cloud-test-hosts.json` with stale-lock cleanup workflow.
 
 ### Fixed
 - Python GCP cancellation unraisable warning suppressed.
@@ -59,10 +68,11 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 
 ## Tagging & Publishing
 - Go: tag `go/vX.Y.Z` triggers module availability on proxy & pkg.go.dev.
-- Python: planned GitHub Action to build wheel/sdist and publish to PyPI.
-- Java: planned GitHub Action to deploy to Maven Central (OSSRH) once credentials & GPG keys configured.
+- Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
+- Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
-[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.3.0...HEAD
+[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...HEAD
+[v0.4.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.3.0...go/v0.4.0
 [v0.3.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.2.0...go/v0.3.0
 [v0.2.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.1.0...go/v0.2.0
 [v0.1.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/0.0.1...go/v0.1.0
