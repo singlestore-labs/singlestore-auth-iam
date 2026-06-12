@@ -11,8 +11,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: api-docs-pages
@@ -20,6 +18,9 @@ concurrency:
 
 jobs:
   check-pages:
+    permissions:
+      contents: read
+      pages: read
     runs-on: ubuntu-latest
     outputs:
       enabled: ${{ steps.check.outputs.enabled }}
@@ -45,6 +46,10 @@ jobs:
             }
 
   deploy:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     needs: check-pages
     if: needs.check-pages.outputs.enabled == 'true'
     environment:
