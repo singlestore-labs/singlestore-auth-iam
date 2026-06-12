@@ -60,10 +60,19 @@ jobs:
 
     - name: Setup SSH key
       if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
+      env:
+        AWS_POSITIVE_KEY: ${{ secrets.AWS_POSITIVE_KEY }}
+        AZURE_POSITIVE_KEY: ${{ secrets.AZURE_POSITIVE_KEY }}
+        AZURE_NEGATIVE_KEY: ${{ secrets.AZURE_NEGATIVE_KEY }}
+        GCP_POSITIVE_KEY: ${{ secrets.GCP_POSITIVE_KEY }}
       run: |
         mkdir -p ~/.ssh
-        echo "${{ secrets[env.SSH_KEY_SECRET] }}" > ~/.ssh/key
+        printf '%s\n' "${!SSH_KEY_SECRET}" > ~/.ssh/key
         chmod 600 ~/.ssh/key
+        if [ ! -s ~/.ssh/key ] || ! ssh-keygen -l -f ~/.ssh/key >/dev/null 2>&1; then
+          echo "SSH key secret ${SSH_KEY_SECRET} is missing or invalid" >&2
+          exit 1
+        fi
         ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
         ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
 
