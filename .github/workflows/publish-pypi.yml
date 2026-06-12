@@ -1,0 +1,67 @@
+name: Publish Python package to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip build hatchling
+
+      - name: Set release version from tag
+        working-directory: python
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "${RELEASE_VERSION}" ] || ! echo "${RELEASE_VERSION}" | grep -Eq '^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9.-]+)?$'; then
+            echo "Invalid release tag ${GITHUB_REF_NAME}; expected vMAJOR[.MINOR[.PATCH]][-qualifier]" >&2
+            exit 1
+          fi
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${RELEASE_VERSION}\"/" src/s2iam/__init__.py
+          grep -q "__version__ = \"${RELEASE_VERSION}\"" src/s2iam/__init__.py
+
+      - name: Build distributions
+        working-directory: python
+        run: python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: python/dist/
+
+  publish:
+    name: Upload release to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/singlestore-auth-iam/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
