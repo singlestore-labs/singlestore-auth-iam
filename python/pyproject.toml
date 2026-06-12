@@ -7,7 +7,7 @@ name = "singlestore-auth-iam"
 description = "SingleStore IAM authentication library for cloud providers"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "../LICENSE"}
+license = "MIT"
 authors = [
     {name = "SingleStore Labs"},
 ]
@@ -58,15 +58,11 @@ path = "src/s2iam/__init__.py"
 include = [
     "/src",
     "/tests",
-    "../LICENSE",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/s2iam"]
 sources = ["src"]
-artifacts = [
-    "../LICENSE",
-]
 
 [tool.black]
 line-length = 120

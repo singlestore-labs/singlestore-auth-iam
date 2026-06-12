@@ -34,6 +34,7 @@ jobs:
             exit 1
           fi
           sed -i "s/^__version__ = \".*\"/__version__ = \"${RELEASE_VERSION}\"/" src/s2iam/__init__.py
+          grep -q "__version__ = \"${RELEASE_VERSION}\"" src/s2iam/__init__.py
 
       - name: Build distributions
         working-directory: python
