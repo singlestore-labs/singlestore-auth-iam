@@ -82,7 +82,8 @@ class CloudProviderClient(ABC):
 
         Args:
             role_identifier: Provider-specific role identifier
-            role_session_name: AWS STS RoleSessionName (ignored by non-AWS providers)
+            role_session_name: AWS-only; ignored here. Pass roleSessionName via
+                get_identity_headers additional_params (or assume_role_session_name in get_jwt).
 
         Returns:
             New CloudProviderClient instance with assumed role

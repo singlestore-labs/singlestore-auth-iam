@@ -23,15 +23,11 @@ ROLE_SESSION_NAME_PARAM = "roleSessionName"
 DEFAULT_ROLE_SESSION_NAME = "s2iam-session"
 
 
-def _role_session_name_from_params(
-    additional_params: Optional[dict[str, str]], client_session_name: Optional[str]
-) -> str:
+def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) -> str:
     if additional_params:
         name = additional_params.get(ROLE_SESSION_NAME_PARAM)
         if name:
             return name
-    if client_session_name:
-        return client_session_name
     return DEFAULT_ROLE_SESSION_NAME
 
 
@@ -41,7 +37,6 @@ class AWSClient(CloudProviderClient):
     _region: Optional[str]
     _identity: Optional[CloudIdentity]
     _role_arn: Optional[str]
-    _role_session_name: Optional[str]
     _sts_client: Optional[Any]
     _session: Optional[Any]
 
@@ -51,7 +46,6 @@ class AWSClient(CloudProviderClient):
         self._region = None
         self._identity = None
         self._role_arn = None
-        self._role_session_name = None
         self._sts_client = None
         self._session = None
 
@@ -171,7 +165,6 @@ class AWSClient(CloudProviderClient):
         clone._detected = self._detected
         clone._region = self._region
         clone._role_arn = role_identifier
-        clone._role_session_name = role_session_name
         clone._sts_client = self._sts_client
         return clone
 
@@ -207,7 +200,7 @@ class AWSClient(CloudProviderClient):
 
         try:  # noqa: BLE001
             if self._role_arn:
-                session_name = _role_session_name_from_params(additional_params, self._role_session_name)
+                session_name = _role_session_name_from_params(additional_params)
                 self._log(f"Assuming role {self._role_arn} with session name {session_name}")
                 assume_resp = await loop.run_in_executor(
                     None,
