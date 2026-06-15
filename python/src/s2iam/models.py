@@ -76,12 +76,15 @@ class CloudProviderClient(ABC):
         ...
 
     @abstractmethod
-    def assume_role(self, role_identifier: str) -> "CloudProviderClient":
+    def assume_role(
+        self, role_identifier: str, role_session_name: Optional[str] = None
+    ) -> "CloudProviderClient":
         """
         Configure the provider to use an alternate identity.
 
         Args:
             role_identifier: Provider-specific role identifier
+            role_session_name: AWS STS RoleSessionName (ignored by non-AWS providers)
 
         Returns:
             New CloudProviderClient instance with assumed role

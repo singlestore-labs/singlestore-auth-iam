@@ -19,7 +19,9 @@ class _StubProvider(CloudProviderClient):
     def get_type(self) -> CloudProviderType:
         return CloudProviderType.AWS
 
-    def assume_role(self, role_identifier: str) -> CloudProviderClient:
+    def assume_role(
+        self, role_identifier: str, role_session_name: Optional[str] = None
+    ) -> CloudProviderClient:
         return self
 
     async def get_identity_headers(

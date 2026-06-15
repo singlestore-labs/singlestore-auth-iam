@@ -224,7 +224,9 @@ class GCPClient(CloudProviderClient):
         """Return GCP provider type."""
         return CloudProviderType.GCP
 
-    def assume_role(self, role_identifier: str) -> "GCPClient":
+    def assume_role(
+        self, role_identifier: str, role_session_name: Optional[str] = None
+    ) -> "GCPClient":
         """Create a new client with assumed service account."""
         new_client = GCPClient(self._logger)
         new_client._detected = self._detected
