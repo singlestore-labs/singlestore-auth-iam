@@ -35,14 +35,14 @@ func (o jwtOption) applyJWTOption(opts *jwtOptions) {
 // jwtOptions holds the options for the getJWT function
 type jwtOptions struct {
 	detectProviderOptions
-	JWTType              JWTType
-	WorkspaceGroupID     string
-	ServerURL            string
-	AllowHTTP            bool
-	Provider             models.CloudProviderClient
-	AdditionalParams     map[string]string
-	AssumeRoleIdentifier     string
-	AssumeRoleSessionName    string
+	JWTType               JWTType
+	WorkspaceGroupID      string
+	ServerURL             string
+	AllowHTTP             bool
+	Provider              models.CloudProviderClient
+	AdditionalParams      map[string]string
+	AssumeRoleIdentifier  string
+	AssumeRoleSessionName string
 }
 
 // WithServerURL sets the authentication server URL

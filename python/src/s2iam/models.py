@@ -76,9 +76,7 @@ class CloudProviderClient(ABC):
         ...
 
     @abstractmethod
-    def assume_role(
-        self, role_identifier: str, role_session_name: Optional[str] = None
-    ) -> "CloudProviderClient":
+    def assume_role(self, role_identifier: str, role_session_name: Optional[str] = None) -> "CloudProviderClient":
         """
         Configure the provider to use an alternate identity.
 

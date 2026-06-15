@@ -24,12 +24,12 @@ type Config struct {
 	GCPAudience string
 
 	// Provider options
-	Provider   string
+	Provider              string
 	AssumeRole            string
 	AssumeRoleSessionName string
-	Timeout    time.Duration
-	ServerURL  string
-	AllowHTTP  bool
+	Timeout               time.Duration
+	ServerURL             string
+	AllowHTTP             bool
 
 	// Output options
 	EnvName   string

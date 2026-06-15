@@ -69,9 +69,7 @@ async def get_jwt(
     # Assume role if requested
     if assume_role_identifier:
         if assume_role_session_name:
-            provider = provider.assume_role(
-                assume_role_identifier, role_session_name=assume_role_session_name
-            )
+            provider = provider.assume_role(assume_role_identifier, role_session_name=assume_role_session_name)
         else:
             provider = provider.assume_role(assume_role_identifier)
 

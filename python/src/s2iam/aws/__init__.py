@@ -166,9 +166,7 @@ class AWSClient(CloudProviderClient):
     def get_type(self) -> CloudProviderType:
         return CloudProviderType.AWS
 
-    def assume_role(
-        self, role_identifier: str, role_session_name: Optional[str] = None
-    ) -> "AWSClient":
+    def assume_role(self, role_identifier: str, role_session_name: Optional[str] = None) -> "AWSClient":
         clone = AWSClient(self._logger)
         clone._detected = self._detected
         clone._region = self._region
@@ -209,9 +207,7 @@ class AWSClient(CloudProviderClient):
 
         try:  # noqa: BLE001
             if self._role_arn:
-                session_name = _role_session_name_from_params(
-                    additional_params, self._role_session_name
-                )
+                session_name = _role_session_name_from_params(additional_params, self._role_session_name)
                 self._log(f"Assuming role {self._role_arn} with session name {session_name}")
                 assume_resp = await loop.run_in_executor(
                     None,

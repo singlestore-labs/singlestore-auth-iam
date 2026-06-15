@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	s2iamGoModulePath = "github.com/singlestore-labs/singlestore-auth-iam/go"
+	s2iamGoModulePath        = "github.com/singlestore-labs/singlestore-auth-iam/go"
 	serverInfoTimeoutSeconds = 10 // baseline timeout for local / fast environments
 )
 
