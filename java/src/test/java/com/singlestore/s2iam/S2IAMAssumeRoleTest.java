@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.singlestore.s2iam.exceptions.NoCloudProviderDetectedException;
 import com.singlestore.s2iam.providers.aws.AWSClient;
+import java.util.Map;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,15 @@ public class S2IAMAssumeRoleTest {
 
   @Test
   void testAssumeRoleMustSucceedWhenEnvSet() {
+    testAssumeRoleIdentity(null);
+  }
+
+  @Test
+  void testAssumeRoleWithCustomSessionName() {
+    testAssumeRoleIdentity("s2iam-test-session");
+  }
+
+  private void testAssumeRoleIdentity(String sessionName) {
     String roleArn = System.getenv("S2IAM_TEST_ASSUME_ROLE");
     if (roleArn == null || roleArn.isEmpty()) {
       Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set - skipping assumeRole test");
@@ -30,7 +40,7 @@ public class S2IAMAssumeRoleTest {
       return; // unreachable
     }
     assertNotNull(base, "provider must be detected");
-    CloudProviderClient.IdentityHeadersResult baseRes = base.getIdentityHeaders(java.util.Map.of());
+    CloudProviderClient.IdentityHeadersResult baseRes = base.getIdentityHeaders(Map.of());
     assertNull(baseRes.error, "base identity retrieval failed: "
         + (baseRes.error == null ? "" : baseRes.error.getMessage()));
     assertNotNull(baseRes.identity, "base identity missing");
@@ -38,7 +48,10 @@ public class S2IAMAssumeRoleTest {
 
     CloudProviderClient assumed = base.assumeRole(roleArn);
     assertNotNull(assumed, "assumeRole returned null client");
-    CloudProviderClient.IdentityHeadersResult res = assumed.getIdentityHeaders(java.util.Map.of());
+    Map<String, String> additionalParams = (sessionName != null && !sessionName.isEmpty())
+        ? Map.of(AWSClient.ROLE_SESSION_NAME_PARAM, sessionName)
+        : Map.of();
+    CloudProviderClient.IdentityHeadersResult res = assumed.getIdentityHeaders(additionalParams);
     assertNull(res.error, "assumeRole identity retrieval failed: "
         + (res.error == null ? "" : res.error.getMessage()));
     assertNotNull(res.identity, "identity missing after assumeRole");
@@ -51,8 +64,11 @@ public class S2IAMAssumeRoleTest {
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
     if (roleArn.startsWith("arn:aws:iam:")) {
-      assertTrue(assumedIdentifier.contains(AWSClient.DEFAULT_ROLE_SESSION_NAME),
-          "assumed identifier should contain default session name");
+      String expectedSession = (sessionName != null && !sessionName.isEmpty())
+          ? sessionName
+          : AWSClient.DEFAULT_ROLE_SESSION_NAME;
+      assertTrue(assumedIdentifier.contains(expectedSession),
+          "assumed identifier should contain session name");
     }
   }
 }
