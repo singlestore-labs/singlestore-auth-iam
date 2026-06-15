@@ -292,7 +292,7 @@ def _decode_jwt_payload(token: str) -> dict:
 
     parts = token.split(".")
     assert len(parts) >= 2, "JWT structure invalid"
-    payload_b64 = parts[1] + "=" * (4 - len(parts[1]) % 4)
+    payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
     return json.loads(base64.urlsafe_b64decode(payload_b64))
 
 
