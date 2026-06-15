@@ -19,6 +19,7 @@ from ..models import (
 )
 
 ROLE_SESSION_NAME_PARAM = "roleSessionName"
+# Stable default when AssumeRole is used without an explicit session name.
 DEFAULT_ROLE_SESSION_NAME = "s2iam-session"
 
 

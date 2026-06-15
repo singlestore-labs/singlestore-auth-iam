@@ -37,7 +37,8 @@ public class S2IAMJwtAssumeRoleTest {
   }
 
   @Test
-  void assumeRoleDatabaseJWT() throws Exception {
+  void assumeRoleDatabaseJWTWithSessionName() throws Exception {
+    String sessionName = "s2iam-test-session";
     String role = System.getenv("S2IAM_TEST_ASSUME_ROLE");
     if (role == null || role.isEmpty())
       Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set");
@@ -66,6 +67,7 @@ public class S2IAMJwtAssumeRoleTest {
     // Assume role path
     List<JwtOption> assumeOpts = new ArrayList<>(opts);
     assumeOpts.add(Options.withAssumeRole(role));
+    assumeOpts.add(Options.withAssumeRoleSessionName(sessionName));
     String assumedJwt = S2IAM.getDatabaseJWT("test-workspace",
         assumeOpts.toArray(new JwtOption[0]));
     String assumedSub = decodeSub(assumedJwt);
@@ -78,6 +80,9 @@ public class S2IAMJwtAssumeRoleTest {
     String roleNameFragment = role.contains("/") ? role.substring(role.lastIndexOf('/') + 1) : role;
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
+    if (role.startsWith("arn:aws:iam:"))
+      assertTrue(assumedIdentifier.contains(sessionName),
+          "assumed identifier should contain session name");
   }
 
   private static JsonNode fetchLastRequest() throws Exception {

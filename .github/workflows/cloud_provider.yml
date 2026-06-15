@@ -40,13 +40,6 @@ permissions:
 # Go: Runs integration tests with coverage reporting (go coverage format)
 # Python: Uses automated validation framework with coverage reporting (XML format)
 # Coverage from all environments (no CSP, AWS, Azure, GCP) is uploaded to Codecov
-#
-# Per-host concurrency: each matrix leg acquires a remote lock on its VM after SSH
-# setup (post environment approval) via make ssh-acquire-lock (see Makefile).
-# Lock path on each host: /tmp/s2iam-cloud-test.lock.d/ (atomic mkdir; info file).
-# Release runs in an always() cleanup step (make ssh-release-lock). Stale locks
-# (runner kill, network drop) can be cleared via the "Clear Cloud Test Locks"
-# workflow (cloud_clear_stale_locks.yml; make ssh-clear-lock).
 
 jobs:
   matrix-prep:
@@ -64,7 +57,6 @@ jobs:
 
   test:
     # Single test job with matrix over cloud VM hosts. SSH keys remain environment secrets.
-    # Per-host serialization uses remote locks on each VM (see header comment).
     needs: matrix-prep
     runs-on: ubuntu-latest
     environment: cloud-VMs
@@ -91,18 +83,6 @@ jobs:
         chmod 600 ~/.ssh/key
         ssh-keyscan -H ${{ matrix.hostname }} >> ~/.ssh/known_hosts
         ssh ${{ env.SSH_OPTS }} ${{ env.HOST }} "echo 'SSH connection successful'"
-
-    - name: Acquire remote lock
-      id: lock
-      env:
-        LOCK_RUN_ID: ${{ github.run_id }}
-        LOCK_RUN_ATTEMPT: ${{ github.run_attempt }}
-        LOCK_REF: ${{ github.ref }}
-        LOCK_MATRIX: ${{ matrix.name }}
-        LOCK_HOSTNAME: ${{ matrix.hostname }}
-      run: |
-        make ssh-acquire-lock
-        echo "acquired=true" >> "${GITHUB_OUTPUT}"
 
     - name: Run remote tests via Make (copy, run, download, cleanup)
       env:
@@ -157,10 +137,6 @@ jobs:
       run: |
         set -e
         make ssh-cleanup-remote
-
-    - name: Release remote lock
-      if: always() && steps.lock.outputs.acquired == 'true'
-      run: make ssh-release-lock
 
     - name: Cleanup SSH key
       if: always()

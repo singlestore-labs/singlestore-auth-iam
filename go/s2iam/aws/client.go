@@ -2,7 +2,6 @@ package aws
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -25,15 +24,17 @@ const (
 	// RoleSessionNameParam is the additionalParams key for a custom STS role session name.
 	RoleSessionNameParam = "roleSessionName"
 
+	// DefaultRoleSessionName is the stable STS session name used when AssumeRole is
+	// requested without an explicit RoleSessionName. The resulting identity ARN is
+	// arn:aws:sts::ACCOUNT:assumed-role/ROLE/DefaultRoleSessionName — pre-create DB
+	// users (and cloud principals) to match that full ARN, or set a custom session name.
+	DefaultRoleSessionName = "s2iam-session"
+
 	// Timeouts for AWS metadata/token detection (short to keep detection fast)
 	awsMetadataTimeout    = 2 * time.Second
 	awsTokenTimeout       = 2 * time.Second
 	awsRegionProbeTimeout = 2 * time.Second
 )
-
-func defaultRoleSessionName() string {
-	return fmt.Sprintf("SingleStoreAuth-%d", time.Now().Unix())
-}
 
 func roleSessionNameFromParams(additionalParams map[string]string) string {
 	if additionalParams != nil {
@@ -41,7 +42,7 @@ func roleSessionNameFromParams(additionalParams map[string]string) string {
 			return name
 		}
 	}
-	return defaultRoleSessionName()
+	return DefaultRoleSessionName
 }
 
 // AWSClient implements the CloudProviderClient interface for AWS

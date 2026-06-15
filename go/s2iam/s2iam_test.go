@@ -433,11 +433,16 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 // Test with AssumeRole
 func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	// Cannot use t.Parallel() - depends on S2IAM_TEST_ASSUME_ROLE environment variable
-	// Check for the required environment variable
 	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")
 	if roleIdentifier == "" {
 		t.Skip("test requires S2IAM_TEST_ASSUME_ROLE environment variable to be set")
 	}
+
+	testGetDatabaseJWTAssumeRoleValid(t, roleIdentifier, "s2iam-test-session")
+}
+
+func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName string) {
+	t.Helper()
 
 	_ = requireCloudRole(t)
 
@@ -457,9 +462,15 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	flags.lastIdentifier = ""
 
 	// Now test with role assumption
-	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
-		s2iam.WithAssumeRole(roleIdentifier))
+	opts := []s2iam.JWTOption{
+		s2iam.WithServerURL(fakeServer.URL + "/iam/:jwtType"),
+		s2iam.WithAllowHTTP(),
+		s2iam.WithAssumeRole(roleIdentifier),
+	}
+	if sessionName != "" {
+		opts = append(opts, s2iam.WithAssumeRoleSessionName(sessionName))
+	}
+	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", opts...)
 
 	// Since S2IAM_TEST_ASSUME_ROLE is set, role assumption MUST succeed
 	// If it fails, that's a test failure - the environment is misconfigured
@@ -496,6 +507,11 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	assert.Contains(t, assumedIdentifier, expectedRoleName,
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
+	if strings.Contains(roleIdentifier, "arn:aws:iam:") {
+		assert.Contains(t, assumedIdentifier, sessionName,
+			"Assumed identity should contain session name (expected: %s, got: %s)",
+			sessionName, assumedIdentifier)
+	}
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
 }
