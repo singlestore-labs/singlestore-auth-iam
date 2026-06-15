@@ -6,7 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ## [Unreleased]
 ### Added
-- Optional AWS `RoleSessionName` when assuming a role (Go `WithAssumeRoleSessionName`, Python `assume_role_session_name`, Java `Options.withAssumeRoleSessionName`, CLI `--assume-role-session-name`). Default assume-role behavior is unchanged when the option is omitted.
+- Optional AWS `RoleSessionName` when assuming a role (`WithAssumeRoleSessionName` in Go, `assume_role_session_name` in Python, `assumeRoleSessionName` / `Options.withAssumeRoleSessionName` in Java, `--assume-role-session-name` CLI flag).
+
+### Changed
+- AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
+- Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
 
 ## [v0.4.0] - 2026-06-12
 ### Added
