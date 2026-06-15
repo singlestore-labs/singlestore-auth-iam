@@ -3,21 +3,10 @@ package aws
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
 )
-
-func TestRoleSessionNameFromParams(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "my-custom-session", roleSessionNameFromParams(map[string]string{
-		RoleSessionNameParam: "my-custom-session",
-	}))
-	assert.Equal(t, DefaultRoleSessionName, roleSessionNameFromParams(nil))
-	assert.Equal(t, DefaultRoleSessionName, roleSessionNameFromParams(map[string]string{}))
-}
 
 func TestValidatePrincipal(t *testing.T) {
 	if !gates.S2IAMValidatePrincipal.Enabled() {

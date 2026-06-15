@@ -12,9 +12,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
 - Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
 
-### Removed
-- Per-host remote lock steps from cloud provider CI workflow.
-
 ## [v0.4.0] - 2026-06-12
 ### Added
 - OpenAPI specification for the IAM HTTP API (`docs/api/openapi.yaml`) with authentication guide (`docs/api/AUTHENTICATION.md`), local `make docs-api-lint` / `make docs-api-html` targets, and GitHub Pages deployment workflow.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
@@ -438,7 +439,17 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 		t.Skip("test requires S2IAM_TEST_ASSUME_ROLE environment variable to be set")
 	}
 
-	testGetDatabaseJWTAssumeRoleValid(t, roleIdentifier, "s2iam-test-session")
+	for _, tc := range []struct {
+		name        string
+		sessionName string
+	}{
+		{name: "without custom session name", sessionName: ""},
+		{name: "with custom session name", sessionName: "s2iam-test-session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testGetDatabaseJWTAssumeRoleValid(t, roleIdentifier, tc.sessionName)
+		})
+	}
 }
 
 func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName string) {
@@ -508,9 +519,13 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
 	if strings.Contains(roleIdentifier, "arn:aws:iam:") {
-		assert.Contains(t, assumedIdentifier, sessionName,
+		expectedSessionName := sessionName
+		if expectedSessionName == "" {
+			expectedSessionName = aws.DefaultRoleSessionName
+		}
+		assert.Contains(t, assumedIdentifier, expectedSessionName,
 			"Assumed identity should contain session name (expected: %s, got: %s)",
-			sessionName, assumedIdentifier)
+			expectedSessionName, assumedIdentifier)
 	}
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
