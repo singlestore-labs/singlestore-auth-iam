@@ -16,4 +16,5 @@ public class JwtOptions extends ProviderOptions {
   public CloudProviderClient provider;
   public Map<String, String> additionalParams = new HashMap<>();
   public String assumeRoleIdentifier;
+  public String assumeRoleSessionName;
 }

@@ -19,6 +19,7 @@ async def get_jwt(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -67,7 +68,18 @@ async def get_jwt(
 
     # Assume role if requested
     if assume_role_identifier:
-        provider = provider.assume_role(assume_role_identifier)
+        if assume_role_session_name:
+            provider = provider.assume_role(
+                assume_role_identifier, role_session_name=assume_role_session_name
+            )
+        else:
+            provider = provider.assume_role(assume_role_identifier)
+
+    if assume_role_session_name and additional_params is None:
+        additional_params = {}
+    if assume_role_session_name:
+        additional_params = dict(additional_params or {})
+        additional_params["roleSessionName"] = assume_role_session_name
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
@@ -127,6 +139,7 @@ async def get_jwt_database(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -156,6 +169,7 @@ async def get_jwt_database(
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
+        assume_role_session_name=assume_role_session_name,
         timeout=timeout,
         logger=logger,
         **kwargs,
@@ -169,6 +183,7 @@ async def get_jwt_api(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -197,6 +212,7 @@ async def get_jwt_api(
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
+        assume_role_session_name=assume_role_session_name,
         timeout=timeout,
         logger=logger,
         **kwargs,

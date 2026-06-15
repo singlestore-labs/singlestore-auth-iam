@@ -44,10 +44,11 @@ func TestParseFlags(t *testing.T) {
 		},
 		{
 			name: "with provider and role",
-			args: []string{"cmd", "--provider", "aws", "--assume-role", "test-role", "--workspace-group-id", "test-workspace"},
+			args: []string{"cmd", "--provider", "aws", "--assume-role", "test-role", "--assume-role-session-name", "my-session", "--workspace-group-id", "test-workspace"},
 			validate: func(t *testing.T, config Config) {
 				assert.Equal(t, "aws", config.Provider)
 				assert.Equal(t, "test-role", config.AssumeRole)
+				assert.Equal(t, "my-session", config.AssumeRoleSessionName)
 			},
 		},
 		{

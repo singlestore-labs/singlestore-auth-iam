@@ -22,11 +22,27 @@ const (
 	getTokenURL    = "http://169.254.169.254/latest/api/token"
 	getMetadataURL = "http://169.254.169.254/latest/meta-data/"
 
+	// RoleSessionNameParam is the additionalParams key for a custom STS role session name.
+	RoleSessionNameParam = "roleSessionName"
+
 	// Timeouts for AWS metadata/token detection (short to keep detection fast)
 	awsMetadataTimeout    = 2 * time.Second
 	awsTokenTimeout       = 2 * time.Second
 	awsRegionProbeTimeout = 2 * time.Second
 )
+
+func defaultRoleSessionName() string {
+	return fmt.Sprintf("SingleStoreAuth-%d", time.Now().Unix())
+}
+
+func roleSessionNameFromParams(additionalParams map[string]string) string {
+	if additionalParams != nil {
+		if name := additionalParams[RoleSessionNameParam]; name != "" {
+			return name
+		}
+	}
+	return defaultRoleSessionName()
+}
 
 // AWSClient implements the CloudProviderClient interface for AWS
 type AWSClient struct {
@@ -299,8 +315,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		if c.logger != nil {
 			c.logger.Logf("AWS GetIdentityHeaders - Assuming role: %s\n", c.roleARN)
 		}
-		// Generate a unique session name
-		sessionName := fmt.Sprintf("SingleStoreAuth-%d", time.Now().Unix())
+		sessionName := roleSessionNameFromParams(additionalParams)
 
 		// Assume the specified role
 		assumeRoleInput := &sts.AssumeRoleInput{

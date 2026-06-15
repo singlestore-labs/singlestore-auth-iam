@@ -430,6 +430,9 @@ public final class S2IAM {
       }
       provider = provider.assumeRole(id);
     }
+    if (o.assumeRoleSessionName != null && !o.assumeRoleSessionName.isEmpty()) {
+      o.additionalParams.put(AWSClient.ROLE_SESSION_NAME_PARAM, o.assumeRoleSessionName);
+    }
     CloudProviderClient.IdentityHeadersResult res = provider.getIdentityHeaders(o.additionalParams);
     if (res.error != null)
       throw new S2IAMException("failed to get identity headers", res.error);

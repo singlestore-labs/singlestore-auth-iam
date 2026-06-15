@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	s2iamGoModulePath = "github.com/singlestore-labs/singlestore-auth-iam/go"
 	serverInfoTimeoutSeconds = 10 // baseline timeout for local / fast environments
 )
 
@@ -128,7 +129,7 @@ func TestIntegration_ServerAndClient(t *testing.T) {
 	clientBinary := filepath.Join(t.TempDir(), "client"+binaryExt)
 
 	// Get the absolute path to the project's Go module
-	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", s2iamGoModulePath).Output()
 	require.NoError(t, err, "failed to determine module root")
 	moduleRootStr := strings.TrimSpace(string(moduleRoot))
 
@@ -229,7 +230,7 @@ func TestIntegration_ServerOnly(t *testing.T) {
 
 	testServerBinary := filepath.Join(t.TempDir(), "test_server"+binaryExt)
 
-	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	moduleRoot, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", s2iamGoModulePath).Output()
 	require.NoError(t, err, "failed to determine module root")
 	moduleRootStr := strings.TrimSpace(string(moduleRoot))
 

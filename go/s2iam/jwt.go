@@ -41,7 +41,8 @@ type jwtOptions struct {
 	AllowHTTP            bool
 	Provider             models.CloudProviderClient
 	AdditionalParams     map[string]string
-	AssumeRoleIdentifier string
+	AssumeRoleIdentifier     string
+	AssumeRoleSessionName    string
 }
 
 // WithServerURL sets the authentication server URL
@@ -76,6 +77,13 @@ func WithGCPAudience(audience string) JWTOption {
 func WithAssumeRole(roleIdentifier string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleIdentifier = roleIdentifier
+	})
+}
+
+// WithAssumeRoleSessionName sets the AWS STS RoleSessionName when assuming a role.
+func WithAssumeRoleSessionName(sessionName string) JWTOption {
+	return jwtOption(func(o *jwtOptions) {
+		o.AssumeRoleSessionName = sessionName
 	})
 }
 
@@ -125,6 +133,10 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	provider := jwtOpts.Provider
 	if jwtOpts.AssumeRoleIdentifier != "" {
 		provider = provider.AssumeRole(jwtOpts.AssumeRoleIdentifier)
+	}
+
+	if jwtOpts.AssumeRoleSessionName != "" {
+		jwtOpts.AdditionalParams["roleSessionName"] = jwtOpts.AssumeRoleSessionName
 	}
 
 	identityHeaders, identity, err := provider.GetIdentityHeaders(ctx, jwtOpts.AdditionalParams)
