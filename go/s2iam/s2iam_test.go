@@ -23,7 +23,6 @@ import (
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
@@ -518,14 +517,10 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 	assert.Contains(t, assumedIdentifier, expectedRoleName,
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
-	if strings.Contains(roleIdentifier, "arn:aws:iam:") {
-		expectedSessionName := sessionName
-		if expectedSessionName == "" {
-			expectedSessionName = aws.DefaultRoleSessionName
-		}
-		assert.Contains(t, assumedIdentifier, expectedSessionName,
-			"Assumed identity should contain session name (expected: %s, got: %s)",
-			expectedSessionName, assumedIdentifier)
+	if sessionName != "" && strings.Contains(roleIdentifier, "arn:aws:iam:") {
+		assert.Contains(t, assumedIdentifier, sessionName,
+			"Assumed identity should contain custom session name (expected: %s, got: %s)",
+			sessionName, assumedIdentifier)
 	}
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)

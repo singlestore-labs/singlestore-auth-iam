@@ -22,8 +22,6 @@ import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
 
 public class AWSClient extends AbstractBaseClient {
   public static final String ROLE_SESSION_NAME_PARAM = "roleSessionName";
-  /** Stable default when AssumeRole is used without an explicit session name. */
-  public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
 
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
@@ -142,9 +140,9 @@ public class AWSClient extends AbstractBaseClient {
         GetCallerIdentityResponse assumedIdentity = temp
             .getCallerIdentity(GetCallerIdentityRequest.builder().build());
         account = assumedIdentity.account();
-        arn = assumedIdentity.arn();
-        region = deriveRegion(arn);
-        resourceType = deriveResourceTypeDetailed(arn);
+        region = deriveRegion(assumedIdentity.arn());
+        resourceType = deriveResourceTypeDetailed(assumedIdentity.arn());
+        arn = assumedRole;
       } else {
         arn = who.arn();
         account = who.account();
@@ -173,7 +171,7 @@ public class AWSClient extends AbstractBaseClient {
       if (name != null && !name.isEmpty())
         return name;
     }
-    return DEFAULT_ROLE_SESSION_NAME;
+    return "SingleStoreAuth-" + (System.currentTimeMillis() / 1000L);
   }
 
   private void ensureSTS() {

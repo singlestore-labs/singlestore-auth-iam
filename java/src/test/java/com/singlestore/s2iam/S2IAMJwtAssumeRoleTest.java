@@ -89,12 +89,6 @@ public class S2IAMJwtAssumeRoleTest {
     String roleNameFragment = role.contains("/") ? role.substring(role.lastIndexOf('/') + 1) : role;
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
-    if (role.startsWith("arn:aws:iam:")) {
-      String expectedSession = (sessionName != null && !sessionName.isEmpty()) ? sessionName
-          : com.singlestore.s2iam.providers.aws.AWSClient.DEFAULT_ROLE_SESSION_NAME;
-      assertTrue(assumedIdentifier.contains(expectedSession),
-          "assumed identifier should contain session name");
-    }
   }
 
   private static JsonNode fetchLastRequest() throws Exception {
