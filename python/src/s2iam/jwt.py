@@ -3,6 +3,7 @@ JWT functionality for SingleStore authentication.
 """
 
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import aiohttp
 
@@ -98,9 +99,16 @@ async def get_jwt(
         logger.log(f"Requesting JWT from {server_url} for provider {identity.provider.value}")
 
     # Make JWT request
+    request_url = server_url
+    if workspace_group_id and jwt_type == JWTType.DATABASE_ACCESS:
+        parsed = urlparse(server_url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["workspaceGroupID"] = workspace_group_id
+        request_url = urlunparse(parsed._replace(query=urlencode(query)))
+
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         async with session.post(
-            server_url,
+            request_url,
             headers={
                 **headers,
                 "Content-Type": "application/json",
