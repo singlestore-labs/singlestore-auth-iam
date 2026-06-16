@@ -29,23 +29,21 @@ const (
 
 // AzureClient implements the CloudProviderClient interface for Azure
 type AzureClient struct {
-	managedIdentityID   string
-	identity            *models.CloudIdentity
-	detected            bool
-	logger              models.Logger // Added logger field
-	mu                  sync.Mutex    // Added for concurrency safety
-	assumeRoleRequested bool          // Flag to track if AssumeRole was called
+	managedIdentityID string
+	identity          *models.CloudIdentity
+	detected          bool
+	logger            models.Logger // Added logger field
+	mu                sync.Mutex    // Added for concurrency safety
 }
 
 func (c *AzureClient) copy() *AzureClient {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return &AzureClient{
-		managedIdentityID:   c.managedIdentityID,
-		identity:            c.identity,
-		detected:            c.detected,
-		logger:              c.logger,
-		assumeRoleRequested: c.assumeRoleRequested,
+		managedIdentityID: c.managedIdentityID,
+		identity:          c.identity,
+		detected:          c.detected,
+		logger:            c.logger,
 	}
 }
 
@@ -242,17 +240,10 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 	detected := c.detected
 	managedIdentityID := c.managedIdentityID
 	logger := c.logger
-	assumeRoleRequested := c.assumeRoleRequested
 	c.mu.Unlock()
 
 	if !detected {
 		return nil, nil, errors.WithStack(models.ErrProviderNotDetected)
-	}
-
-	// Check if AssumeRole was requested - Azure doesn't support true role assumption
-	if assumeRoleRequested {
-		return nil, nil, errors.WithStack(models.ErrAssumeRoleNotSupported.Errorf(
-			"Azure does not support AssumeRole"))
 	}
 
 	// Check for context cancellation
@@ -474,12 +465,11 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 	}, nil
 }
 
-// AssumeRole is not supported by Azure.
-// Azure does not have an equivalent to AWS STS AssumeRole.
-// This method will return a client that fails when GetIdentityHeaders is called.
+// AssumeRole selects a user-assigned managed identity by client ID (UUID).
+// This mirrors Python/Java behavior: the identifier is passed as client_id to the
+// Azure instance metadata service, not AWS-style role assumption.
 func (c *AzureClient) AssumeRole(roleIdentifier string) models.CloudProviderClient {
 	newClient := c.copy()
 	newClient.managedIdentityID = roleIdentifier
-	newClient.assumeRoleRequested = true
 	return newClient
 }
