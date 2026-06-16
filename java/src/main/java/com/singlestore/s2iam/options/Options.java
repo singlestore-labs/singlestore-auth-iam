@@ -31,7 +31,10 @@ public final class Options {
     return o -> o.assumeRoleSessionName = sessionName;
   }
 
-  /** Sets an additional provider-specific parameter forwarded to identity acquisition. */
+  /**
+   * Sets an additional provider-specific parameter forwarded to identity
+   * acquisition.
+   */
   public static JwtOption withAdditionalParam(String key, String value) {
     return o -> o.additionalParams.put(key, value);
   }

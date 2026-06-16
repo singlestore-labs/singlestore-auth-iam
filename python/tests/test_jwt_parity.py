@@ -7,7 +7,7 @@ import subprocess
 import time
 import uuid
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Optional
 
 import aiohttp
 import pytest
@@ -87,7 +87,7 @@ def _flagged_test_server(*extra_flags: str) -> Iterator[GoTestServerManager]:
             pass
 
 
-async def _fetch_last_server_request(base_url: str) -> dict | None:
+async def _fetch_last_server_request(base_url: str) -> Optional[dict]:
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{base_url}/info/requests") as resp:
             if resp.status != 200:

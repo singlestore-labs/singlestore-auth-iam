@@ -49,14 +49,14 @@ public class S2IAMJwtAssumeRoleInvalidTest {
       case azure:
         invalidRole = UUID.randomUUID().toString();
         break;
-      default:
+      default :
         Assumptions.abort("unsupported provider: " + provider.getType());
         return;
     }
 
-    String url = server.getEndpoints().getOrDefault("auth", server.getBaseURL() + "/auth/iam/:jwtType");
-    assertThrows(S2IAMException.class,
-        () -> S2IAM.getDatabaseJWT("test-workspace", ServerUrlOption.of(url), Options.withAllowHttp(),
-            Options.withAssumeRole(invalidRole)));
+    String url = server.getEndpoints().getOrDefault("auth",
+        server.getBaseURL() + "/auth/iam/:jwtType");
+    assertThrows(S2IAMException.class, () -> S2IAM.getDatabaseJWT("test-workspace",
+        ServerUrlOption.of(url), Options.withAllowHttp(), Options.withAssumeRole(invalidRole)));
   }
 }

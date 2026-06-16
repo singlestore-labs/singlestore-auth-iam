@@ -92,14 +92,14 @@ public class GCPClient extends AbstractBaseClient {
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
       if (assumedRole != null && !assumedRole.isEmpty()) {
-        String selfToken = fetchMetadataIdentityToken(client, "https://iamcredentials.googleapis.com/");
+        String selfToken = fetchMetadataIdentityToken(client,
+            "https://iamcredentials.googleapis.com/");
         if (selfToken == null || selfToken.isEmpty()) {
           return new IdentityHeadersResult(null, null,
               new IdentityUnavailableException("GCP impersonation requires base identity token"));
         }
-        String impersonationUrl =
-            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/" + assumedRole
-                + ":generateIdToken";
+        String impersonationUrl = "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+            + assumedRole + ":generateIdToken";
         String body = "{\"audience\":\"" + audience + "\"}";
         HttpRequest req = HttpRequest.newBuilder(URI.create(impersonationUrl))
             .timeout(Timeouts.IDENTITY_EXTENDED).header("Authorization", "Bearer " + selfToken)
@@ -137,9 +137,8 @@ public class GCPClient extends AbstractBaseClient {
   }
 
   private String fetchMetadataIdentityToken(HttpClient client, String audience) throws Exception {
-    String url =
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
-            + audience + "&format=full";
+    String url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
+        + audience + "&format=full";
     HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
         .timeout(Timeouts.IDENTITY).GET().build();
     HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());

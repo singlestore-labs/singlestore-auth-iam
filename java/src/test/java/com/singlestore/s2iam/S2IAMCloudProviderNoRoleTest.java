@@ -31,14 +31,15 @@ public class S2IAMCloudProviderNoRoleTest {
       case "azure":
         assertEquals(CloudProviderType.azure, client.getType());
         break;
-      default:
+      default :
         fail("Unknown provider in S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE: " + noRole);
     }
 
     CloudProviderClient.IdentityHeadersResult res = client.getIdentityHeaders(java.util.Map.of());
     assertNotNull(res.error, "GetIdentityHeaders should fail when no role is assigned");
-    assertTrue(res.error instanceof IdentityUnavailableException
-        || res.error instanceof IllegalStateException,
+    assertTrue(
+        res.error instanceof IdentityUnavailableException
+            || res.error instanceof IllegalStateException,
         "unexpected error type: " + res.error.getClass().getName());
   }
 }
