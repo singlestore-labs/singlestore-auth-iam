@@ -159,7 +159,7 @@ public class AWSClient extends AbstractBaseClient {
       Map<String, String> extra = new HashMap<>();
       extra.put("account", account);
       if (who.userId() != null && !who.userId().isEmpty())
-        extra.put("userId", who.userId());
+        extra.put("UserId", who.userId());
       CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, arn, account, region,
           resourceType, extra);
       return new IdentityHeadersResult(headers, identity, null);

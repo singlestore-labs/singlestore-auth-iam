@@ -101,6 +101,14 @@ public class AzureClient extends AbstractBaseClient {
         "https://management.azure.com/");
     String url = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource="
         + resource;
+    if (assumedRole != null && !assumedRole.isEmpty()) {
+      try {
+        url += "&client_id="
+            + java.net.URLEncoder.encode(assumedRole, java.nio.charset.StandardCharsets.UTF_8);
+      } catch (Exception e) {
+        return new IdentityHeadersResult(null, null, e);
+      }
+    }
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata", "true")

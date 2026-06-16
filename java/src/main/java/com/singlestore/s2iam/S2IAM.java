@@ -365,7 +365,7 @@ public final class S2IAM {
     for (JwtOption opt : opts)
       opt.apply(o);
     if (o.timeout == null)
-      o.timeout = Duration.ofSeconds(5);
+      o.timeout = Timeouts.IDENTITY;
     if (o.serverUrl == null || o.serverUrl.isEmpty())
       o.serverUrl = DEFAULT_SERVER;
   }

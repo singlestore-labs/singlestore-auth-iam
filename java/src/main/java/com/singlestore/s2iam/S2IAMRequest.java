@@ -127,17 +127,24 @@ public final class S2IAMRequest {
       jwtOpts.add(Options.withServerUrl(serverUrl));
     if (allowHttp)
       jwtOpts.add(Options.withAllowHttp());
-    if (timeout != null)
-      providerOpts.add(Options.withTimeout(timeout));
-    // Map additional params to existing explicit helpers (currently only audience)
-    if (additionalParams.containsKey("audience")) {
-      // Validate provider type if provider already set (explicit builder provider) or
-      // later after detection
-      if (provider != null && provider.getType() != CloudProviderType.gcp) {
-        throw new S2IAMException(
-            "audience is GCP-only and cannot be used with provider=" + provider.getType());
+    if (timeout != null) {
+      jwtOpts.add(Options.withTimeout(timeout));
+      providerOpts.add(Options.withDetectTimeout(timeout));
+    }
+    for (Map.Entry<String, String> e : additionalParams.entrySet()) {
+      String key = e.getKey();
+      String value = e.getValue();
+      if (key == null || value == null)
+        continue;
+      if ("audience".equals(key)) {
+        if (provider != null && provider.getType() != CloudProviderType.gcp) {
+          throw new S2IAMException(
+              "audience is GCP-only and cannot be used with provider=" + provider.getType());
+        }
+        jwtOpts.add(Options.withAudience(value));
+      } else {
+        jwtOpts.add(Options.withAdditionalParam(key, value));
       }
-      jwtOpts.add(Options.withAudience(additionalParams.get("audience")));
     }
     JwtOption[] jwtArr = jwtOpts.toArray(new JwtOption[0]);
     ProviderOption[] providerArr = providerOpts.toArray(new ProviderOption[0]);

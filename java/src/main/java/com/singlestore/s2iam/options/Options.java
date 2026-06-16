@@ -31,11 +31,22 @@ public final class Options {
     return o -> o.assumeRoleSessionName = sessionName;
   }
 
-  // Re-export provider options for convenience
-  public static ProviderOption withTimeout(Duration d) {
+  /** Sets an additional provider-specific parameter forwarded to identity acquisition. */
+  public static JwtOption withAdditionalParam(String key, String value) {
+    return o -> o.additionalParams.put(key, value);
+  }
+
+  /** Timeout for auth-server HTTP requests (JwtOptions.timeout). */
+  public static JwtOption withTimeout(Duration d) {
+    return o -> o.timeout = d;
+  }
+
+  /** Timeout for provider detection (ProviderOptions.timeout). */
+  public static ProviderOption withDetectTimeout(Duration d) {
     return ProviderOption.withTimeout(d);
   }
 
+  // Re-export provider options for convenience
   public static ProviderOption withLogger(com.singlestore.s2iam.Logger l) {
     return ProviderOption.withLogger(l);
   }

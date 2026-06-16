@@ -91,27 +91,66 @@ public class GCPClient extends AbstractBaseClient {
       audience = audience.substring(0, audience.length() - 1);
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
-      String url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
-          + audience + "&format=full";
-      HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
-          .timeout(Timeouts.IDENTITY).GET().build();
-      HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-      if (resp.statusCode() != 200 || resp.body().isEmpty()) {
-        if (resp.statusCode() == 404) {
-          return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
-              "GCP identity token unavailable (no attached service account) status=404"));
+      if (assumedRole != null && !assumedRole.isEmpty()) {
+        String selfToken = fetchMetadataIdentityToken(client, "https://iamcredentials.googleapis.com/");
+        if (selfToken == null || selfToken.isEmpty()) {
+          return new IdentityHeadersResult(null, null,
+              new IdentityUnavailableException("GCP impersonation requires base identity token"));
         }
-        return new IdentityHeadersResult(null, null, new IllegalStateException(
-            "failed to get GCP identity token status=" + resp.statusCode()));
+        String impersonationUrl =
+            "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/" + assumedRole
+                + ":generateIdToken";
+        String body = "{\"audience\":\"" + audience + "\"}";
+        HttpRequest req = HttpRequest.newBuilder(URI.create(impersonationUrl))
+            .timeout(Timeouts.IDENTITY_EXTENDED).header("Authorization", "Bearer " + selfToken)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+          return new IdentityHeadersResult(null, null, new IllegalStateException(
+              "GCP impersonation failed status=" + resp.statusCode() + " body=" + resp.body()));
+        }
+        JsonNode node = OM.readTree(resp.body());
+        String token = node.path("token").asText();
+        if (token == null || token.isEmpty()) {
+          return new IdentityHeadersResult(null, null,
+              new IllegalStateException("GCP impersonation returned empty token"));
+        }
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Authorization", "Bearer " + token);
+        CloudIdentity identity = parseGCPIdentity(token);
+        return new IdentityHeadersResult(headers, identity, null);
+      }
+
+      String token = fetchMetadataIdentityToken(client, audience);
+      if (token == null || token.isEmpty()) {
+        return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
+            "GCP identity token unavailable (no attached service account)"));
       }
       Map<String, String> headers = new HashMap<>();
-      String token = resp.body();
       headers.put("Authorization", "Bearer " + token);
       CloudIdentity identity = parseGCPIdentity(token);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
     }
+  }
+
+  private String fetchMetadataIdentityToken(HttpClient client, String audience) throws Exception {
+    String url =
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
+            + audience + "&format=full";
+    HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
+        .timeout(Timeouts.IDENTITY).GET().build();
+    HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+    if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+      if (resp.statusCode() == 404) {
+        return null;
+      }
+      throw new IllegalStateException(
+          "failed to get GCP identity token status=" + resp.statusCode());
+    }
+    return resp.body();
   }
   private CloudIdentity parseGCPIdentity(String jwt) {
     try {
