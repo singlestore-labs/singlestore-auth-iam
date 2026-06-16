@@ -283,7 +283,14 @@ class TestAssumeRole:
             from s2iam.aws import DEFAULT_ROLE_SESSION_NAME
 
             expected_session = session_name or DEFAULT_ROLE_SESSION_NAME
-            assert expected_session in assumed_identifier, "assumed identity should contain session name"
+            expected_segment = f":assumed-role/{role_name}/{expected_session}"
+            assert expected_segment in assumed_identifier, (
+                f"assumed identity ARN should contain {expected_segment!r}, got {assumed_identifier!r}"
+            )
+            assert assumed_identifier.endswith(f"/{expected_session}"), (
+                f"assumed identity ARN should end with session name /{expected_session!r}, "
+                f"got {assumed_identifier!r}"
+            )
 
 
 def _decode_jwt_payload(token: str) -> dict:

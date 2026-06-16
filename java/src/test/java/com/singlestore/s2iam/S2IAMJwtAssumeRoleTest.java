@@ -93,8 +93,11 @@ public class S2IAMJwtAssumeRoleTest {
       String expectedSession = (sessionName != null && !sessionName.isEmpty())
           ? sessionName
           : com.singlestore.s2iam.providers.aws.AWSClient.DEFAULT_ROLE_SESSION_NAME;
-      assertTrue(assumedIdentifier.contains(expectedSession),
-          "assumed identifier should contain session name");
+      String expectedSegment = ":assumed-role/" + roleNameFragment + "/" + expectedSession;
+      assertTrue(assumedIdentifier.contains(expectedSegment),
+          "assumed identifier ARN should contain assumed-role segment: " + expectedSegment);
+      assertTrue(assumedIdentifier.endsWith("/" + expectedSession),
+          "assumed identifier ARN should end with session name: /" + expectedSession);
     }
   }
 

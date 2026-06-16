@@ -523,10 +523,18 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		if expectedSessionName == "" {
 			expectedSessionName = aws.DefaultRoleSessionName
 		}
-		assert.Contains(t, assumedIdentifier, expectedSessionName,
-			"Assumed identity should contain session name (expected: %s, got: %s)",
+		expectedAssumedRoleSegment := fmt.Sprintf(":assumed-role/%s/%s", expectedRoleName, expectedSessionName)
+		assert.Contains(t, assumedIdentifier, expectedAssumedRoleSegment,
+			"Assumed identity ARN should contain assumed-role segment (expected: %s, got: %s)",
+			expectedAssumedRoleSegment, assumedIdentifier)
+		assert.True(t, strings.HasSuffix(assumedIdentifier, "/"+expectedSessionName),
+			"Assumed identity ARN should end with session name (expected suffix: /%s, got: %s)",
 			expectedSessionName, assumedIdentifier)
 	}
+	assert.Equal(t, flags.lastIdentifier, assumedIdentifier,
+		"Fake server identity should match JWT sub claim")
+	assert.Equal(t, assumedIdentifier, assumedClaims["sub"],
+		"JWT sub claim should match assumed identity ARN")
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
 }

@@ -76,14 +76,12 @@ class CloudProviderClient(ABC):
         ...
 
     @abstractmethod
-    def assume_role(self, role_identifier: str, role_session_name: Optional[str] = None) -> "CloudProviderClient":
+    def assume_role(self, role_identifier: str) -> "CloudProviderClient":
         """
         Configure the provider to use an alternate identity.
 
         Args:
             role_identifier: Provider-specific role identifier
-            role_session_name: AWS-only; ignored here. Pass roleSessionName via
-                get_identity_headers additional_params (or assume_role_session_name in get_jwt).
 
         Returns:
             New CloudProviderClient instance with assumed role

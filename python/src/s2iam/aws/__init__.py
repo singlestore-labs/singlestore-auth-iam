@@ -160,7 +160,7 @@ class AWSClient(CloudProviderClient):
     def get_type(self) -> CloudProviderType:
         return CloudProviderType.AWS
 
-    def assume_role(self, role_identifier: str, role_session_name: Optional[str] = None) -> "AWSClient":
+    def assume_role(self, role_identifier: str) -> "AWSClient":
         clone = AWSClient(self._logger)
         clone._detected = self._detected
         clone._region = self._region

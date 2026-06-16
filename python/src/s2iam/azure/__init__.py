@@ -251,7 +251,7 @@ class AzureClient(CloudProviderClient):
         """Return Azure provider type."""
         return CloudProviderType.AZURE
 
-    def assume_role(self, role_identifier: str, role_session_name: Optional[str] = None) -> "AzureClient":
+    def assume_role(self, role_identifier: str) -> "AzureClient":
         """Create a new client with assumed managed identity."""
         new_client = AzureClient(self._logger)
         new_client._detected = self._detected
