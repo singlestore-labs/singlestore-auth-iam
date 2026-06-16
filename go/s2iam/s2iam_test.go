@@ -506,6 +506,9 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		parts := strings.Split(roleIdentifier, ":role/")
 		if len(parts) == 2 {
 			expectedRoleName = parts[1]
+			if i := strings.LastIndex(expectedRoleName, "/"); i >= 0 {
+				expectedRoleName = expectedRoleName[i+1:]
+			}
 		} else {
 			expectedRoleName = roleIdentifier
 		}

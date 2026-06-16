@@ -148,6 +148,7 @@ async def get_jwt_database(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
+        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -191,6 +192,7 @@ async def get_jwt_api(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
+        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
