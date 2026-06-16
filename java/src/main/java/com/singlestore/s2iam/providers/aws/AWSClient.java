@@ -141,6 +141,7 @@ public class AWSClient extends AbstractBaseClient {
             .build();
         GetCallerIdentityResponse assumedIdentity = temp
             .getCallerIdentity(GetCallerIdentityRequest.builder().build());
+        who = assumedIdentity;
         account = assumedIdentity.account();
         arn = assumedIdentity.arn();
         region = deriveRegion(arn);
