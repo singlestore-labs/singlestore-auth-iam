@@ -82,6 +82,58 @@ public class S2IAMJwtErrorCasesTest {
     assertTrue(ex.getMessage().contains("500"));
   }
 
+  @Test
+  void serverReturnsInvalidJSON() throws Exception {
+    assumeOrSkip();
+    CloudProviderClient provider = S2IAM.detectProvider();
+    boolean realCloud = expectCloud();
+    java.util.Map<String, String> addl = new java.util.HashMap<>();
+    if (provider.getType() == CloudProviderType.gcp && realCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
+    }
+    CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes != null && idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
+    base.stop();
+    base = new GoTestServer(Path.of(".").toAbsolutePath(), "-return-invalid-json");
+    base.start();
+    S2IAMException ex = assertThrows(S2IAMException.class,
+        () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url()), Options.withAllowHttp()));
+    assertTrue(ex.getMessage().contains("parse"));
+  }
+
+  @Test
+  void verificationFailure401() throws Exception {
+    assumeOrSkip();
+    CloudProviderClient provider = S2IAM.detectProvider();
+    boolean realCloud = expectCloud();
+    java.util.Map<String, String> addl = new java.util.HashMap<>();
+    if (provider.getType() == CloudProviderType.gcp && realCloud) {
+      addl.put("audience", "https://authsvc.singlestore.com");
+    }
+    CloudProviderClient.IdentityHeadersResult idRes = provider.getIdentityHeaders(addl);
+    TestSkipUtil.skipIfNoRole(provider, idRes);
+    TestSkipUtil.skipIfAzureMIUnavailable(provider, idRes);
+    if (idRes != null && idRes.error instanceof IdentityUnavailableException) {
+      org.junit.jupiter.api.Assumptions.abort(
+          "identity unavailable (expected in no-role environment): " + idRes.error.getMessage());
+    }
+    assertNull(idRes.error, "identity header retrieval failed: "
+        + (idRes.error == null ? "" : idRes.error.getMessage()));
+    base.stop();
+    base = new GoTestServer(Path.of(".").toAbsolutePath(), "-fail-verification");
+    base.start();
+    S2IAMException ex = assertThrows(S2IAMException.class,
+        () -> S2IAM.getDatabaseJWT("wg", ServerUrlOption.of(url()), Options.withAllowHttp()));
+    assertTrue(ex.getMessage().contains("401"));
+  }
+
   private void assumeOrSkip() throws Exception {
     boolean expectCloud = expectCloud();
     try {

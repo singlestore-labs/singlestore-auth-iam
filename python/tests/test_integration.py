@@ -230,10 +230,15 @@ class TestErrorHandling:
 
     async def test_no_provider_detected_outside_cloud(self):
         """Test behavior when not running in a cloud environment."""
-        # This test might pass or fail depending on where it's run
-        # If run locally (not in cloud), should raise CloudProviderNotFound
-        # If run in cloud, should succeed
-        pass  # Behavior depends on environment
+        if (
+            os.environ.get("S2IAM_TEST_CLOUD_PROVIDER")
+            or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
+            or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
+        ):
+            pytest.skip("configured cloud test environment")
+
+        with pytest.raises(s2iam.CloudProviderNotFound):
+            await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
 
     async def test_invalid_jwt_server_url(self):
         """Test handling of invalid JWT server URLs."""
