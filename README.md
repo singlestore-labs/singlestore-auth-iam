@@ -242,7 +242,7 @@ SingleStore database users and cloud principals must be pre-created to match thi
 | `--assume-role-session-name=my-app` (recommended) | `my-app` | `arn:aws:sts::123456789012:assumed-role/MyRole/my-app` |
 | Omitted (default) | `s2iam-session` | `arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session` |
 
-**Do not rely on timestamp- or random-based session names** — they produce a different ARN on every request and will not match pre-provisioned database users.
+**Do not use timestamp- or random-based session names** — they produce a different ARN on every request and will not match pre-provisioned database users.
 
 Go: `s2iam.WithAssumeRoleSessionName("my-app")` · Python: `assume_role_session_name="my-app"` · Java: `Options.withAssumeRoleSessionName("my-app")`
 

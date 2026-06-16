@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
@@ -136,7 +137,7 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	}
 
 	if jwtOpts.AssumeRoleSessionName != "" {
-		jwtOpts.AdditionalParams["roleSessionName"] = jwtOpts.AssumeRoleSessionName
+		jwtOpts.AdditionalParams[aws.RoleSessionNameParam] = jwtOpts.AssumeRoleSessionName
 	}
 
 	identityHeaders, identity, err := provider.GetIdentityHeaders(ctx, jwtOpts.AdditionalParams)

@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import aiohttp
 
+from .aws import ROLE_SESSION_NAME_PARAM
 from .models import CloudProviderClient, JWTType, Logger
 
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
@@ -70,11 +71,9 @@ async def get_jwt(
     if assume_role_identifier:
         provider = provider.assume_role(assume_role_identifier)
 
-    if assume_role_session_name and additional_params is None:
-        additional_params = {}
     if assume_role_session_name:
         additional_params = dict(additional_params or {})
-        additional_params["roleSessionName"] = assume_role_session_name
+        additional_params[ROLE_SESSION_NAME_PARAM] = assume_role_session_name
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
