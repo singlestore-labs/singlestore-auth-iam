@@ -23,6 +23,7 @@ public final class S2IAMRequest {
   private boolean apiMode = false;
   private String workspaceGroupId;
   private String assumeRoleId;
+  private String assumeRoleSessionName;
   private Duration timeout;
   private String serverUrl;
   private boolean allowHttp;
@@ -56,6 +57,12 @@ public final class S2IAMRequest {
    */
   public S2IAMRequest assumeRole(String assumeRoleId) {
     this.assumeRoleId = assumeRoleId;
+    return this;
+  }
+
+  /** Optional AWS STS RoleSessionName when assuming a role. */
+  public S2IAMRequest assumeRoleSessionName(String assumeRoleSessionName) {
+    this.assumeRoleSessionName = assumeRoleSessionName;
     return this;
   }
 
@@ -114,6 +121,8 @@ public final class S2IAMRequest {
     List<ProviderOption> providerOpts = new ArrayList<>();
     if (assumeRoleId != null)
       jwtOpts.add(Options.withAssumeRole(assumeRoleId));
+    if (assumeRoleSessionName != null)
+      jwtOpts.add(Options.withAssumeRoleSessionName(assumeRoleSessionName));
     if (serverUrl != null)
       jwtOpts.add(Options.withServerUrl(serverUrl));
     if (allowHttp)

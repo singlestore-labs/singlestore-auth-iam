@@ -38,6 +38,15 @@ public class S2IAMJwtAssumeRoleTest {
 
   @Test
   void assumeRoleDatabaseJWT() throws Exception {
+    assumeRoleDatabaseJWT(null);
+  }
+
+  @Test
+  void assumeRoleDatabaseJWTWithCustomSessionName() throws Exception {
+    assumeRoleDatabaseJWT("s2iam-test-session");
+  }
+
+  private void assumeRoleDatabaseJWT(String sessionName) throws Exception {
     String role = System.getenv("S2IAM_TEST_ASSUME_ROLE");
     if (role == null || role.isEmpty())
       Assumptions.abort("S2IAM_TEST_ASSUME_ROLE not set");
@@ -66,6 +75,8 @@ public class S2IAMJwtAssumeRoleTest {
     // Assume role path
     List<JwtOption> assumeOpts = new ArrayList<>(opts);
     assumeOpts.add(Options.withAssumeRole(role));
+    if (sessionName != null && !sessionName.isEmpty())
+      assumeOpts.add(Options.withAssumeRoleSessionName(sessionName));
     String assumedJwt = S2IAM.getDatabaseJWT("test-workspace",
         assumeOpts.toArray(new JwtOption[0]));
     String assumedSub = decodeSub(assumedJwt);
@@ -78,6 +89,16 @@ public class S2IAMJwtAssumeRoleTest {
     String roleNameFragment = role.contains("/") ? role.substring(role.lastIndexOf('/') + 1) : role;
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
+    if (role.startsWith("arn:aws:iam:")) {
+      String expectedSession = (sessionName != null && !sessionName.isEmpty())
+          ? sessionName
+          : com.singlestore.s2iam.providers.aws.AWSClient.DEFAULT_ROLE_SESSION_NAME;
+      String expectedSegment = ":assumed-role/" + roleNameFragment + "/" + expectedSession;
+      assertTrue(assumedIdentifier.contains(expectedSegment),
+          "assumed identifier ARN should contain assumed-role segment: " + expectedSegment);
+      assertTrue(assumedIdentifier.endsWith("/" + expectedSession),
+          "assumed identifier ARN should end with session name: /" + expectedSession);
+    }
   }
 
   private static JsonNode fetchLastRequest() throws Exception {

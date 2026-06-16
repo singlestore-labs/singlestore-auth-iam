@@ -235,6 +235,74 @@ class TestErrorHandlingValidation:
             pytest.skip("No cloud provider detected")
 
 
+@pytest.mark.asyncio
+class TestAssumeRole:
+    """AWS assume-role integration tests (mirrors Go TestGetDatabaseJWT_AssumeRole_Valid)."""
+
+    @pytest.mark.integration
+    @pytest.mark.parametrize(
+        "session_name",
+        [
+            pytest.param(None, id="without custom session name"),
+            pytest.param("s2iam-test-session", id="with custom session name"),
+        ],
+    )
+    async def test_assume_role_database_jwt(self, test_server, session_name):
+        role = os.environ.get("S2IAM_TEST_ASSUME_ROLE")
+        if not role:
+            pytest.skip("test requires S2IAM_TEST_ASSUME_ROLE environment variable to be set")
+
+        await require_cloud_role(timeout=10.0)
+
+        server_url = f"{test_server.server_url}/auth/iam/database"
+        original_jwt = await s2iam.get_jwt_database(
+            workspace_group_id="test-workspace",
+            server_url=server_url,
+            allow_http=True,
+        )
+        original_claims = _decode_jwt_payload(original_jwt)
+        original_identifier = original_claims.get("sub", "")
+
+        kwargs = {
+            "workspace_group_id": "test-workspace",
+            "server_url": server_url,
+            "allow_http": True,
+            "assume_role_identifier": role,
+        }
+        if session_name:
+            kwargs["assume_role_session_name"] = session_name
+
+        assumed_jwt = await s2iam.get_jwt_database(**kwargs)
+        assumed_claims = _decode_jwt_payload(assumed_jwt)
+        assumed_identifier = assumed_claims.get("sub", "")
+
+        assert assumed_identifier != original_identifier, "identity should change when assuming role"
+        role_name = role.rsplit("/", 1)[-1] if "/" in role else role
+        assert role_name in assumed_identifier, "assumed identity should contain role name"
+        if role.startswith("arn:aws:iam:"):
+            from s2iam.aws import DEFAULT_ROLE_SESSION_NAME
+
+            expected_session = session_name or DEFAULT_ROLE_SESSION_NAME
+            expected_segment = f":assumed-role/{role_name}/{expected_session}"
+            assert (
+                expected_segment in assumed_identifier
+            ), f"assumed identity ARN should contain {expected_segment!r}, got {assumed_identifier!r}"
+            assert assumed_identifier.endswith(f"/{expected_session}"), (
+                f"assumed identity ARN should end with session name /{expected_session!r}, "
+                f"got {assumed_identifier!r}"
+            )
+
+
+def _decode_jwt_payload(token: str) -> dict:
+    import base64
+    import json
+
+    parts = token.split(".")
+    assert len(parts) >= 2, "JWT structure invalid"
+    payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload_b64))
+
+
 class TestLocalOnlyFastPathCancelledContext:
     """Local-only tests for IRSA / workload identity fast detection with cancelled context.
 

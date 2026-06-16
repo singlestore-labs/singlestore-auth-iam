@@ -27,6 +27,10 @@ public final class Options {
     return o -> o.assumeRoleIdentifier = role;
   }
 
+  public static JwtOption withAssumeRoleSessionName(String sessionName) {
+    return o -> o.assumeRoleSessionName = sessionName;
+  }
+
   // Re-export provider options for convenience
   public static ProviderOption withTimeout(Duration d) {
     return ProviderOption.withTimeout(d);

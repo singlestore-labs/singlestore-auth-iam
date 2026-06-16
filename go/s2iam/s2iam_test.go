@@ -23,6 +23,7 @@ import (
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
@@ -433,11 +434,26 @@ func TestGetDatabaseJWT_GCPAudience(t *testing.T) {
 // Test with AssumeRole
 func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	// Cannot use t.Parallel() - depends on S2IAM_TEST_ASSUME_ROLE environment variable
-	// Check for the required environment variable
 	roleIdentifier := os.Getenv("S2IAM_TEST_ASSUME_ROLE")
 	if roleIdentifier == "" {
 		t.Skip("test requires S2IAM_TEST_ASSUME_ROLE environment variable to be set")
 	}
+
+	for _, tc := range []struct {
+		name        string
+		sessionName string
+	}{
+		{name: "without custom session name", sessionName: ""},
+		{name: "with custom session name", sessionName: "s2iam-test-session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testGetDatabaseJWTAssumeRoleValid(t, roleIdentifier, tc.sessionName)
+		})
+	}
+}
+
+func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName string) {
+	t.Helper()
 
 	_ = requireCloudRole(t)
 
@@ -457,9 +473,15 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	flags.lastIdentifier = ""
 
 	// Now test with role assumption
-	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
-		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
-		s2iam.WithAssumeRole(roleIdentifier))
+	opts := []s2iam.JWTOption{
+		s2iam.WithServerURL(fakeServer.URL + "/iam/:jwtType"),
+		s2iam.WithAllowHTTP(),
+		s2iam.WithAssumeRole(roleIdentifier),
+	}
+	if sessionName != "" {
+		opts = append(opts, s2iam.WithAssumeRoleSessionName(sessionName))
+	}
+	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", opts...)
 
 	// Since S2IAM_TEST_ASSUME_ROLE is set, role assumption MUST succeed
 	// If it fails, that's a test failure - the environment is misconfigured
@@ -484,6 +506,9 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 		parts := strings.Split(roleIdentifier, ":role/")
 		if len(parts) == 2 {
 			expectedRoleName = parts[1]
+			if i := strings.LastIndex(expectedRoleName, "/"); i >= 0 {
+				expectedRoleName = expectedRoleName[i+1:]
+			}
 		} else {
 			expectedRoleName = roleIdentifier
 		}
@@ -496,6 +521,23 @@ func TestGetDatabaseJWT_AssumeRole_Valid(t *testing.T) {
 	assert.Contains(t, assumedIdentifier, expectedRoleName,
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
+	if strings.Contains(roleIdentifier, "arn:aws:iam:") {
+		expectedSessionName := sessionName
+		if expectedSessionName == "" {
+			expectedSessionName = aws.DefaultRoleSessionName
+		}
+		expectedAssumedRoleSegment := fmt.Sprintf(":assumed-role/%s/%s", expectedRoleName, expectedSessionName)
+		assert.Contains(t, assumedIdentifier, expectedAssumedRoleSegment,
+			"Assumed identity ARN should contain assumed-role segment (expected: %s, got: %s)",
+			expectedAssumedRoleSegment, assumedIdentifier)
+		assert.True(t, strings.HasSuffix(assumedIdentifier, "/"+expectedSessionName),
+			"Assumed identity ARN should end with session name (expected suffix: /%s, got: %s)",
+			expectedSessionName, assumedIdentifier)
+	}
+	assert.Equal(t, flags.lastIdentifier, assumedIdentifier,
+		"Fake server identity should match JWT sub claim")
+	assert.Equal(t, assumedIdentifier, assumedClaims["sub"],
+		"JWT sub claim should match assumed identity ARN")
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
 }

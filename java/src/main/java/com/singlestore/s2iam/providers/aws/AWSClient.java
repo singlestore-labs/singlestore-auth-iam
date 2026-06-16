@@ -21,6 +21,10 @@ import software.amazon.awssdk.services.sts.model.GetCallerIdentityRequest;
 import software.amazon.awssdk.services.sts.model.GetCallerIdentityResponse;
 
 public class AWSClient extends AbstractBaseClient {
+  public static final String ROLE_SESSION_NAME_PARAM = "roleSessionName";
+  /** Stable default when AssumeRole is used without an explicit session name. */
+  public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
+
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
   // Identity headers always reflect either the base credentials or an assumed
@@ -124,9 +128,9 @@ public class AWSClient extends AbstractBaseClient {
       String resourceType;
       String region;
       if (assumedRole != null && !assumedRole.isEmpty()) {
+        String sessionName = resolveRoleSessionName(additionalParams);
         AssumeRoleResponse assume = sts.assumeRole(AssumeRoleRequest.builder().roleArn(assumedRole)
-            .roleSessionName("SingleStoreAuth-" + (System.currentTimeMillis() / 1000L))
-            .durationSeconds(3600).build());
+            .roleSessionName(sessionName).durationSeconds(3600).build());
         headers.put("X-AWS-Access-Key-ID", assume.credentials().accessKeyId());
         headers.put("X-AWS-Secret-Access-Key", assume.credentials().secretAccessKey());
         headers.put("X-AWS-Session-Token", assume.credentials().sessionToken());
@@ -137,10 +141,11 @@ public class AWSClient extends AbstractBaseClient {
             .build();
         GetCallerIdentityResponse assumedIdentity = temp
             .getCallerIdentity(GetCallerIdentityRequest.builder().build());
+        who = assumedIdentity;
         account = assumedIdentity.account();
-        region = deriveRegion(assumedIdentity.arn());
-        resourceType = deriveResourceTypeDetailed(assumedIdentity.arn());
-        arn = assumedRole;
+        arn = assumedIdentity.arn();
+        region = deriveRegion(arn);
+        resourceType = deriveResourceTypeDetailed(arn);
       } else {
         arn = who.arn();
         account = who.account();
@@ -161,6 +166,15 @@ public class AWSClient extends AbstractBaseClient {
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
     }
+  }
+
+  static String resolveRoleSessionName(Map<String, String> additionalParams) {
+    if (additionalParams != null) {
+      String name = additionalParams.get(ROLE_SESSION_NAME_PARAM);
+      if (name != null && !name.isEmpty())
+        return name;
+    }
+    return DEFAULT_ROLE_SESSION_NAME;
   }
 
   private void ensureSTS() {

@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 import aiohttp
 
+from .aws import ROLE_SESSION_NAME_PARAM
 from .models import CloudProviderClient, JWTType, Logger
 
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
@@ -19,6 +20,7 @@ async def get_jwt(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -68,6 +70,10 @@ async def get_jwt(
     # Assume role if requested
     if assume_role_identifier:
         provider = provider.assume_role(assume_role_identifier)
+
+    if assume_role_session_name:
+        additional_params = dict(additional_params or {})
+        additional_params[ROLE_SESSION_NAME_PARAM] = assume_role_session_name
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
@@ -127,6 +133,7 @@ async def get_jwt_database(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -141,6 +148,7 @@ async def get_jwt_database(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
+        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -156,6 +164,7 @@ async def get_jwt_database(
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
+        assume_role_session_name=assume_role_session_name,
         timeout=timeout,
         logger=logger,
         **kwargs,
@@ -169,6 +178,7 @@ async def get_jwt_api(
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
+    assume_role_session_name: Optional[str] = None,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -182,6 +192,7 @@ async def get_jwt_api(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
+        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -197,6 +208,7 @@ async def get_jwt_api(
         provider=provider,
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
+        assume_role_session_name=assume_role_session_name,
         timeout=timeout,
         logger=logger,
         **kwargs,

@@ -18,6 +18,18 @@ from ..models import (
     ProviderNotDetected,
 )
 
+ROLE_SESSION_NAME_PARAM = "roleSessionName"
+# Stable default when AssumeRole is used without an explicit session name.
+DEFAULT_ROLE_SESSION_NAME = "s2iam-session"
+
+
+def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) -> str:
+    if additional_params:
+        name = additional_params.get(ROLE_SESSION_NAME_PARAM)
+        if name:
+            return name
+    return DEFAULT_ROLE_SESSION_NAME
+
 
 class AWSClient(CloudProviderClient):
     _logger: Optional[Logger]
@@ -188,12 +200,13 @@ class AWSClient(CloudProviderClient):
 
         try:  # noqa: BLE001
             if self._role_arn:
-                self._log(f"Assuming role {self._role_arn}")
+                session_name = _role_session_name_from_params(additional_params)
+                self._log(f"Assuming role {self._role_arn} with session name {session_name}")
                 assume_resp = await loop.run_in_executor(
                     None,
                     lambda: sts_client.assume_role(
                         RoleArn=self._role_arn,
-                        RoleSessionName="s2iam-session",
+                        RoleSessionName=session_name,
                     ),
                 )
                 creds = assume_resp["Credentials"]

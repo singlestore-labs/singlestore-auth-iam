@@ -40,7 +40,7 @@ Use `.audience()` (builder) or `Options.withAudience()` (static API) ONLY when t
 
 Assume Role / Impersonation
 ---------------------------
-- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). Session name prefix: `SingleStoreAuth-`.
+- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). Default session name: `s2iam-session` (override with `Options.withAssumeRoleSessionName`).
 - GCP: Provide a service account email for impersonation.
 - Azure: Provide a managed identity client (object) ID (UUID format).
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/memsql/errors"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
@@ -35,13 +36,14 @@ func (o jwtOption) applyJWTOption(opts *jwtOptions) {
 // jwtOptions holds the options for the getJWT function
 type jwtOptions struct {
 	detectProviderOptions
-	JWTType              JWTType
-	WorkspaceGroupID     string
-	ServerURL            string
-	AllowHTTP            bool
-	Provider             models.CloudProviderClient
-	AdditionalParams     map[string]string
-	AssumeRoleIdentifier string
+	JWTType               JWTType
+	WorkspaceGroupID      string
+	ServerURL             string
+	AllowHTTP             bool
+	Provider              models.CloudProviderClient
+	AdditionalParams      map[string]string
+	AssumeRoleIdentifier  string
+	AssumeRoleSessionName string
 }
 
 // WithServerURL sets the authentication server URL
@@ -76,6 +78,13 @@ func WithGCPAudience(audience string) JWTOption {
 func WithAssumeRole(roleIdentifier string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleIdentifier = roleIdentifier
+	})
+}
+
+// WithAssumeRoleSessionName sets the AWS STS RoleSessionName when assuming a role.
+func WithAssumeRoleSessionName(sessionName string) JWTOption {
+	return jwtOption(func(o *jwtOptions) {
+		o.AssumeRoleSessionName = sessionName
 	})
 }
 
@@ -125,6 +134,10 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	provider := jwtOpts.Provider
 	if jwtOpts.AssumeRoleIdentifier != "" {
 		provider = provider.AssumeRole(jwtOpts.AssumeRoleIdentifier)
+	}
+
+	if jwtOpts.AssumeRoleSessionName != "" {
+		jwtOpts.AdditionalParams[aws.RoleSessionNameParam] = jwtOpts.AssumeRoleSessionName
 	}
 
 	identityHeaders, identity, err := provider.GetIdentityHeaders(ctx, jwtOpts.AdditionalParams)
