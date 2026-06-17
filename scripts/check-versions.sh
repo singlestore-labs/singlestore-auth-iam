@@ -15,8 +15,9 @@ semver_lt() {
   [ "$(printf '%s\n' "$a" "$b" | sort -V | head -1)" = "$a" ] && [ "$a" != "$b" ]
 }
 
+# Release flow: prep PR bumps CHANGELOG/README, merge to main, then tag v* and go/v*.
 # Strict CHANGELOG section check applies on main pushes (and local runs on main).
-# PRs may carry [Unreleased] work without a section for the latest tag yet.
+# Prep PRs may carry [Unreleased] work and README pins newer than the latest tag.
 is_main_context() {
   if [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "${GITHUB_REF:-}" = "refs/heads/main" ]; then
     return 0
@@ -31,7 +32,7 @@ is_main_context() {
 [ -n "$latest_go" ] || fail "no go/v* tags found"
 [ "$latest_v" = "$latest_go" ] || fail "tag mismatch: v${latest_v} vs go/v${latest_go}"
 
-# README: fail only when pinned versions are older than the latest release.
+# README: fail when pinned versions are older than the latest tag; newer pins are OK on prep PRs.
 while read -r ver; do
   if semver_lt "$ver" "$latest_v"; then
     fail "README.md pins ${ver}, which is older than latest release ${latest_v}"

@@ -90,9 +90,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 Versions are kept in sync across languages (Go, Python, Java). A version tag indicates aligned core convenience APIs and detection semantics.
 
 ## Tagging & Publishing
-- Go: tag `go/vX.Y.Z` triggers module availability on proxy & pkg.go.dev.
-- Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
-- Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
+See [RELEASING.md](RELEASING.md) for the full process (prep PR → merge → tag).
+
+After merge, each release uses two tags with the same semver:
+- `vX.Y.Z` — triggers PyPI and Maven Central publish workflows on tag push.
+- `go/vX.Y.Z` — Go module on proxy / pkg.go.dev (create separately; GitHub Releases only adds `v*`).
 
 [Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...HEAD
 [v0.5.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...go/v0.5.0
