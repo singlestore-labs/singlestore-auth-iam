@@ -1,11 +1,11 @@
 SingleStore Auth IAM - Java
 ===========================
 
-Status: ACTIVE DEVELOPMENT (parity tracking the Go reference). Breaking changes may still occur before GA.
+Status: ACTIVE DEVELOPMENT. Breaking changes may still occur before GA.
 
 Overview
 --------
-This Java library obtains short‑lived JWTs for SingleStore database (workspace group) or Management API access using native cloud provider identities (AWS / GCP / Azure). It auto‑detects the runtime cloud provider in seconds (target parity with Go implementation) and sends signed identity headers to the auth service which returns a JWT.
+This Java library obtains short‑lived JWTs for SingleStore database (workspace group) or Management API access using native cloud provider identities (AWS / GCP / Azure). It auto‑detects the runtime cloud provider in seconds and sends signed identity headers to the auth service which returns a JWT.
 
 Quick Start
 -----------
@@ -40,7 +40,7 @@ Use `.audience()` (builder) or `Options.withAudience()` (static API) ONLY when t
 
 Assume Role / Impersonation
 ---------------------------
-- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). Default session name: `s2iam-session` (override with `Options.withAssumeRoleSessionName`).
+- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s. Default session name: `s2iam-session` (override with `Options.withAssumeRoleSessionName`).
 - GCP: Provide a service account email for impersonation.
 - Azure: Provide a **managed identity client ID** (UUID). The library passes it as `client_id` to the Azure instance metadata service (user-assigned identity selection), matching Python behavior.
 

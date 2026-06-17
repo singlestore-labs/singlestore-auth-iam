@@ -51,7 +51,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 ## [v0.2.0] - 2025-08-19
 ### Added
 - Python client library (async convenience functions `get_jwt_database`, `get_jwt_api`).
-- Cloud provider detection parity improvements (fast path + concurrent metadata probes).
+- Fast-path and concurrent metadata probe improvements for cloud provider detection.
 - GCP test coverage in CI.
 
 ### Fixed
@@ -73,7 +73,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 ---
 
 ## Release Alignment
-Versions are kept in sync across languages (Go, Python, Java). A version tag indicates feature parity for core convenience APIs and detection semantics.
+Versions are kept in sync across languages (Go, Python, Java). A version tag indicates aligned core convenience APIs and detection semantics.
 
 ## Tagging & Publishing
 - Go: tag `go/vX.Y.Z` triggers module availability on proxy & pkg.go.dev.
