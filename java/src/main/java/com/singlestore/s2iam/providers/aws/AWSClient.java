@@ -2,6 +2,7 @@ package com.singlestore.s2iam.providers.aws;
 
 import com.singlestore.s2iam.*;
 import com.singlestore.s2iam.providers.AbstractBaseClient;
+import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -164,7 +165,11 @@ public class AWSClient extends AbstractBaseClient {
           resourceType, extra);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
-      return new IdentityHeadersResult(null, null, e);
+      if (e instanceof IdentityUnavailableException) {
+        return new IdentityHeadersResult(null, null, e);
+      }
+      return new IdentityHeadersResult(null, null,
+          new IdentityUnavailableException(e.getMessage(), e));
     }
   }
 

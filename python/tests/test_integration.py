@@ -237,8 +237,9 @@ class TestErrorHandling:
         ):
             pytest.skip("configured cloud test environment")
 
-        with pytest.raises(s2iam.CloudProviderNotFound):
-            await s2iam.detect_provider(timeout=TEST_DETECT_TIMEOUT)
+        from .testhelp import expect_no_cloud_provider_outside_cloud
+
+        await expect_no_cloud_provider_outside_cloud(timeout=TEST_DETECT_TIMEOUT)
 
     async def test_invalid_jwt_server_url(self):
         """Test handling of invalid JWT server URLs."""

@@ -203,8 +203,9 @@ class TestErrorHandlingValidation:
         ):
             pytest.skip("configured cloud test environment")
 
-        with pytest.raises(s2iam.CloudProviderNotFound):
-            await s2iam.detect_provider(timeout=1.0)
+        from .testhelp import expect_no_cloud_provider_outside_cloud
+
+        await expect_no_cloud_provider_outside_cloud(timeout=1.0)
 
     @pytest.mark.integration
     async def test_invalid_server_url_handling(self):
