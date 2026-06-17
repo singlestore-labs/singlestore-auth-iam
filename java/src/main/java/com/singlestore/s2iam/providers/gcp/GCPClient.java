@@ -100,7 +100,7 @@ public class GCPClient extends AbstractBaseClient {
         }
         String impersonationUrl = "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
             + assumedRole + ":generateIdToken";
-        String body = "{\"audience\":\"" + audience + "\"}";
+        String body = OM.writeValueAsString(Map.of("audience", audience));
         HttpRequest req = HttpRequest.newBuilder(URI.create(impersonationUrl))
             .timeout(Timeouts.IDENTITY_EXTENDED).header("Authorization", "Bearer " + selfToken)
             .header("Content-Type", "application/json")
@@ -108,7 +108,7 @@ public class GCPClient extends AbstractBaseClient {
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200 || resp.body().isEmpty()) {
           return new IdentityHeadersResult(null, null, new IllegalStateException(
-              "GCP impersonation failed status=" + resp.statusCode() + " body=" + resp.body()));
+              "GCP impersonation failed status=" + resp.statusCode()));
         }
         JsonNode node = OM.readTree(resp.body());
         String token = node.path("token").asText();
