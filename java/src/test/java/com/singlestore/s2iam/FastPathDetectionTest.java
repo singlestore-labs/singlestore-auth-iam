@@ -7,10 +7,10 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Fast-path provider detection via test hooks (local only, skipped on real cloud).
- * Detection timeout behavior is centrally defined in {@link Timeouts#DETECT};
- * these tests rely solely on explicit system property hooks and should remain
- * fast.
+ * Fast-path provider detection via test hooks (local only, skipped on real
+ * cloud). Detection timeout behavior is centrally defined in
+ * {@link Timeouts#DETECT}; these tests rely solely on explicit system property
+ * hooks and should remain fast.
  */
 public class FastPathDetectionTest {
 

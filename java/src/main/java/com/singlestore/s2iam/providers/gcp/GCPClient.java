@@ -107,8 +107,8 @@ public class GCPClient extends AbstractBaseClient {
             .POST(HttpRequest.BodyPublishers.ofString(body)).build();
         HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200 || resp.body().isEmpty()) {
-          return new IdentityHeadersResult(null, null, new IllegalStateException(
-              "GCP impersonation failed status=" + resp.statusCode()));
+          return new IdentityHeadersResult(null, null,
+              new IllegalStateException("GCP impersonation failed status=" + resp.statusCode()));
         }
         JsonNode node = OM.readTree(resp.body());
         String token = node.path("token").asText();

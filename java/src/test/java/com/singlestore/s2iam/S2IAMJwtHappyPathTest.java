@@ -73,7 +73,8 @@ public class S2IAMJwtHappyPathTest {
     assertFalse(jwt.isEmpty());
     assertTrue(jwt.split("\\.").length >= 2, "looks like a JWT");
 
-    // Fetch server request log and verify server received the same identity as the client
+    // Fetch server request log and verify server received the same identity as the
+    // client
     JsonNode lastReq = fetchLastRequest();
     assertNotNull(lastReq, "server request log empty");
     JsonNode identity = lastReq.path("identity");
@@ -81,7 +82,8 @@ public class S2IAMJwtHappyPathTest {
         "client/server identifier mismatch");
     assertEquals(cid.getProvider().name(), identity.path("provider").asText());
 
-    // Decode JWT payload (no signature verification) and verify sub matches client identifier
+    // Decode JWT payload (no signature verification) and verify sub matches client
+    // identifier
     String sub = decodeSub(jwt);
     assertEquals(cid.getIdentifier(), sub, "JWT sub mismatch");
   }

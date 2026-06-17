@@ -14,7 +14,8 @@ public final class Timeouts {
   // Metadata detection timeout.
   // Central tuning point used by S2IAM.detectProvider (unless caller supplies
   // ProviderOption timeout).
-  // 10s default matches the shared detection timeout used by Go and Python clients
+  // 10s default matches the shared detection timeout used by Go and Python
+  // clients
   // while still canceling
   // immediately upon first success. Real provider metadata responses normally
   // arrive in <100ms, so the

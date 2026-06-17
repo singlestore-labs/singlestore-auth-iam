@@ -2,10 +2,9 @@
 JWT functionality for SingleStore authentication.
 """
 
+import json
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
-import json
 
 import aiohttp
 

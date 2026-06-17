@@ -136,7 +136,8 @@ public final class S2IAM {
     return detectProviderWithStatus(opts).provider;
   }
 
-  // Extended API returning structured per-provider attempt statuses for observability.
+  // Extended API returning structured per-provider attempt statuses for
+  // observability.
   public static DetectResult detectProviderWithStatus(ProviderOption... opts)
       throws NoCloudProviderDetectedException {
     // Internal wrapper used to carry provider type through ExecutionException

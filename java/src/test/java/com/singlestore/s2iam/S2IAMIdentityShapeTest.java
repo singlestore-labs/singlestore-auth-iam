@@ -16,7 +16,9 @@ import java.util.Base64;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.*;
 
-/** Provider-specific identity header shape assertions sent to the auth server. */
+/**
+ * Provider-specific identity header shape assertions sent to the auth server.
+ */
 public class S2IAMIdentityShapeTest {
   static GoTestServer server;
   static final ObjectMapper M = new ObjectMapper();
