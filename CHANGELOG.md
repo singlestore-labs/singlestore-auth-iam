@@ -6,11 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ## [Unreleased]
 ### Added
+- Cross-language behavior tests for assume-role and JWT error paths.
+- Python `workspaceGroupID` query param and AWS `UserId` claim support.
+
+### Changed
+- Java provider assume-role and JWT option handling aligned with Go/Python.
+- Maven Central artifact description updated to standard functional summary.
+
+### Fixed
+- Go Azure AssumeRole selects managed identity by `client_id`.
+- Local and cloud test failures for JWT parsing and no-provider detection.
+
+## [v0.5.0] - 2026-06-16
+### Added
 - Optional AWS `RoleSessionName` when assuming a role (`WithAssumeRoleSessionName` in Go, `assume_role_session_name` in Python, `assumeRoleSessionName` / `Options.withAssumeRoleSessionName` in Java, `--assume-role-session-name` CLI flag).
 - Documentation on AWS AssumeRole identity ARN matching for pre-provisioned database users (root README, Go/Java README).
 
 ### Changed
 - AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
+- Maven Central publish split from Java test workflow.
 
 ### Fixed
 - Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
@@ -80,7 +94,8 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 - Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
 - Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
-[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...HEAD
+[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...HEAD
+[v0.5.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...go/v0.5.0
 [v0.4.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.3.0...go/v0.4.0
 [v0.3.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.2.0...go/v0.3.0
 [v0.2.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.1.0...go/v0.2.0
