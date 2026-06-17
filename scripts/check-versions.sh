@@ -28,20 +28,31 @@ is_main_context() {
   return 1
 }
 
+# Maven/Gradle dependency pins in the root README (0.x.y semver only).
+readme_pins() {
+  grep -oE '0\.[0-9]+\.[0-9]+' README.md | grep -v SNAPSHOT | sort -u
+}
+
 [ -n "$latest_v" ] || fail "no v* release tags found"
 [ -n "$latest_go" ] || fail "no go/v* tags found"
 [ "$latest_v" = "$latest_go" ] || fail "tag mismatch: v${latest_v} vs go/v${latest_go}"
 
+# README: all Maven/Gradle pins must agree with each other.
+mapfile -t readme_pin_list < <(readme_pins)
+if [ "${#readme_pin_list[@]}" -gt 1 ]; then
+  fail "README.md has inconsistent pins: ${readme_pin_list[*]}"
+fi
+
 # README: fail when pinned versions are older than the latest tag; newer pins are OK on prep PRs.
-while read -r ver; do
+for ver in "${readme_pin_list[@]}"; do
   if semver_lt "$ver" "$latest_v"; then
     fail "README.md pins ${ver}, which is older than latest release ${latest_v}"
   fi
-done < <(grep -oE '0\.[0-9]+\.[0-9]+' README.md | grep -v SNAPSHOT | sort -u)
+done
 
 if is_main_context; then
   grep -q "## \\[v${latest_v}\\]" CHANGELOG.md \
-    || warn "CHANGELOG.md missing section for v${latest_v}"
+    || fail "CHANGELOG.md missing section for v${latest_v}"
 fi
 
 py_ver=$(grep -E '^__version__ = ' python/src/s2iam/__init__.py | sed -E 's/.*"([^"]+)".*/\1/')

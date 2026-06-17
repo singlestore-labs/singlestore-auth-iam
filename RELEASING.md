@@ -54,15 +54,36 @@ Both tags must exist for each aligned release. Order between `v*` and `go/v*` do
 
 ## `make check-versions` rules
 
-CI runs this on every push and pull request. It detects release drift without blocking normal PR work:
+CI runs `scripts/check-versions.sh` on every push and pull request. The script compares **git tags** (source of truth for releases) against docs in the repo. It is designed to catch forgotten bumps and tag drift, not to block normal prep work.
 
-| Check | Result |
-|-------|--------|
-| Latest `v*` and `go/v*` tags differ | **Fail** |
-| No release tags found | **Fail** |
-| README pins a version **older** than the latest tag | **Fail** (stale docs) |
-| README pins a version **newer** than the latest tag | OK (pre-release doc bump on prep PR) |
-| CHANGELOG missing `## [vX.Y.Z]` for the latest tag | **Warn** on `main` only; skipped on PRs |
-| Python `__version__` differs from latest tag | **Warn** (dev placeholder is expected locally) |
+### When it passes vs fails
+
+| Situation | Expected result |
+|-----------|-------------------|
+| Any branch/PR: tags aligned, README pins not stale | **Pass** |
+| Prep PR: README bumped to `0.6.0`, latest tag still `0.5.0` | **Pass** (ahead-of-tag doc bump is OK) |
+| Prep PR: only some README snippets updated (mixed `0.5.0` / `0.6.0`) | **Fail** (inconsistent pins) |
+| Any branch/PR: README still shows `0.4.0` but latest tag is `0.5.0` | **Fail** (stale docs) |
+| Any branch/PR: `v0.5.0` exists but `go/v0.5.0` missing (or vice versa) | **Fail** |
+| PR (not `main`): CHANGELOG has `[Unreleased]` only, no `## [v0.6.0]` yet | **Pass** (section not required until release) |
+| `main` push (or local run on `main`): latest tag is `0.5.0` but CHANGELOG has no `## [v0.5.0]` | **Fail** |
+| After merge + tag: `main` has CHANGELOG section and README pins match tag | **Pass** |
+
+**It should not fail most of the time.** After the relaxed PR rules (commit `86f395e`), only real drift or mistakes should fail CI. Prep PRs that bump README ahead of tagging are expected to pass.
+
+### Checks performed
+
+| Location / check | Enforced? | Notes |
+|------------------|-----------|-------|
+| Latest `v*` tag vs latest `go/v*` tag | **Fail** if mismatch | Both tags required for every release |
+| `README.md` Maven/Gradle pins (4 snippets) | **Fail** if stale or inconsistent | Must all pin the same semver; may be **newer** than latest tag on prep PRs |
+| `CHANGELOG.md` `## [vX.Y.Z]` for latest tag | **Fail** on `main` only | Skipped on PRs so prep work can stay under `[Unreleased]` |
+| `python/src/s2iam/__init__.py` `__version__` | **Warn** only | Dev placeholder; publish workflow sets version from tag |
+| `java/pom.xml` `<version>` | Not checked | `0.0.1-SNAPSHOT` locally; Maven publish sets version from tag |
+| `python/pyproject.toml` | Not checked | Uses `dynamic = ["version"]` from `__init__.py` |
+| Go module (`go.mod`) | Not checked | Go modules are versioned by `go/v*` tags |
+| `docs/api/openapi.yaml` `info.version` | Not checked | API spec version, not library release semver |
+| CHANGELOG footer compare links | Not checked | Update manually in prep PR |
+| Language-specific READMEs (`go/`, `python/`, `java/`) | Not checked | No pinned release versions today |
 
 On prep PRs, `[Unreleased]` changelog entries are fine; the script does not require a released section for work that has not shipped to a tag yet.
