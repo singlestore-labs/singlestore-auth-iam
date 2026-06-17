@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ main ]
 
-name: golangci-lint
+name: lint
 permissions:  # added using https://github.com/step-security/secure-workflows
   contents: read
 
@@ -27,11 +27,11 @@ jobs:
       - name: Check release version alignment
         run: make check-versions
 
-  golangci:
+  go:
     permissions:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for golangci/golangci-lint-action to fetch pull requests
-    name: lint
+    name: go
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -43,25 +43,44 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee
         with:
-          # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
           version: latest
-
-          # Optional: working directory, useful for monorepos
           working-directory: go
           output: checkstyle
 
-          # Optional: golangci-lint command line arguments.
-          # args: --issues-exit-code=0
-          # args: --out-format checkstyle
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-          # Optional: show only new issues if it's a pull request. The default value is `false`.
-          # only-new-issues: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
 
-          # Optional: if set to true then the action will use pre-installed Go.
-          # skip-go-installation: true
+      - name: Install Python dependencies
+        working-directory: ./python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
 
-          # Optional: if set to true then the action don't cache or restore ~/go/pkg.
-          # skip-pkg-cache: true
+      - name: Run linting and type checking (Make)
+        run: make lint-python
 
-          # Optional: if set to true then the action don't cache or restore ~/.cache/go-build.
-          # skip-build-cache: true
+  java:
+    name: java
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Lint / formatting check
+        run: make lint-java
