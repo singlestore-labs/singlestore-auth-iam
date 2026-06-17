@@ -24,4 +24,19 @@ Release versions are defined by **git tags**, not by files in the repo. Java (`p
 | `go/vX.Y.Z` | Go module on proxy / pkg.go.dev |
 | `vX.Y.Z` | Triggers PyPI and Maven Central publish workflows |
 
-Both tags must exist for each aligned release. `make check-versions` fails if the latest `v*` and `go/v*` tags differ.
+Both tags must exist for each aligned release.
+
+## `make check-versions` rules
+
+CI runs this on every push and pull request. It detects release drift without blocking normal PR work:
+
+| Check | Result |
+|-------|--------|
+| Latest `v*` and `go/v*` tags differ | **Fail** |
+| No release tags found | **Fail** |
+| README pins a version **older** than the latest tag | **Fail** (stale docs) |
+| README pins a version **newer** than the latest tag | OK (pre-release doc bump) |
+| CHANGELOG missing `## [vX.Y.Z]` for the latest tag | **Warn** on `main` only; skipped on PRs |
+| Python `__version__` differs from latest tag | **Warn** (dev placeholder is expected locally) |
+
+On PRs, `[Unreleased]` changelog entries are fine; the script does not require a released section for work that has not shipped to the user-facing tag yet.

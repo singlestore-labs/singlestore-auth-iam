@@ -67,7 +67,7 @@ help:
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint                                 Run all linters"
-	@echo "  make check-versions                       Verify release tags, README, and CHANGELOG alignment"
+	@echo "  make check-versions                       Detect stale README pins and tag drift (see RELEASING.md)"
 	@echo "  make format                               Format all code"
 	@echo "  make clean                                Clean build artifacts"
 	@echo ""
