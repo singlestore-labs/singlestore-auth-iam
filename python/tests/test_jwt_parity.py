@@ -51,12 +51,17 @@ def _flagged_test_server(*extra_flags: str) -> Iterator[GoTestServerManager]:
         "2m",
         *extra_flags,
     ]
-    proc = subprocess.Popen(cmd, cwd=go_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, cwd=go_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     deadline = time.time() + 30
     port = None
     while time.time() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError("test server exited early")
+            stdout, stderr = proc.communicate(timeout=1)
+            raise RuntimeError(
+                "test server exited early"
+                + (f"\nstdout:\n{stdout}" if stdout else "")
+                + (f"\nstderr:\n{stderr}" if stderr else "")
+            )
         if os.path.exists(info_file):
             try:
                 with open(info_file) as f:
@@ -114,11 +119,11 @@ class TestCloudProviderNoRole:
         if not no_role:
             pytest.skip("test requires S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
 
+        # Mirrors Go TestCloudProviderNoRole: some providers fail during detection
+        # (Azure-style ErrNoCloudProviderDetected), others detect then fail identity.
         try:
             provider = await s2iam.detect_provider(timeout=10.0)
         except s2iam.CloudProviderNotFound:
-            return
-        except s2iam.ProviderIdentityUnavailable:
             return
 
         expected = {
@@ -129,7 +134,7 @@ class TestCloudProviderNoRole:
         assert expected is not None, f"Unknown provider in S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE: {no_role}"
         assert provider.get_type() == expected
 
-        with pytest.raises((s2iam.ProviderIdentityUnavailable, Exception)):
+        with pytest.raises(s2iam.ProviderIdentityUnavailable):
             await provider.get_identity_headers()
 
 
@@ -174,7 +179,7 @@ class TestJwtErrorCases:
     async def test_empty_jwt(self):
         provider = await require_cloud_role(timeout=10.0)
         with _flagged_test_server("-return-empty-jwt") as server:
-            with pytest.raises(Exception, match="(?i)empty|no jwt"):
+            with pytest.raises(Exception, match="(?i)received empty jwt|empty|no jwt"):
                 await s2iam.get_jwt(
                     jwt_type=JWTType.DATABASE_ACCESS,
                     workspace_group_id="test-workspace",
