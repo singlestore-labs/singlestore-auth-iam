@@ -56,20 +56,64 @@ Both tags must exist for each aligned release. Order between `v*` and `go/v*` do
 
 CI runs `scripts/check-versions.sh` on every push and pull request. The script compares **git tags** (source of truth for releases) against docs in the repo. It is designed to catch forgotten bumps and tag drift, not to block normal prep work.
 
-### When it passes vs fails
+### Three scenarios
+
+`check-versions` is meant to stay green through the normal release lifecycle. Tags are the source of truth; README and CHANGELOG are checked against them with different strictness on PRs vs `main`.
+
+#### (1) No new version picked yet
+
+Feature PRs and other day-to-day work while the latest release is still `0.5.0`.
+
+| State | Example |
+|-------|---------|
+| Latest tags | `v0.5.0`, `go/v0.5.0` |
+| `README.md` pins | `0.5.0` (matches latest tag) |
+| `CHANGELOG.md` | `[Unreleased]` entries only, or prior `## [v0.5.0]` section from the last release |
+
+| Context | Expected |
+|---------|----------|
+| PR | **Pass** — no release prep required |
+| `main` (local or push) | **Pass** when `## [v0.5.0]` exists in CHANGELOG (already true after the last release) |
+
+#### (2) Files updated, tag not cut yet
+
+Release prep PR: docs bumped on the branch, tags still at the previous release.
+
+| State | Example |
+|-------|---------|
+| Latest tags | still `v0.5.0`, `go/v0.5.0` |
+| `README.md` pins | `0.6.0` (ahead of tag) |
+| `CHANGELOG.md` | `## [v0.6.0]` section added, or still only `[Unreleased]` |
+
+| Context | Expected |
+|---------|----------|
+| PR | **Pass** — README pins may be **newer** than the latest tag; CHANGELOG section for the unreleased version is **not** required on PRs |
+| `main` before tags | **Pass** only if README pins are not stale and `## [v0.5.0]` is still present; after merge, tagging should follow promptly |
+
+#### (3) Tag updated
+
+After merge and both `v0.6.0` / `go/v0.6.0` are pushed.
+
+| State | Example |
+|-------|---------|
+| Latest tags | `v0.6.0`, `go/v0.6.0` |
+| `README.md` pins | `0.6.0` |
+| `CHANGELOG.md` | `## [v0.6.0]` section |
+
+| Context | Expected |
+|---------|----------|
+| PR | **Pass** when docs are aligned or ahead; **fail** if pins are stale or inconsistent |
+| `main` (local or push) | **Pass** when README pins match the tag and CHANGELOG has `## [v0.6.0]`; **fail** if the tag exists but docs are stale, inconsistent, or missing the changelog section |
+
+### Other pass/fail cases
 
 | Situation | Expected result |
 |-----------|-------------------|
-| Any branch/PR: tags aligned, README pins not stale | **Pass** |
-| Prep PR: README bumped to `0.6.0`, latest tag still `0.5.0` | **Pass** (ahead-of-tag doc bump is OK) |
 | Prep PR: only some README snippets updated (mixed `0.5.0` / `0.6.0`) | **Fail** (inconsistent pins) |
 | Any branch/PR: README still shows `0.4.0` but latest tag is `0.5.0` | **Fail** (stale docs) |
 | Any branch/PR: `v0.5.0` exists but `go/v0.5.0` missing (or vice versa) | **Fail** |
-| PR (not `main`): CHANGELOG has `[Unreleased]` only, no `## [v0.6.0]` yet | **Pass** (section not required until release) |
-| `main` push (or local run on `main`): latest tag is `0.5.0` but CHANGELOG has no `## [v0.5.0]` | **Fail** |
-| After merge + tag: `main` has CHANGELOG section and README pins match tag | **Pass** |
 
-**It should not fail most of the time.** After the relaxed PR rules (commit `86f395e`), only real drift or mistakes should fail CI. Prep PRs that bump README ahead of tagging are expected to pass.
+**It should not fail most of the time.** Only real drift or mistakes should fail CI. Prep PRs that bump README ahead of tagging are expected to pass.
 
 ### Checks performed
 
