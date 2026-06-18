@@ -17,7 +17,7 @@ from s2iam import CloudProviderType, JWTType
 from s2iam.aws import DEFAULT_ROLE_SESSION_NAME, ROLE_SESSION_NAME_PARAM, _role_session_name_from_params
 
 from .test_server_utils import GoTestServerManager
-from .testhelp import require_cloud_role
+from .testhelp import expect_no_cloud_provider_outside_cloud, require_cloud_role
 
 
 def _go_dir() -> str:
@@ -261,13 +261,6 @@ async def test_assume_role_server_identity_matches_jwt_sub():
 
 @pytest.mark.asyncio
 async def test_no_provider_outside_cloud():
-    if (
-        os.environ.get("S2IAM_TEST_CLOUD_PROVIDER")
-        or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
-        or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
-    ):
-        pytest.skip("configured cloud test environment")
-
-    from .testhelp import expect_no_cloud_provider_outside_cloud
-
+    # The helper centralizes the cloud-test-env skip logic (and the actual
+    # "no provider detected locally" expectation), so it is not duplicated here.
     await expect_no_cloud_provider_outside_cloud(timeout=1.0)
