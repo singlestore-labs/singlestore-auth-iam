@@ -29,8 +29,11 @@ is_main_context() {
 }
 
 # Maven/Gradle dependency pins in the root README (0.x.y semver only).
+# Capture an optional -SNAPSHOT suffix in the same token so it can be filtered
+# out; otherwise `grep -oE '0\.[0-9]+\.[0-9]+'` would strip the suffix first and
+# treat e.g. 0.0.1-SNAPSHOT as a real 0.0.1 pin.
 readme_pins() {
-  grep -oE '0\.[0-9]+\.[0-9]+' README.md | grep -v SNAPSHOT | sort -u
+  grep -oE '0\.[0-9]+\.[0-9]+(-SNAPSHOT)?' README.md | grep -v -- '-SNAPSHOT' | sort -u
 }
 
 [ -n "$latest_v" ] || fail "no v* release tags found"
