@@ -19,7 +19,7 @@ DETECT_PROVIDER_DEFAULT_TIMEOUT: float = 10.0
 
 Rationale: Prefer avoiding false negatives over minimizing worst‑case wait.
 10s ceiling handles slow or throttled metadata on constrained CI VMs while
-early success still returns in sub‑second typical cases. Mirrors Go/Java parity.
+early success still returns in sub‑second typical cases. Matches the 10s detection timeout used by Go and Java clients.
 """
 
 

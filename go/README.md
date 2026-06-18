@@ -59,7 +59,7 @@ func main() {
     customJWT, err := s2iam.GetDatabaseJWT(
         ctx,
         "workspace-group-id",
-        s2iam.WithExternalServerURL("https://custom-auth.singlestore.com/auth/iam"),
+        s2iam.WithServerURL("https://custom-auth.singlestore.com/auth/iam/:jwtType"),
         s2iam.WithGCPAudience("custom-audience"),
     )
     if err != nil {

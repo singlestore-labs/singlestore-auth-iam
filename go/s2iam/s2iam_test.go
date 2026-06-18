@@ -562,7 +562,7 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 	case s2iam.ProviderGCP:
 		invalidRole = fmt.Sprintf("projects/fake-project/serviceAccounts/nonexistent-sa-%s@fake-project.iam.gserviceaccount.com", timestamp)
 	case s2iam.ProviderAzure:
-		invalidRole = fmt.Sprintf("/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/fake-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/nonexistent-identity-%s", timestamp)
+		invalidRole = fmt.Sprintf("00000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 	default:
 		t.Skipf("test does not support provider type: %s", client.GetType())
 	}
@@ -571,14 +571,8 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 		s2iam.WithAssumeRole(invalidRole))
 
-	// This should fail since the role doesn't exist (or AssumeRole isn't supported)
+	// This should fail since the role/identity doesn't exist
 	require.Error(t, err, "AssumeRole should fail with invalid role")
-
-	// For Azure, we expect the specific "AssumeRole not supported" error
-	if client.GetType() == s2iam.ProviderAzure {
-		assert.True(t, errors.Is(err, s2iam.ErrAssumeRoleNotSupported),
-			"Azure should return ErrAssumeRoleNotSupported, got: %+v", err)
-	}
 
 	t.Logf("AssumeRole correctly failed with invalid role (%s format): %s: %v",
 		client.GetType(), invalidRole, err)

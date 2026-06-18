@@ -8,7 +8,7 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>SingleStore Auth IAM Java</name>
-    <description>SingleStore Auth IAM Java library (experimental)</description>
+    <description>SingleStore IAM authentication library for cloud identity JWTs from AWS, Azure, and GCP.</description>
     <url>https://github.com/singlestore-labs/singlestore-auth-iam</url>
     <properties>
         <maven.compiler.source>11</maven.compiler.source>

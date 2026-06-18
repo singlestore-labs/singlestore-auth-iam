@@ -160,3 +160,23 @@ async def validate_identity_and_jwt(
     # resourceType intentionally not asserted strictly (server normalization differences allowed).
 
     return headers, identity, claims
+
+
+def skip_if_configured_cloud_test_environment() -> None:
+    """Skip when cloud test env vars are set (remote/CI cloud hosts)."""
+    if (
+        os.environ.get("S2IAM_TEST_CLOUD_PROVIDER")
+        or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
+        or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
+    ):
+        pytest.skip("configured cloud test environment")
+
+
+async def expect_no_cloud_provider_outside_cloud(timeout: float = 1.0) -> None:
+    """Mirror Go TestRun_NoCloudProvider: require no provider locally; skip if metadata reachable."""
+    skip_if_configured_cloud_test_environment()
+    try:
+        await s2iam.detect_provider(timeout=timeout)
+    except s2iam.CloudProviderNotFound:
+        return
+    pytest.skip("cloud provider detected; test only runs outside cloud environments")

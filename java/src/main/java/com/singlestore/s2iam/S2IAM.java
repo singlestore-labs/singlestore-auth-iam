@@ -136,8 +136,8 @@ public final class S2IAM {
     return detectProviderWithStatus(opts).provider;
   }
 
-  // Extended API returning structured attempt statuses for observability / parity
-  // across languages.
+  // Extended API returning structured per-provider attempt statuses for
+  // observability.
   public static DetectResult detectProviderWithStatus(ProviderOption... opts)
       throws NoCloudProviderDetectedException {
     // Internal wrapper used to carry provider type through ExecutionException
@@ -216,7 +216,7 @@ public final class S2IAM {
     }
     // Detection timeout: use centralized Timeouts.DETECT unless explicitly
     // overridden via ProviderOption.
-    // This keeps parity with other languages and allows a single tuning point.
+    // Uses the shared default detection timeout (see Timeouts.DETECT).
     // Tests rely on fast failure.
     Duration timeout = po.timeout == null ? Timeouts.DETECT : po.timeout;
     if (debug && po.logger != null) {
@@ -365,7 +365,7 @@ public final class S2IAM {
     for (JwtOption opt : opts)
       opt.apply(o);
     if (o.timeout == null)
-      o.timeout = Duration.ofSeconds(5);
+      o.timeout = Timeouts.IDENTITY;
     if (o.serverUrl == null || o.serverUrl.isEmpty())
       o.serverUrl = DEFAULT_SERVER;
   }

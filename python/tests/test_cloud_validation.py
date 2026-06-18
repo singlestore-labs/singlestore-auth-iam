@@ -5,6 +5,7 @@ import os
 import re
 import time
 
+import aiohttp
 import pytest
 
 import s2iam
@@ -195,19 +196,16 @@ class TestErrorHandlingValidation:
     @pytest.mark.integration
     async def test_no_provider_outside_cloud(self):
         """Test proper error when no cloud provider is detected."""
-        # This test is designed to fail gracefully on non-cloud environments
-        try:
-            provider = await s2iam.detect_provider(timeout=5.0)
-            # If we get here, we're in a cloud environment
-            assert provider.get_type() in [
-                CloudProviderType.AWS,
-                CloudProviderType.GCP,
-                CloudProviderType.AZURE,
-            ]
-            pytest.skip("Running in cloud environment - cannot test no-provider scenario")
-        except s2iam.CloudProviderNotFound:
-            # This is expected when not in cloud
-            pass
+        if (
+            os.environ.get("S2IAM_TEST_CLOUD_PROVIDER")
+            or os.environ.get("S2IAM_TEST_ASSUME_ROLE")
+            or os.environ.get("S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE")
+        ):
+            pytest.skip("configured cloud test environment")
+
+        from .testhelp import expect_no_cloud_provider_outside_cloud
+
+        await expect_no_cloud_provider_outside_cloud(timeout=1.0)
 
     @pytest.mark.integration
     async def test_invalid_server_url_handling(self):
@@ -275,6 +273,14 @@ class TestAssumeRole:
         assumed_jwt = await s2iam.get_jwt_database(**kwargs)
         assumed_claims = _decode_jwt_payload(assumed_jwt)
         assumed_identifier = assumed_claims.get("sub", "")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{test_server.server_url}/info/requests") as resp:
+                assert resp.status == 200
+                requests = await resp.json()
+                assert requests, "expected server request log"
+                server_identifier = requests[-1].get("identity", {}).get("identifier", "")
+                assert server_identifier == assumed_identifier, "server identity should match JWT sub"
 
         assert assumed_identifier != original_identifier, "identity should change when assuming role"
         role_name = role.rsplit("/", 1)[-1] if "/" in role else role
