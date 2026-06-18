@@ -66,7 +66,13 @@ public final class S2IAMRequest {
     return this;
   }
 
-  /** Overall timeout applied to detection + identity HTTP calls. */
+  /**
+   * Timeout applied to both phases of the request: it is used as the provider
+   * detection timeout ({@link Options#withDetectTimeout}) and as the auth-server
+   * HTTP request timeout ({@link Options#withTimeout}). For independent control
+   * of the two phases, call the static API with those options directly instead of
+   * this convenience builder.
+   */
   public S2IAMRequest timeout(Duration timeout) {
     this.timeout = timeout;
     return this;
