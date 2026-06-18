@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -254,19 +255,17 @@ func (c *AzureClient) GetIdentityHeaders(ctx context.Context, additionalParams m
 		// Continue normally
 	}
 
-	url := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, azureResourceServer)
-
-	// Use custom resource if provided in additionalParams
+	resource := azureResourceServer
 	if customResource, ok := additionalParams["azure_resource"]; ok && customResource != "" {
-		url = fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, customResource)
+		resource = customResource
 		if logger != nil {
 			logger.Logf("Azure: Using custom resource audience: %s", customResource)
 		}
 	}
 
-	// If a specific managed identity ID is provided, add it to the request
+	url := buildIMDSTokenURL(resource, managedIdentityID)
+
 	if managedIdentityID != "" {
-		url = fmt.Sprintf("%s&client_id=%s", url, managedIdentityID)
 		if logger != nil {
 			logger.Logf("Azure: Using specific managed identity ID: %s", managedIdentityID)
 		}
@@ -463,6 +462,19 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 		ResourceType:     resourceType,
 		AdditionalClaims: additionalClaims,
 	}, nil
+}
+
+// buildIMDSTokenURL constructs the Azure IMDS token endpoint URL for the given
+// resource audience and optional user-assigned managed identity client ID.
+// The client_id is URL-escaped so a malformed identifier cannot inject extra
+// query parameters into the IMDS request (matching the Java URLEncoder and
+// Python param-dict behavior in the other SDKs).
+func buildIMDSTokenURL(resource, managedIdentityID string) string {
+	url := fmt.Sprintf("%s?api-version=%s&resource=%s", azureMetadataURL, azureAPIVersion, resource)
+	if managedIdentityID != "" {
+		url = fmt.Sprintf("%s&client_id=%s", url, neturl.QueryEscape(managedIdentityID))
+	}
+	return url
 }
 
 // AssumeRole selects a user-assigned managed identity by client ID (UUID).
