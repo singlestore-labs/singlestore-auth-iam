@@ -20,7 +20,7 @@ export UNIQUE_DIR
  dev-setup-ubuntu dev-setup-macos \
  dev-setup-ubuntu-go dev-setup-ubuntu-python dev-setup-macos-go dev-setup-macos-python dev-setup-ubuntu-java dev-setup-macos-java \
  dev-setup-common \
- lint lint-go lint-python lint-java \
+ lint lint-go lint-python lint-java check-versions \
  format format-go format-python format-java \
  docs-api docs-api-html docs-api-lint docs-api-clean \
  ssh-copy-to-remote ssh-run-remote-tests \
@@ -67,6 +67,7 @@ help:
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint                                 Run all linters"
+	@echo "  make check-versions                       Detect stale README pins and tag drift (see RELEASING.md)"
 	@echo "  make format                               Format all code"
 	@echo "  make clean                                Clean build artifacts"
 	@echo ""
@@ -264,6 +265,9 @@ dev-setup-gcp:
 	@echo "GCP dependencies installed via python3-google-auth and python3-google-auth-oauthlib"
 
 lint: lint-go lint-python lint-java
+
+check-versions:
+	@./scripts/check-versions.sh
 
 lint-go:
 	@echo "Running Go linters..."

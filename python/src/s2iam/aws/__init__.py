@@ -266,12 +266,18 @@ class AWSClient(CloudProviderClient):
                 self._region = region_from_arn
                 self._log(f"Derived region from ARN: {self._region}")
 
+            extra_claims: dict[str, str] = {}
+            user_id = identity_resp.get("UserId")
+            if user_id:
+                extra_claims["UserId"] = user_id
+
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
                 identifier=arn,
                 account_id=identity_resp["Account"],
                 region=region_from_arn,
                 resource_type=resource_type,
+                additional_claims=extra_claims,
             )
             self._log(f"Generated headers for identity: {identity.identifier}")
             return headers, identity

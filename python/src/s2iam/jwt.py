@@ -2,7 +2,9 @@
 JWT functionality for SingleStore authentication.
 """
 
+import json
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import aiohttp
 
@@ -93,14 +95,20 @@ async def get_jwt(
     if workspace_group_id:
         request_data["workspace_group_id"] = workspace_group_id
 
-    # Log request if logger available
-    if logger:
-        logger.log(f"Requesting JWT from {server_url} for provider {identity.provider.value}")
-
     # Make JWT request
+    request_url = server_url
+    if workspace_group_id and jwt_type == JWTType.DATABASE_ACCESS:
+        parsed = urlparse(server_url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["workspaceGroupID"] = workspace_group_id
+        request_url = urlunparse(parsed._replace(query=urlencode(query)))
+
+    if logger:
+        logger.log(f"Requesting JWT from {request_url} for provider {identity.provider.value}")
+
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         async with session.post(
-            server_url,
+            request_url,
             headers={
                 **headers,
                 "Content-Type": "application/json",
@@ -108,10 +116,13 @@ async def get_jwt(
             json=request_data,
         ) as response:
             if response.status == 200:
-                response_data = await response.json()
+                try:
+                    response_data = await response.json(content_type=None)
+                except json.JSONDecodeError as exc:
+                    raise Exception(f"cannot parse response: {exc}") from exc
                 jwt_value = response_data.get("jwt")
                 if not isinstance(jwt_value, str) or not jwt_value:
-                    raise Exception("No JWT in response")
+                    raise Exception("received empty JWT from server")
 
                 if logger:
                     logger.log("Successfully obtained JWT")

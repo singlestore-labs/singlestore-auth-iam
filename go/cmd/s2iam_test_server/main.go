@@ -25,21 +25,22 @@ import (
 
 // Config holds the test server configuration
 type Config struct {
-	Port             int
-	KeySize          int
-	FailVerification bool
-	ReturnEmptyJWT   bool
-	ReturnError      bool
-	ErrorCode        int
-	ErrorMessage     string
-	RequiredAudience string
-	AzureTenant      string
-	TokenExpiry      time.Duration
-	AllowedAudiences []string
-	Verbose          bool
-	Timeout          time.Duration
-	InfoFile         string // Path to atomically written server info
-	ShutdownOnStdin  bool   // Graceful shutdown when stdin closes
+	Port              int
+	KeySize           int
+	FailVerification  bool
+	ReturnEmptyJWT    bool
+	ReturnInvalidJSON bool
+	ReturnError       bool
+	ErrorCode         int
+	ErrorMessage      string
+	RequiredAudience  string
+	AzureTenant       string
+	TokenExpiry       time.Duration
+	AllowedAudiences  []string
+	Verbose           bool
+	Timeout           time.Duration
+	InfoFile          string // Path to atomically written server info
+	ShutdownOnStdin   bool   // Graceful shutdown when stdin closes
 }
 
 // Standardized timeouts (avoid magic numbers)
@@ -117,6 +118,7 @@ func parseFlags() Config {
 	flag.IntVar(&config.KeySize, "key-size", 2048, "RSA key size")
 	flag.BoolVar(&config.FailVerification, "fail-verification", false, "Fail verification for all requests")
 	flag.BoolVar(&config.ReturnEmptyJWT, "return-empty-jwt", false, "Return empty JWT in response")
+	flag.BoolVar(&config.ReturnInvalidJSON, "return-invalid-json", false, "Return malformed JSON in response")
 	flag.BoolVar(&config.ReturnError, "return-error", false, "Return an error response")
 	flag.IntVar(&config.ErrorCode, "error-code", 500, "HTTP error code to return (when --return-error)")
 	flag.StringVar(&config.ErrorMessage, "error-message", "Internal Server Error", "Error message to return")
@@ -463,6 +465,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		s.requestLog = append(s.requestLog, reqInfo)
 		response := map[string]string{"jwt": ""}
 		_ = json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	if s.config.ReturnInvalidJSON {
+		s.requestLog = append(s.requestLog, reqInfo)
+		_, _ = w.Write([]byte("{invalid json"))
 		return
 	}
 

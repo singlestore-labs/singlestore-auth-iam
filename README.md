@@ -6,6 +6,8 @@ This repository contains tools for the SingleStore IAM authentication system.
 ![Go unit tests](https://github.com/singlestore-labs/singlestore-auth-iam/actions/workflows/go.yml/badge.svg)
 [![Go report card](https://goreportcard.com/badge/github.com/singlestore-labs/singlestore-auth-iam/go)](https://goreportcard.com/report/github.com/singlestore-labs/singlestore-auth-iam/go)
 [![codecov](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam/branch/main/graph/badge.svg)](https://codecov.io/gh/singlestore-labs/singlestore-auth-iam)
+[![PyPI version](https://img.shields.io/pypi/v/singlestore-auth-iam.svg)](https://pypi.org/project/singlestore-auth-iam/)
+[![Maven Central](https://img.shields.io/maven-central/v/com.singlestore/s2iam.svg)](https://central.sonatype.com/artifact/com.singlestore/s2iam)
 
 ## Current Status
 
@@ -63,30 +65,30 @@ cd python
 pip install -e .
 ```
 
-### Java (Snapshot)
+### Java
 
-Until the first registered release, use the current snapshot version and ensure JDK 11+ (library is compiled targeting Java 11 for broad compatibility).
+Published to [Maven Central](https://central.sonatype.com/artifact/com.singlestore/s2iam). Requires JDK 11+ (library is compiled targeting Java 11 for broad compatibility). Check Maven Central for the latest release version.
 
 Maven:
 ```xml
 <dependency>
 	<groupId>com.singlestore</groupId>
 	<artifactId>s2iam</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.5.0</version>
 </dependency>
 ```
 
 Gradle (Groovy DSL):
 ```gradle
 dependencies {
-	implementation 'com.singlestore:s2iam:0.0.1-SNAPSHOT'
+	implementation 'com.singlestore:s2iam:0.5.0'
 }
 ```
 
 Gradle (Kotlin DSL):
 ```kotlin
 dependencies {
-	implementation("com.singlestore:s2iam:0.0.1-SNAPSHOT")
+	implementation("com.singlestore:s2iam:0.5.0")
 }
 ```
 
@@ -131,13 +133,13 @@ api_jwt = await s2iam.get_jwt_api()
 
 ### Java Library
 
-Add the Maven dependency (snapshot until first release):
+Add the Maven dependency (see [Maven Central](https://central.sonatype.com/artifact/com.singlestore/s2iam) for the latest version):
 
 ```xml
 <dependency>
 	<groupId>com.singlestore</groupId>
 	<artifactId>s2iam</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.5.0</version>
 </dependency>
 ```
 
@@ -169,6 +171,8 @@ String jwt = S2IAMRequest.newRequest()
 ```
 
 Audience (GCP ONLY): Supplying an audience when not on GCP raises an exception (renamed from withGcpAudience to withAudience and now enforced).
+
+**[📖 Full Java Documentation →](java/README.md)**
 
 ### Command Line Tool
 
@@ -250,7 +254,7 @@ Go: `s2iam.WithAssumeRoleSessionName("my-app")` · Python: `assume_role_session_
 
 - **[Go Library Documentation](https://pkg.go.dev/github.com/singlestore-labs/singlestore-auth-iam/go/s2iam) and [README](go/README.md)** - Complete Go API reference and examples
 - **[Python Library Documentation](python/README.md)** - Complete Python API reference and examples
-- **Java**: See inline Javadoc and `[README](java/README.md)` (implementation evolving pre-GA)
+- **[Java Library Documentation](java/README.md)** - Complete Java API reference and examples (see also [Maven Central](https://central.sonatype.com/artifact/com.singlestore/s2iam) for Javadoc)
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

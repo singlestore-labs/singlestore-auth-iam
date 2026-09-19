@@ -48,8 +48,8 @@ That's it! The library automatically detects your cloud environment and gets the
 
 ### Environment Variables
 
-- `S2IAM_SERVER_URL`: Custom authentication server URL (default: https://auth.singlestore.com)
-- `S2IAM_DEBUGGING`: Set to "true" to enable debug logging
+- `S2IAM_JWT_SERVER_URL`: Override the authentication server URL for JWT requests (default: `https://authsvc.singlestore.com/auth/iam/{jwt_type}`)
+- `S2IAM_DEBUGGING`: Set to `"true"` to enable debug logging
 
 ## Supported Environments
 
@@ -78,8 +78,8 @@ The `workspace_group_id` parameter is optional for `get_jwt_database()`. When pr
 
 ### Environment Variables
 
-- `S2IAM_DEBUGGING`: Set to "true" to enable debug logging
-- `S2IAM_SERVER_URL`: Custom authentication server URL (default: https://auth.singlestore.com)
+- `S2IAM_DEBUGGING`: Set to `"true"` to enable debug logging
+- `S2IAM_JWT_SERVER_URL`: Override authentication server URL for JWT requests
 
 ### Provider-Specific Configuration
 
@@ -99,9 +99,11 @@ The `workspace_group_id` parameter is optional for `get_jwt_database()`. When pr
 
 ### Core Functions
 
-#### `detect_provider(timeout=5.0, logger=None, clients=None)`
+#### `detect_provider(timeout=10.0, logger=None, clients=None)`
 
 Automatically detect which cloud provider the application is running on.
+
+**Note:** The library default detection timeout is **10 seconds** (aligned with Go/Java). Some examples pass a shorter timeout for quick local checks.
 
 **Parameters:**
 - `timeout` (float): Detection timeout in seconds

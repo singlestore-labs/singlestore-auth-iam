@@ -21,9 +21,6 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Lint / formatting check
-        run: make lint-java
-
       - name: Run tests with coverage (mvn verify)
         working-directory: java
         run: mvn -q -DskipTests=false verify

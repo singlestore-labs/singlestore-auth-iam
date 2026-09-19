@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"sync"
@@ -163,14 +164,18 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
-		// Use IAM API to impersonate the service account
-		impersonationURL := fmt.Sprintf(
-			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateIdToken",
-			serviceAccountEmail,
-		)
+		// Use IAM API to impersonate the service account.
+		impersonationURL := buildImpersonationURL(serviceAccountEmail)
 
-		requestBody := fmt.Sprintf(`{"audience":"%s"}`, audience)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(requestBody))
+		// Marshal the request body as JSON rather than interpolating the
+		// audience into a string literal, which would break the request (or
+		// allow field injection) if the audience contained a quote. This also
+		// matches the Java implementation's Jackson serialization.
+		reqBody, err := json.Marshal(map[string]string{"audience": audience})
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to encode impersonation request: %w", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(string(reqBody)))
 		if err != nil {
 			return nil, nil, errors.Errorf("failed to create impersonation request: %w", err)
 		}
@@ -288,6 +293,17 @@ func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*mo
 
 	// Use the shared identity extraction function to ensure consistency with verifier
 	return extractGCPIdentityFromToken(ctx, payload, c.logger)
+}
+
+// buildImpersonationURL constructs the IAM Credentials generateIdToken endpoint
+// URL for the given service-account email. The email is path-escaped so a
+// malformed identifier cannot alter the request path; valid service-account
+// emails are unchanged by PathEscape.
+func buildImpersonationURL(serviceAccountEmail string) string {
+	return fmt.Sprintf(
+		"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateIdToken",
+		neturl.PathEscape(serviceAccountEmail),
+	)
 }
 
 // AssumeRole configures the provider to use a different service account

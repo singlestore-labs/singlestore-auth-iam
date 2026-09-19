@@ -17,8 +17,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.*;
 
 /**
- * Parity: provider-specific identity shape assertions (mirrors logic embedded
- * in Go happy path test).
+ * Provider-specific identity header shape assertions sent to the auth server.
  */
 public class S2IAMIdentityShapeTest {
   static GoTestServer server;

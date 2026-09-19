@@ -31,7 +31,7 @@ print_error() {
 # Function to check if cloud tests should run
 should_run_cloud_tests() {
     # Cloud tests should run if test environment variables are set
-    if [ -n "${S2IAM_TEST_CLOUD_PROVIDER:-}" ] || [ -n "${S2IAM_TEST_ASSUME_ROLE:-}" ]; then
+    if [ -n "${S2IAM_TEST_CLOUD_PROVIDER:-}" ] || [ -n "${S2IAM_TEST_ASSUME_ROLE:-}" ] || [ -n "${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-}" ]; then
         return 0  # true - run cloud tests
     else
         return 1  # false - skip cloud tests
@@ -168,6 +168,7 @@ show_usage() {
     echo "Environment Variables:"
     echo "  S2IAM_TEST_CLOUD_PROVIDER    Set to 'aws', 'gcp', or 'azure' to run cloud tests"
     echo "  S2IAM_TEST_ASSUME_ROLE       Set to role ARN/ID to test role assumption"
+    echo "  S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE  Set to 'aws', 'gcp', or 'azure' for negative tests"
     echo "  S2IAM_DEBUGGING              Set to 'true' for verbose test output"
     echo ""
     echo "Examples:"
