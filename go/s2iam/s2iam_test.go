@@ -914,7 +914,10 @@ func TestGetDatabaseJWT_ProductionServer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	token, err := s2iam.GetDatabaseJWT(ctx, "test-workspace",
+	// Auth service requires workspaceGroupID to be a UUID: 36-character canonical
+	// form or 32 hex digits. A placeholder such as "test-workspace" is rejected.
+	const workspaceGroupID = "11111111-1111-4111-8111-111111111111"
+	token, err := s2iam.GetDatabaseJWT(ctx, workspaceGroupID,
 		s2iam.WithServerURL("https://authsvc.singlestore.com/auth/iam/:jwtType"))
 
 	require.NoError(t, err)
@@ -923,6 +926,13 @@ func TestGetDatabaseJWT_ProductionServer(t *testing.T) {
 	// Validate the JWT signature using the production server's JWKS
 	err = validateJWTWithProductionJWKS(t, token)
 	require.NoError(t, err, "JWT signature validation should succeed")
+
+	claims := jwt.MapClaims{}
+	_, _, err = jwt.NewParser().ParseUnverified(token, claims)
+	require.NoError(t, err)
+	aud, err := claims.GetAudience()
+	require.NoError(t, err)
+	assert.Contains(t, []string(aud), workspaceGroupID)
 
 	t.Log("Successfully got and validated JWT from production server")
 }

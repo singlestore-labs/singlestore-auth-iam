@@ -216,7 +216,8 @@ dev-setup-ubuntu-python: dev-setup-common
 		python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests \
 		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort
 	@echo "Installing editable package with dev extras (pip) ..."
-	cd python && pip install -e .[dev]
+	# Ubuntu 23.04+ marks the system Python as externally managed (PEP 668).
+	cd python && pip install -e '.[dev]' || pip install --break-system-packages -e '.[dev]'
 	@echo "✓ Ubuntu Python development environment ready (no virtualenv)"
 
 dev-setup-ubuntu-java:

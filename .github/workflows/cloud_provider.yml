@@ -15,7 +15,8 @@ permissions:
 # Host list: .github/cloud-test-hosts.json (shared with cloud_clear_stale_locks.yml).
 #
 # Base system setup (Ubuntu hosts expected):
-# copy over the Makefile and run: make dev-setup-ubuntu
+# copy over the whole dev tree (HOST=xxx make ssh-copy-to-remote) and run: make dev-setup-ubuntu
+# (cd tests/dev-1 && make dev-setup-ubuntu)
 #
 # AWS EC2 setup:
 # sudo snap install aws-cli --classic
