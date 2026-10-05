@@ -216,8 +216,10 @@ dev-setup-ubuntu-python: dev-setup-common
 		python3-pytest python3-pytest-cov python3-pytest-asyncio python3-requests \
 		python3-google-auth-oauthlib python3-flake8 black python3-mypy python3-isort
 	@echo "Installing editable package with dev extras (pip) ..."
-	# Ubuntu 23.04+ marks the system Python as externally managed (PEP 668).
-	cd python && pip install -e '.[dev]' || pip install --break-system-packages -e '.[dev]'
+	# --break-system-packages only when this Python has a PEP 668 EXTERNALLY-MANAGED marker.
+	cd python && \
+		break_flag=$$(python3 -c 'import os, sysconfig; print("--break-system-packages" if os.path.isfile(os.path.join(sysconfig.get_path("stdlib"), "EXTERNALLY-MANAGED")) else "")') && \
+		python3 -m pip install $$break_flag -e '.[dev]'
 	@echo "✓ Ubuntu Python development environment ready (no virtualenv)"
 
 dev-setup-ubuntu-java:
