@@ -27,6 +27,16 @@ public final class Options {
     return o -> o.assumeRoleIdentifier = role;
   }
 
+  /**
+   * Sets the AWS STS RoleSessionName used on the AssumeRole call. The session
+   * name is still sent to AWS (visible in CloudTrail) but no longer affects the
+   * issued identity: AWS assumed-role sessions map to the base IAM role ARN
+   * regardless of session name.
+   *
+   * @deprecated the session name no longer affects the issued identity and this
+   *             option will be removed in a future release.
+   */
+  @Deprecated
   public static JwtOption withAssumeRoleSessionName(String sessionName) {
     return o -> o.assumeRoleSessionName = sessionName;
   }

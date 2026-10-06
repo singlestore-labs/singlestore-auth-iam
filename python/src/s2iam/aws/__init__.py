@@ -22,6 +22,11 @@ ROLE_SESSION_NAME_PARAM = "roleSessionName"
 # Stable default when AssumeRole is used without an explicit session name.
 DEFAULT_ROLE_SESSION_NAME = "s2iam-session"
 
+# Claim keys populated in CloudIdentity.additional_claims for AWS identities.
+CLAIM_USER_ID = "UserId"
+CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn"
+CLAIM_ROLE_SESSION_NAME = "RoleSessionName"
+
 
 def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) -> str:
     if additional_params:
@@ -29,6 +34,63 @@ def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) 
         if name:
             return name
     return DEFAULT_ROLE_SESSION_NAME
+
+
+def _parse_assumed_role_arn(arn: str) -> Optional[tuple[str, str]]:
+    """Return (role_name, session_name) for an STS assumed-role ARN, else None.
+
+    Format: arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION. Neither ROLE nor
+    SESSION may contain '/'.
+    """
+    parts = arn.split(":")
+    if len(parts) < 6 or parts[2] != "sts":
+        return None
+    segments = parts[5].split("/", 2)
+    if len(segments) < 2 or segments[0] != "assumed-role" or not segments[1]:
+        return None
+    session_name = segments[2] if len(segments) == 3 else ""
+    return segments[1], session_name
+
+
+def _arn_resource_type(arn: str) -> str:
+    parts = arn.split(":")
+    if len(parts) >= 6:
+        resource_parts = parts[5].split("/")
+        if len(resource_parts) >= 2 and resource_parts[0]:
+            return resource_parts[0]
+    return ""
+
+
+def canonical_identity(arn: str, account: str, user_id: str = "") -> tuple[str, str, dict[str, str]]:
+    """Derive the single, stable principal identity from a GetCallerIdentity ARN.
+
+    AWS STS assumed-role sessions collapse to their base IAM role ARN
+    (arn:aws:iam::ACCOUNT:role/ROLE). The STS session name is caller-chosen and is
+    not a trustworthy authorization boundary; the IAM role is gated by its trust
+    policy, and role names are unique within an account. The raw assumed-role ARN
+    and session name are preserved in the returned claims for audit. All other
+    identities (IAM users, etc.) are returned unchanged.
+
+    Note: the STS assumed-role ARN omits the IAM path, so for a pathed role the
+    derived identity is the path-less canonical form.
+    """
+    claims: dict[str, str] = {}
+    if user_id:
+        claims[CLAIM_USER_ID] = user_id
+
+    identifier = arn
+    resource_type = _arn_resource_type(arn)
+
+    parsed = _parse_assumed_role_arn(arn)
+    if parsed is not None:
+        role_name, session_name = parsed
+        identifier = f"arn:aws:iam::{account}:role/{role_name}"
+        resource_type = "role"
+        claims[CLAIM_ASSUMED_ROLE_ARN] = arn
+        if session_name:
+            claims[CLAIM_ROLE_SESSION_NAME] = session_name
+
+    return identifier, resource_type, claims
 
 
 class AWSClient(CloudProviderClient):
@@ -254,24 +316,27 @@ class AWSClient(CloudProviderClient):
 
             arn = identity_resp["Arn"]
             parts = arn.split(":")
+            # Region comes from the raw ARN (empty for assumed-role STS ARNs).
             region_from_arn = parts[3] if len(parts) > 3 else ""
-            resource_type = ""
-            if len(parts) > 5:
-                res_parts = parts[5].split("/")
-                if res_parts and res_parts[0]:
-                    resource_type = res_parts[0]
 
             # If region unset locally (IRSA path without env/metadata), adopt ARN region
             if not self._region and region_from_arn:
                 self._region = region_from_arn
                 self._log(f"Derived region from ARN: {self._region}")
 
+            # Collapse assumed-role sessions to the base IAM role ARN (the single,
+            # stable mapping shared with the Go verifier / authority).
+            identifier, resource_type, claims = canonical_identity(
+                arn, identity_resp["Account"], identity_resp.get("UserId", "")
+            )
+
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
-                identifier=arn,
+                identifier=identifier,
                 account_id=identity_resp["Account"],
                 region=region_from_arn,
                 resource_type=resource_type,
+                additional_claims=claims,
             )
             self._log(f"Generated headers for identity: {identity.identifier}")
             return headers, identity

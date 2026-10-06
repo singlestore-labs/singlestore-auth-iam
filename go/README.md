@@ -67,13 +67,13 @@ func main() {
     }
     fmt.Println("Custom JWT:", customJWT)
     
-    // Assume a different role before getting a JWT
-    // For AWS, provide a role ARN. Default session name is s2iam-session; override for custom DB user ARNs.
+    // Assume a different role before getting a JWT.
+    // For AWS, provide a role ARN; the identity becomes that base IAM role ARN
+    // (arn:aws:iam::123456789012:role/RoleToAssume) regardless of session name.
     assumedRoleJWT, err := s2iam.GetDatabaseJWT(
         ctx,
         "workspace-group-id",
         s2iam.WithAssumeRole("arn:aws:iam::123456789012:role/RoleToAssume"),
-        s2iam.WithAssumeRoleSessionName("my-app"), // optional
     )
     if err != nil {
         log.Fatalf("Error getting JWT with assumed role: %v", err)

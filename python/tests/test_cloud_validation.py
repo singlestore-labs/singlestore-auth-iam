@@ -280,16 +280,12 @@ class TestAssumeRole:
         role_name = role.rsplit("/", 1)[-1] if "/" in role else role
         assert role_name in assumed_identifier, "assumed identity should contain role name"
         if role.startswith("arn:aws:iam:"):
-            from s2iam.aws import DEFAULT_ROLE_SESSION_NAME
-
-            expected_session = session_name or DEFAULT_ROLE_SESSION_NAME
-            expected_segment = f":assumed-role/{role_name}/{expected_session}"
-            assert (
-                expected_segment in assumed_identifier
-            ), f"assumed identity ARN should contain {expected_segment!r}, got {assumed_identifier!r}"
-            assert assumed_identifier.endswith(f"/{expected_session}"), (
-                f"assumed identity ARN should end with session name /{expected_session!r}, "
-                f"got {assumed_identifier!r}"
+            # AWS assumed-role sessions collapse to the base IAM role ARN. For a
+            # root-path role the canonical identity equals the role ARN exactly, and
+            # the (deprecated) session name must not affect it.
+            assert assumed_identifier == role, (
+                f"assumed AWS identity should be the base IAM role ARN {role!r} "
+                f"(session name must not affect it), got {assumed_identifier!r}"
             )
 
 

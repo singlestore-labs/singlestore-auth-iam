@@ -90,14 +90,11 @@ public class S2IAMJwtAssumeRoleTest {
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
     if (role.startsWith("arn:aws:iam:")) {
-      String expectedSession = (sessionName != null && !sessionName.isEmpty())
-          ? sessionName
-          : com.singlestore.s2iam.providers.aws.AWSClient.DEFAULT_ROLE_SESSION_NAME;
-      String expectedSegment = ":assumed-role/" + roleNameFragment + "/" + expectedSession;
-      assertTrue(assumedIdentifier.contains(expectedSegment),
-          "assumed identifier ARN should contain assumed-role segment: " + expectedSegment);
-      assertTrue(assumedIdentifier.endsWith("/" + expectedSession),
-          "assumed identifier ARN should end with session name: /" + expectedSession);
+      // AWS assumed-role sessions collapse to the base IAM role ARN. For a root-path
+      // role the canonical identity equals the role ARN exactly; the (deprecated)
+      // session name must not affect it.
+      assertEquals(role, assumedIdentifier,
+          "assumed AWS identity should be the base IAM role ARN (session name must not affect it)");
     }
   }
 

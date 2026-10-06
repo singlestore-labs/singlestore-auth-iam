@@ -56,6 +56,16 @@ and [STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_Ass
 
 Long-lived IAM user access keys without a session token are not sufficient.
 
+### Resulting identity
+
+The service verifies the credentials with STS `GetCallerIdentity`. For any assumed-role
+session (instance profile, IRSA, or explicit `AssumeRole`), the verified identity is the
+**base IAM role ARN** `arn:aws:iam::ACCOUNT:role/ROLE_NAME` — not the STS form
+`arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME`. The caller-chosen session
+name does not affect the identity. Register cloud principals and create database users
+using the IAM role ARN. The identity is path-less: a role under a non-root IAM path is
+represented without its path.
+
 ### Database JWT: required `workspaceGroupID` query parameter
 
 Database JWT requests (`POST /auth/iam/database`) require a `workspaceGroupID`

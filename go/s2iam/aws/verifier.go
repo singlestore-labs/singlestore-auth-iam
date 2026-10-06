@@ -120,21 +120,12 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, errors.Errorf("AWS returned empty ARN or Account")
 	}
 
-	// Parse the ARN to extract region and resource type
+	// Extract region from the raw ARN if possible (assumed-role STS ARNs carry no
+	// region, which matches historical behavior of an empty region here).
 	arnParts := strings.Split(*getCallerIdentityOutput.Arn, ":")
-	var region, resourceType string
-
-	// Extract region from ARN if possible
+	var region string
 	if len(arnParts) >= 4 {
 		region = arnParts[3]
-	}
-
-	// Extract resource type from ARN
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
 	}
 
 	if err := validatePrincipal(*getCallerIdentityOutput.Arn); err != nil {
@@ -144,18 +135,25 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, err
 	}
 
+	// Collapse assumed-role sessions to the base IAM role ARN (the single, stable
+	// mapping). This is the authoritative identity the auth service issues.
+	identifier, resourceType, claims := canonicalIdentity(
+		*getCallerIdentityOutput.Arn,
+		*getCallerIdentityOutput.Account,
+		aws.ToString(getCallerIdentityOutput.UserId),
+	)
+
 	if logger != nil {
-		logger.Logf("Successfully verified AWS identity: %s", *getCallerIdentityOutput.Arn)
+		logger.Logf("Successfully verified AWS identity: %s (attested: %s)",
+			identifier, *getCallerIdentityOutput.Arn)
 	}
 
 	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *getCallerIdentityOutput.Arn,
-		AccountID:    *getCallerIdentityOutput.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *getCallerIdentityOutput.UserId,
-		},
+		Provider:         models.ProviderAWS,
+		Identifier:       identifier,
+		AccountID:        *getCallerIdentityOutput.Account,
+		Region:           region,
+		ResourceType:     resourceType,
+		AdditionalClaims: claims,
 	}, nil
 }

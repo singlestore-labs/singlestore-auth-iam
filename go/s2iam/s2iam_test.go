@@ -23,7 +23,6 @@ import (
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
-	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
@@ -479,6 +478,7 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		s2iam.WithAssumeRole(roleIdentifier),
 	}
 	if sessionName != "" {
+		//nolint:staticcheck // SA1019: intentionally exercising the deprecated option
 		opts = append(opts, s2iam.WithAssumeRoleSessionName(sessionName))
 	}
 	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", opts...)
@@ -516,23 +516,16 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		expectedRoleName = roleIdentifier
 	}
 
-	// The assumed identifier should contain the role name
-	// For AWS, the assumed role format is: arn:aws:sts::account:assumed-role/RoleName/SessionName
+	// The assumed identifier should contain the role name.
 	assert.Contains(t, assumedIdentifier, expectedRoleName,
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
-	if strings.Contains(roleIdentifier, "arn:aws:iam:") {
-		expectedSessionName := sessionName
-		if expectedSessionName == "" {
-			expectedSessionName = aws.DefaultRoleSessionName
-		}
-		expectedAssumedRoleSegment := fmt.Sprintf(":assumed-role/%s/%s", expectedRoleName, expectedSessionName)
-		assert.Contains(t, assumedIdentifier, expectedAssumedRoleSegment,
-			"Assumed identity ARN should contain assumed-role segment (expected: %s, got: %s)",
-			expectedAssumedRoleSegment, assumedIdentifier)
-		assert.True(t, strings.HasSuffix(assumedIdentifier, "/"+expectedSessionName),
-			"Assumed identity ARN should end with session name (expected suffix: /%s, got: %s)",
-			expectedSessionName, assumedIdentifier)
+	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
+		// AWS assumed-role sessions collapse to the base IAM role ARN. For a
+		// root-path role the canonical identity equals the role ARN exactly, and
+		// the (deprecated) session name must not affect it.
+		assert.Equal(t, roleIdentifier, assumedIdentifier,
+			"Assumed AWS identity should be the base IAM role ARN (session name must not affect it)")
 	}
 	assert.Equal(t, flags.lastIdentifier, assumedIdentifier,
 		"Fake server identity should match JWT sub claim")

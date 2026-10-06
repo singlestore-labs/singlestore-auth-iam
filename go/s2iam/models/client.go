@@ -22,7 +22,11 @@ const (
 type CloudIdentity struct {
 	Provider CloudProviderType
 	// The identifier will be:
-	// - AWS: ARN of the IAM role/user
+	// - AWS: ARN of the IAM role or user. Assumed-role sessions (including
+	//   instance-profile, IRSA, and explicit AssumeRole) collapse to the base IAM
+	//   role ARN (arn:aws:iam::ACCOUNT:role/ROLE); the caller-chosen STS session
+	//   name does not affect this value. The raw assumed-role ARN and session name
+	//   are available in AdditionalClaims.
 	// - GCP: Project number + instance ID + service account email
 	// - Azure: Principal ID (object ID of the managed identity)
 	Identifier string

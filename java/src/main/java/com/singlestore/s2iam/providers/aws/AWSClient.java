@@ -160,7 +160,20 @@ public class AWSClient extends AbstractBaseClient {
       extra.put("account", account);
       if (who.userId() != null && !who.userId().isEmpty())
         extra.put("userId", who.userId());
-      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, arn, account, region,
+      // Collapse assumed-role sessions to the base IAM role ARN (the single, stable
+      // mapping shared with the Go verifier / authority). The caller-chosen session
+      // name does not affect identity; the raw ARN and session name are preserved as
+      // claims for audit.
+      String identifier = arn;
+      String[] assumed = parseAssumedRoleArn(arn);
+      if (assumed != null) {
+        identifier = "arn:aws:iam::" + account + ":role/" + assumed[0];
+        resourceType = "role";
+        extra.put("assumedRoleArn", arn);
+        if (!assumed[1].isEmpty())
+          extra.put("roleSessionName", assumed[1]);
+      }
+      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, identifier, account, region,
           resourceType, extra);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
@@ -175,6 +188,24 @@ public class AWSClient extends AbstractBaseClient {
         return name;
     }
     return DEFAULT_ROLE_SESSION_NAME;
+  }
+
+  /**
+   * Returns {roleName, sessionName} for an STS assumed-role ARN
+   * (arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION), or null for any other ARN
+   * shape. Neither ROLE nor SESSION may contain '/'.
+   */
+  static String[] parseAssumedRoleArn(String arn) {
+    if (arn == null)
+      return null;
+    String[] parts = arn.split(":");
+    if (parts.length < 6 || !"sts".equals(parts[2]))
+      return null;
+    String[] seg = parts[5].split("/", 3);
+    if (seg.length < 2 || !"assumed-role".equals(seg[0]) || seg[1].isEmpty())
+      return null;
+    String session = seg.length == 3 ? seg[2] : "";
+    return new String[]{seg[1], session};
   }
 
   private void ensureSTS() {

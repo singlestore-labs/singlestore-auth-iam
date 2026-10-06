@@ -189,11 +189,8 @@ echo $TOKEN
 #### Advanced Usage
 
 ```bash
-# AWS with assumed role
+# AWS with assumed role (identity becomes arn:aws:iam::123456789012:role/MyRole)
 s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole
-
-# AWS with assumed role and explicit session name (recommended for pre-provisioned DB users)
-s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole --assume-role-session-name=my-app
 
 # GCP with service account impersonation
 s2iam --provider=gcp --assume-role=service-account@project-id.iam.gserviceaccount.com
@@ -214,7 +211,7 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--workspace-group-id`: Workspace group ID (required for database JWT)
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
-- `--assume-role-session-name`: AWS STS `RoleSessionName` when using `--assume-role` (optional; default `s2iam-session`)
+- `--assume-role-session-name`: **Deprecated** (no longer affects identity). AWS STS `RoleSessionName` when using `--assume-role`; still sent to AWS for CloudTrail visibility
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
@@ -229,22 +226,25 @@ s2iam --verbose --workspace-group-id=my-workspace
 
 The libraries automatically detect the cloud provider and obtain appropriate credentials from metadata services.
 
-### AWS AssumeRole and database user matching
+### AWS identity and database user matching
 
-When you assume an AWS IAM role, the authenticated identity ARN becomes:
+For AWS, the authenticated identity is the **base IAM role ARN**:
 
-`arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME`
+`arn:aws:iam::ACCOUNT:role/ROLE_NAME`
 
-SingleStore database users and cloud principals must be pre-created to match this **full** ARN exactly (JWT `sub` claim). The session name is part of the ARN and must be stable across requests.
+Every AWS STS assumed-role session collapses to this form — whether the credentials come from an EC2 instance profile, EKS IRSA, or an explicit `AssumeRole` call. SingleStore database users and cloud principals must be pre-created to match this role ARN exactly (JWT `sub` claim).
 
-| Setting | Session name used | Example identity ARN |
-|---------|-------------------|----------------------|
-| `--assume-role-session-name=my-app` (recommended) | `my-app` | `arn:aws:sts::123456789012:assumed-role/MyRole/my-app` |
-| Omitted (default) | `s2iam-session` | `arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session` |
+The STS session name (e.g. `.../assumed-role/ROLE_NAME/SESSION_NAME` reported by `aws sts get-caller-identity`) is **not** part of the identity. It is caller-chosen and therefore not a trustworthy authorization boundary; the IAM role is gated by its trust policy. AWS guarantees role names are unique within an account, so the base role ARN uniquely identifies the role.
 
-**Do not use timestamp- or random-based session names** — they produce a different ARN on every request and will not match pre-provisioned database users.
+| Credentials | Identity (JWT `sub`) |
+|-------------|----------------------|
+| EC2 instance profile `MyRole` | `arn:aws:iam::123456789012:role/MyRole` |
+| EKS IRSA role `MyRole` | `arn:aws:iam::123456789012:role/MyRole` |
+| `AssumeRole arn:aws:iam::123456789012:role/MyRole` (any session name) | `arn:aws:iam::123456789012:role/MyRole` |
 
-Go: `s2iam.WithAssumeRoleSessionName("my-app")` · Python: `assume_role_session_name="my-app"` · Java: `Options.withAssumeRoleSessionName("my-app")`
+> **Note:** the identity is path-less. A role created under a non-root IAM path (e.g. `/team/MyRole`) is represented as `arn:aws:iam::ACCOUNT:role/MyRole`; register the cloud principal using that path-less form.
+
+The raw STS assumed-role ARN and session name remain available in the identity's additional claims for auditing.
 
 ## Documentation
 

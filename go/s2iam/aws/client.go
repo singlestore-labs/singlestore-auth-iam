@@ -450,33 +450,37 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	return headers, identity, nil
 }
 
-// parseIdentityFromCallerIdentity converts a GetCallerIdentityOutput to a CloudIdentity
-func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*models.CloudIdentity, error) {
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*callerIdentity.Arn, ":")
-	var region, resourceType string
-
-	if len(arnParts) >= 4 {
+// identityFromCallerIdentity converts a GetCallerIdentityOutput to a
+// CloudIdentity, applying the canonical AWS identity mapping (assumed-role
+// sessions collapse to their base IAM role ARN). This must stay identical to the
+// verifier's mapping so the client-side identity matches the issued JWT sub.
+func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *models.CloudIdentity {
+	// Region is taken from the raw ARN (empty for assumed-role STS ARNs), matching
+	// historical behavior.
+	var region string
+	if arnParts := strings.Split(*callerIdentity.Arn, ":"); len(arnParts) >= 4 {
 		region = arnParts[3]
 	}
 
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
-	}
+	identifier, resourceType, claims := canonicalIdentity(
+		*callerIdentity.Arn,
+		*callerIdentity.Account,
+		aws.ToString(callerIdentity.UserId),
+	)
 
 	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *callerIdentity.Arn,
-		AccountID:    *callerIdentity.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *callerIdentity.UserId,
-		},
-	}, nil
+		Provider:         models.ProviderAWS,
+		Identifier:       identifier,
+		AccountID:        *callerIdentity.Account,
+		Region:           region,
+		ResourceType:     resourceType,
+		AdditionalClaims: claims,
+	}
+}
+
+// parseIdentityFromCallerIdentity converts a GetCallerIdentityOutput to a CloudIdentity
+func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*models.CloudIdentity, error) {
+	return identityFromCallerIdentity(callerIdentity), nil
 }
 
 // getIdentityFromSTS calls GetCallerIdentity and populates a CloudIdentity object
@@ -486,31 +490,7 @@ func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Clien
 		return nil, errors.Errorf("failed to get caller identity: %w", err)
 	}
 
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*callerIdentity.Arn, ":")
-	var region, resourceType string
-
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
-	}
-
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
-	}
-
-	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *callerIdentity.Arn,
-		AccountID:    *callerIdentity.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *callerIdentity.UserId,
-		},
-	}, nil
+	return identityFromCallerIdentity(callerIdentity), nil
 }
 
 // AssumeRole configures the provider to use an alternate identity
