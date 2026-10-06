@@ -48,7 +48,7 @@ Validation is strict; malformed identifiers raise `S2IAMException` before networ
 
 Identity Format Preferences
 ---------------------------
-By default the issued identity (JWT `sub`) is byte-identical to prior releases. Clients may opt into alternate representations by supplying an ordered preference list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary and semantics.
+Clients may select the issued identity representation (the JWT `sub`) by supplying an ordered preference list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary, the default ordering, and semantics.
 
 ```java
 // Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.

@@ -68,9 +68,9 @@ func main() {
     fmt.Println("Custom JWT:", customJWT)
     
     // Assume a different role before getting a JWT.
-    // For AWS, provide a role ARN. By default the identity (JWT sub) is the raw
-    // STS assumed-role ARN; opt into the session-stripped base IAM role ARN with
-    // WithIdentityFormatPreference (see "Identity format preferences" below).
+    // For AWS, provide a role ARN. Use WithIdentityFormatPreference to select the
+    // identity representation (e.g. the session-stripped base IAM role ARN); see
+    // "Identity format preferences" below.
     assumedRoleJWT, err := s2iam.GetDatabaseJWT(
         ctx,
         "workspace-group-id",
@@ -85,11 +85,11 @@ func main() {
 
 ### Identity format preferences
 
-By default the issued identity is byte-identical to prior releases. Clients may opt into
-alternate identity representations via an ordered preference list; the verifier picks the
-first form it supports and reports the choice in the response `identityFormat` field. See
-the [main README](../README.md#identity-format-preferences-content-negotiation) for the
-full vocabulary and semantics.
+Clients may select the issued identity representation (the JWT `sub`) via an ordered
+preference list; the verifier picks the first form it supports and reports the choice in
+the response `identityFormat` field. See the
+[main README](../README.md#identity-format-preferences-content-negotiation) for the full
+vocabulary, the default ordering, and semantics.
 
 ```go
 // Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
