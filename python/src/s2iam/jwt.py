@@ -100,15 +100,10 @@ async def get_jwt(
         provider = provider.assume_role(assume_role_identifier)
 
     if assume_role_session_name:
-        import warnings
-
-        warnings.warn(
-            "assume_role_session_name is deprecated and no longer affects the issued "
-            "identity: AWS assumed-role sessions map to the base IAM role ARN regardless "
-            "of session name. The value is still sent to AWS (visible in CloudTrail).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        # The session name is part of the identity under the "aws-arn" format
+        # (sub = arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION). It applies to the
+        # library-driven AssumeRole path only, and does not affect the
+        # "aws-iam-role-arn" (session-stripped) format.
         additional_params = dict(additional_params or {})
         additional_params[ROLE_SESSION_NAME_PARAM] = assume_role_session_name
 
@@ -193,9 +188,11 @@ async def get_jwt_database(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
-        assume_role_session_name: Deprecated. AWS STS RoleSessionName when assuming a
-            role. No longer affects the issued identity (assumed-role sessions map to
-            the base IAM role ARN); still sent to AWS for CloudTrail visibility.
+        assume_role_session_name: AWS STS RoleSessionName for the library-driven
+            AssumeRole (assume_role_identifier). Part of the identity under the
+            "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
+            stable value so the full ARN is pre-configurable. Does not affect the
+            "aws-iam-role-arn" (session-stripped) format or ambient credentials.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -241,9 +238,11 @@ async def get_jwt_api(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
-        assume_role_session_name: Deprecated. AWS STS RoleSessionName when assuming a
-            role. No longer affects the issued identity (assumed-role sessions map to
-            the base IAM role ARN); still sent to AWS for CloudTrail visibility.
+        assume_role_session_name: AWS STS RoleSessionName for the library-driven
+            AssumeRole (assume_role_identifier). Part of the identity under the
+            "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
+            stable value so the full ARN is pre-configurable. Does not affect the
+            "aws-iam-role-arn" (session-stripped) format or ambient credentials.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options

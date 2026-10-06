@@ -85,7 +85,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.GCPAudience, "gcp-audience", "", "GCP audience for identity token")
 	flagSet.StringVar(&config.Provider, "provider", "", "Cloud provider: 'aws', 'gcp', or 'azure' (auto-detect if not specified)")
 	flagSet.StringVar(&config.AssumeRole, "assume-role", "", "Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)")
-	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "DEPRECATED (no longer affects identity): AWS STS RoleSessionName when assuming a role")
+	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "AWS STS RoleSessionName for --assume-role (part of the identity under the 'aws-arn' format; defaults to a stable value so the full ARN is pre-configurable)")
 	flagSet.StringVar(&config.IdentityFormatPref, "identity-format-preference", "", "Comma-separated identity-format preference (e.g. 'aws-iam-role-arn,aws-arn'); overrides S2IAM_IDENTITY_FORMAT_PREFERENCE")
 	flagSet.DurationVar(&config.Timeout, "timeout", 10*time.Second, "Timeout for operations")
 	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (uses default if not specified)")
@@ -193,9 +193,8 @@ func run(config Config) error {
 		opts = append(opts, s2iam.WithAssumeRole(config.AssumeRole))
 	}
 	if config.AssumeRoleSessionName != "" {
-		// Deprecated option intentionally forwarded: the session name is still passed
-		// to AWS (CloudTrail visibility) even though it no longer affects identity.
-		opts = append(opts, s2iam.WithAssumeRoleSessionName(config.AssumeRoleSessionName)) //nolint:staticcheck // SA1019: deprecated pass-through is intentional
+		// The session name is part of the identity under the "aws-arn" format.
+		opts = append(opts, s2iam.WithAssumeRoleSessionName(config.AssumeRoleSessionName))
 	}
 
 	if config.GCPAudience != "" {

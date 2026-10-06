@@ -90,8 +90,8 @@ public class S2IAMJwtAssumeRoleTest {
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
     if (role.startsWith("arn:aws:iam:")) {
-      // With the default (legacy) preference the identity is the raw STS
-      // assumed-role ARN (session-bearing), byte-identical to historical behavior.
+      // With the default preference the identity is the raw STS assumed-role ARN
+      // (session-bearing), byte-identical to historical behavior.
       assertTrue(assumedIdentifier.startsWith("arn:aws:sts::"),
           "default AWS identity should be the raw STS assumed-role ARN, got " + assumedIdentifier);
       assertTrue(assumedIdentifier.contains(":assumed-role/" + roleNameFragment + "/"),

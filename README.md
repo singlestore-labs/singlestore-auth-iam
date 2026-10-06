@@ -215,7 +215,7 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--workspace-group-id`: Workspace group ID (required for database JWT)
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
-- `--assume-role-session-name`: AWS STS `RoleSessionName` when using `--assume-role` (visible in CloudTrail; does not affect the base IAM role ARN form)
+- `--assume-role-session-name`: AWS STS `RoleSessionName` for `--assume-role`. Part of the identity under the `aws-arn` format; defaults to a stable value so the full ARN is pre-configurable. Does not affect the `aws-iam-role-arn` form. See [`aws-arn` and session names](#aws-arn-and-session-names)
 - `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (e.g. `aws-iam-role-arn,aws-arn`). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
@@ -254,13 +254,28 @@ cannot be honored.
 
 | Format token | Provider | Meaning | Applicability |
 |--------------|----------|---------|---------------|
-| `aws-arn` | AWS | Raw STS/IAM caller ARN (session-bearing) | Always (floor / default) |
+| `aws-arn` | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles | Always (floor / default); pre-configurable only when the session name is stable (see below) |
 | `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` | Assumed-role sessions only |
 | `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`) | Assumed-role sessions only |
 | `gcp-sa-email` | GCP | Service account email | Verified email only |
 | `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) |
 | `azure-object-id` | Azure | `oid` principal (object id) | Always (floor / default) |
 | `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only |
+
+#### `aws-arn` and session names
+
+Because the `sub` must be pre-configured as a cloud principal / database user, the
+session-bearing `aws-arn` form is only usable when the session name is **stable**:
+
+- **IAM user** — the ARN has no session; always stable.
+- **Library-driven `AssumeRole`** (`WithAssumeRole`) — the library uses a stable default
+  session name (`s2iam-session`), so the full ARN is deterministic. Set your own with
+  `WithAssumeRoleSessionName` (Go), `assume_role_session_name` (Python),
+  `Options.withAssumeRoleSessionName(...)` / `.assumeRoleSessionName(...)` (Java), or
+  `--assume-role-session-name` (CLI).
+- **EKS IRSA** — set `AWS_ROLE_SESSION_NAME` to stabilize the session name.
+- **EC2 instance profile** — the session name is the instance id and cannot be
+  stabilized; use `aws-iam-role-arn` instead.
 
 #### Selecting a preference
 

@@ -330,7 +330,7 @@ components:
         `oid` principal for Azure.
 
         Format vocabulary:
-        - `aws-arn` — raw STS/IAM caller ARN, session-bearing (always valid; AWS default/floor)
+        - `aws-arn` — raw STS/IAM caller ARN (always valid; AWS default/floor). Session-bearing for assumed-role sessions, so pre-configurable only when the session name is stable; otherwise prefer `aws-iam-role-arn`
         - `aws-iam-role-arn` — session-stripped base IAM role ARN (assumed-role sessions only)
         - `aws-role-id` — stable `RoleId` (`AROA…`; assumed-role sessions only)
         - `gcp-sa-email` — service account email (verified email only; GCP default)

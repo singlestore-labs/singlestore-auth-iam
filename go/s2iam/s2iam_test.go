@@ -482,7 +482,6 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		s2iam.WithAssumeRole(roleIdentifier),
 	}
 	if sessionName != "" {
-		//nolint:staticcheck // SA1019: intentionally exercising the deprecated option
 		opts = append(opts, s2iam.WithAssumeRoleSessionName(sessionName))
 	}
 	assumedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", opts...)
@@ -525,9 +524,9 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
 	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
-		// With the default (legacy) preference the identity is the raw STS
-		// assumed-role ARN (session-bearing), byte-identical to historical
-		// behavior. The negotiated base-role-ARN form is exercised below.
+		// With the default preference the identity is the raw STS assumed-role
+		// ARN (session-bearing), byte-identical to historical behavior. The
+		// negotiated base-role-ARN form is exercised below.
 		assert.True(t, strings.HasPrefix(assumedIdentifier, "arn:aws:sts::"),
 			"default AWS identity should be the raw STS assumed-role ARN, got: %s", assumedIdentifier)
 		assert.Contains(t, assumedIdentifier, ":assumed-role/"+expectedRoleName+"/",

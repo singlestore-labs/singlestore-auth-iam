@@ -280,9 +280,9 @@ class TestAssumeRole:
         role_name = role.rsplit("/", 1)[-1] if "/" in role else role
         assert role_name in assumed_identifier, "assumed identity should contain role name"
         if role.startswith("arn:aws:iam:"):
-            # With the default (legacy) preference the identity is the raw STS
-            # assumed-role ARN (session-bearing), byte-identical to historical
-            # behavior. The negotiated base-role-ARN form is exercised below.
+            # With the default preference the identity is the raw STS assumed-role
+            # ARN (session-bearing), byte-identical to historical behavior. The
+            # negotiated base-role-ARN form is exercised below.
             assert assumed_identifier.startswith(
                 "arn:aws:sts::"
             ), f"default AWS identity should be the raw STS assumed-role ARN, got {assumed_identifier!r}"

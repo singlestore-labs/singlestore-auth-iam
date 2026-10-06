@@ -62,13 +62,12 @@ public final class S2IAMRequest {
   }
 
   /**
-   * Optional AWS STS RoleSessionName when assuming a role.
-   *
-   * @deprecated no longer affects the issued identity (assumed-role sessions map
-   *             to the base IAM role ARN); still sent to AWS for CloudTrail
-   *             visibility.
+   * Optional AWS STS RoleSessionName for the library-driven AssumeRole (see
+   * {@link #assumeRole}). It is part of the identity under the "aws-arn" format
+   * (sub = {@code ...:assumed-role/ROLE/SESSION}) and defaults to a stable value
+   * so the full ARN is pre-configurable. It does not affect the
+   * "aws-iam-role-arn" (session-stripped) format or ambient credentials.
    */
-  @Deprecated
   public S2IAMRequest assumeRoleSessionName(String assumeRoleSessionName) {
     this.assumeRoleSessionName = assumeRoleSessionName;
     return this;

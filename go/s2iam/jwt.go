@@ -85,12 +85,16 @@ func WithAssumeRole(roleIdentifier string) JWTOption {
 }
 
 // WithAssumeRoleSessionName sets the AWS STS RoleSessionName used on the
-// AssumeRole call. The session name is still sent to AWS (and is visible in
-// CloudTrail) but no longer affects the issued identity: AWS assumed-role
-// sessions map to the base IAM role ARN regardless of session name.
+// AssumeRole call this library performs for WithAssumeRole. It applies only to
+// that library-driven AssumeRole path, not to ambient credentials (EC2 instance
+// profiles, EKS IRSA), whose session names are assigned by AWS/the infrastructure.
 //
-// Deprecated: the session name no longer affects the issued identity and this
-// option will be removed in a future release.
+// The session name becomes part of the identity under the "aws-arn" format,
+// whose JWT sub is the full STS ARN arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION.
+// When unset, the library uses a stable default (DefaultRoleSessionName), so the
+// full ARN is deterministic and can be pre-configured as a cloud principal /
+// database user. Set a stable value here if you need a different one. It does not
+// affect the "aws-iam-role-arn" format (the session-stripped base role ARN).
 func WithAssumeRoleSessionName(sessionName string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleSessionName = sessionName

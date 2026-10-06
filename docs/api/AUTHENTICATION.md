@@ -225,7 +225,7 @@ that provider — the `sub` you get when you send no preference.
 
 | Format token | Meaning | Example `sub` |
 |--------------|---------|---------------|
-| `aws-arn` * | Raw STS/IAM caller ARN, session-bearing | `arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456` |
+| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below) | `arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456` |
 | `aws-iam-role-arn` | Session-stripped base IAM role ARN (assumed-role only) | `arn:aws:iam::123456789012:role/MyRole` |
 | `aws-role-id` | Stable `RoleId`, prefix of the STS `UserId` (assumed-role only) | `AROAEXAMPLEID1234567` |
 | `gcp-sa-email` * | Service account email (verified email only) | `my-sa@my-project.iam.gserviceaccount.com` |
@@ -236,6 +236,13 @@ that provider — the `sub` you get when you send no preference.
 For GCP the default ordering also falls back to `gcp-sa-unique-id` when the email is
 unverified; `gcp-sa-unique-id` is the always-valid floor the verifier uses as a last
 resort.
+
+Because the `sub` must be pre-configured, the session-bearing `aws-arn` form is only
+usable when the session name is **stable**: an IAM user has no session; the
+library-driven `AssumeRole` uses a stable default session name (`s2iam-session`,
+overridable via `--assume-role-session-name` / `WithAssumeRoleSessionName` and friends);
+EKS IRSA can be stabilized with `AWS_ROLE_SESSION_NAME`. An EC2 instance profile's
+session name is the instance id and cannot be stabilized — use `aws-iam-role-arn` there.
 
 ### Example: opt into the AWS base IAM role ARN
 

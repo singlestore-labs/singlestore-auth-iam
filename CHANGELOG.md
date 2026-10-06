@@ -11,7 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
   first form it supports and can derive, and reports the chosen form back. This is
   **fully additive and non-breaking**: the default identity for every provider is
   byte-identical to prior releases unless a client opts in.
-  - New provider-prefixed format vocabulary: `aws-arn` (raw STS/IAM ARN, legacy default),
+  - New provider-prefixed format vocabulary: `aws-arn` (raw STS/IAM ARN, current default;
+    session-bearing for assumed roles),
     `aws-iam-role-arn` (session-stripped base IAM role ARN), `aws-role-id`
     (stable `RoleId`, `AROA…`), `gcp-sa-email`, `gcp-sa-unique-id`, `azure-object-id`,
     and `azure-resource-id` (`xms_mirid`, user-assigned managed identity).

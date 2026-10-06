@@ -70,7 +70,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
 		},
 		{
-			name:       "AWS legacy preference selects raw STS ARN (session kept)",
+			name:       "AWS aws-arn preference selects raw STS ARN (session kept)",
 			provider:   ProviderAWS,
 			valid:      awsAssumedRoleCandidates,
 			clientPref: []IdentityFormat{FormatAWSARN},
