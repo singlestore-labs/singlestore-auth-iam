@@ -220,15 +220,22 @@ never broadens a match or crosses identities. Tokens for other providers and unk
 tokens are ignored, and if no listed format applies the verifier falls back to its
 default ordering and ultimately to the always-valid floor for the provider.
 
-| Format token | Provider | Meaning | Applicability |
-|--------------|----------|---------|---------------|
-| `aws-arn` | AWS | Raw STS/IAM caller ARN (session-bearing) | Always (floor / default) |
-| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN | Assumed-role sessions only |
-| `aws-role-id` | AWS | Stable `RoleId` (`AROA…`) | Assumed-role sessions only |
-| `gcp-sa-email` | GCP | Service account email | Verified email only (GCP default) |
-| `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) |
-| `azure-object-id` | Azure | `oid` principal / object id | Always (floor / default) |
-| `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only |
+The provider is implied by each token's prefix. A `*` marks the **default** form for
+that provider — the `sub` you get when you send no preference.
+
+| Format token | Meaning | Example `sub` |
+|--------------|---------|---------------|
+| `aws-arn` * | Raw STS/IAM caller ARN, session-bearing | `arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456` |
+| `aws-iam-role-arn` | Session-stripped base IAM role ARN (assumed-role only) | `arn:aws:iam::123456789012:role/MyRole` |
+| `aws-role-id` | Stable `RoleId`, prefix of the STS `UserId` (assumed-role only) | `AROAEXAMPLEID1234567` |
+| `gcp-sa-email` * | Service account email (verified email only) | `my-sa@my-project.iam.gserviceaccount.com` |
+| `gcp-sa-unique-id` | Numeric service account unique id | `103547991597142817347` |
+| `azure-object-id` * | `oid` principal / object id | `11111111-2222-3333-4444-555555555555` |
+| `azure-resource-id` | `xms_mirid` resource id (user-assigned managed identity only) | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
+
+For GCP the default ordering also falls back to `gcp-sa-unique-id` when the email is
+unverified; `gcp-sa-unique-id` is the always-valid floor the verifier uses as a last
+resort.
 
 ### Example: opt into the AWS base IAM role ARN
 
@@ -259,6 +266,29 @@ environment variable.
 | Mixing providers on one request | Pick AWS **or** GCP **or** Azure headers for each POST |
 | Omitting `workspaceGroupID`, or sending a non-UUID, on database JWT requests | Add `?workspaceGroupID=<uuid>` to `/auth/iam/database` (canonical `8-4-4-4-12` form or 32 hex digits) |
 | Confusing inbound vs outbound JWTs | Inbound = cloud provider token in headers; outbound = SingleStore `jwt` in JSON body |
+| Registering the cloud principal / database user for the wrong identity form (e.g. expecting the base IAM role ARN but the `sub` is the raw STS ARN, or vice versa) | Decode the issued JWT and inspect its `sub` to see the exact identity, then either register that value or request a matching format (see below) |
+
+### Checking the identity (`sub`) you actually get
+
+The identity used for authorization is the JWT `sub` claim. Decode the token the CLI
+prints to see it:
+
+```shell
+# Decode a JWT's payload and print the `sub` (handles base64url padding).
+jwt_sub() { cut -d. -f2 | python3 -c 'import sys,base64,json; d=sys.stdin.read().strip(); d+="="*(-len(d)%4); print(json.loads(base64.urlsafe_b64decode(d))["sub"])'; }
+
+# Default identity:
+s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 | jwt_sub
+# e.g. arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456
+
+# Request a different format and re-check; the `sub` changes accordingly:
+s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 \
+  --identity-format-preference=aws-iam-role-arn,aws-arn | jwt_sub
+# e.g. arn:aws:iam::123456789012:role/MyRole
+```
+
+Register your cloud principal and create the database user for whichever `sub` form you
+intend to use, and set the identity-format preference so the issued `sub` matches.
 
 ## OpenAPI / Redoc "Authorize" button
 
