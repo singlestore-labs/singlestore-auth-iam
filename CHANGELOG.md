@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 - AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
 
 ### Fixed
+- Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.
 - Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
 
 ## [v0.4.0] - 2026-06-12
