@@ -31,6 +31,19 @@ type (
 // ErrNoValidAuth is returned when no valid cloud provider authentication is found in the request
 var ErrNoValidAuth = models.ErrNoValidAuth
 
+// defaultsForProvider returns the tokens in the flat, cross-provider default
+// ordering that belong to the given provider, preserving their relative order.
+// An empty result lets the provider verifier fall back to its built-in default.
+func defaultsForProvider(formats []models.IdentityFormat, provider models.CloudProviderType) []models.IdentityFormat {
+	var out []models.IdentityFormat
+	for _, f := range formats {
+		if f.Provider() == provider {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // defaultLogger provides a basic implementation that forwards to standard output
 type defaultLogger struct{}
 
@@ -53,16 +66,18 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 		config.AllowedAudiences = []string{"https://authsvc.singlestore.com"}
 	}
 
-	// Create verifiers for each cloud provider, passing any configured per-provider
-	// default identity-format ordering (empty -> built-in default).
-	awsVerifier := aws.NewVerifier(config.Logger, config.DefaultIdentityFormats[models.ProviderAWS]...)
+	// Create verifiers for each cloud provider, passing the configured default
+	// identity-format ordering filtered to that provider (empty -> built-in
+	// default). DefaultIdentityFormats is a single flat list spanning providers;
+	// each token names its own provider, so we partition it here.
+	awsVerifier := aws.NewVerifier(config.Logger, defaultsForProvider(config.DefaultIdentityFormats, models.ProviderAWS)...)
 
-	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, config.DefaultIdentityFormats[models.ProviderGCP]...)
+	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, defaultsForProvider(config.DefaultIdentityFormats, models.ProviderGCP)...)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
 	}
 
-	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, config.DefaultIdentityFormats[models.ProviderAzure]...)
+	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, defaultsForProvider(config.DefaultIdentityFormats, models.ProviderAzure)...)
 
 	verifiers := map[models.CloudProviderType]models.CloudProviderVerifier{
 		models.ProviderAWS:   awsVerifier,

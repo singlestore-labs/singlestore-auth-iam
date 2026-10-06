@@ -31,8 +31,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
     `["aws-iam-role-arn", "aws-arn"]`. The raw STS assumed-role ARN, role session name, and
     STS `UserId` remain available in `AdditionalClaims` / `additional_claims` / identity
     claims for audit regardless of the chosen format.
-  - Verifier operators can change the per-provider default ordering via
-    `VerifierConfig.DefaultIdentityFormats` (Go); the built-in defaults preserve historical
+  - Verifier operators can change the default ordering via
+    `VerifierConfig.DefaultIdentityFormats` (Go) — a single flat preference list spanning
+    providers (each token names its own provider); the built-in defaults preserve historical
     behavior (`[aws-arn]`, `[gcp-sa-email, gcp-sa-unique-id]`, `[azure-object-id]`).
 
 ### Fixed

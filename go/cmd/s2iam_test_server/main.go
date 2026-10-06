@@ -164,20 +164,13 @@ func NewServer(config Config) (*Server, error) {
 		AzureTenant:      config.AzureTenant,
 	}
 
-	// Wire any configured per-provider default identity-format ordering.
-	defaults := map[models.CloudProviderType][]models.IdentityFormat{}
-	if order := models.ParseIdentityFormatPreference(config.AWSDefaultIdentityFormat); len(order) > 0 {
-		defaults[models.ProviderAWS] = order
-	}
-	if order := models.ParseIdentityFormatPreference(config.GCPDefaultIdentityFormat); len(order) > 0 {
-		defaults[models.ProviderGCP] = order
-	}
-	if order := models.ParseIdentityFormatPreference(config.AzureDefaultIdentityFormat); len(order) > 0 {
-		defaults[models.ProviderAzure] = order
-	}
-	if len(defaults) > 0 {
-		verifierConfig.DefaultIdentityFormats = defaults
-	}
+	// Wire any configured default identity-format ordering as a single flat list
+	// spanning providers (each token names its own provider).
+	var defaults []models.IdentityFormat
+	defaults = append(defaults, models.ParseIdentityFormatPreference(config.AWSDefaultIdentityFormat)...)
+	defaults = append(defaults, models.ParseIdentityFormatPreference(config.GCPDefaultIdentityFormat)...)
+	defaults = append(defaults, models.ParseIdentityFormatPreference(config.AzureDefaultIdentityFormat)...)
+	verifierConfig.DefaultIdentityFormats = defaults
 
 	if config.Verbose {
 		verifierConfig.Logger = logger{}
