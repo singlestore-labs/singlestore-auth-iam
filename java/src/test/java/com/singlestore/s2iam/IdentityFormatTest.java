@@ -6,7 +6,10 @@ import com.singlestore.s2iam.IdentityFormat.Candidate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Unit tests for the shared identity-format negotiation (mirrors the Go models tests). */
+/**
+ * Unit tests for the shared identity-format negotiation (mirrors the Go models
+ * tests).
+ */
 public class IdentityFormatTest {
 
   private static final List<Candidate> AWS_ASSUMED_ROLE = List.of(
@@ -20,9 +23,11 @@ public class IdentityFormatTest {
   void providerAndDefaults() {
     assertEquals(CloudProviderType.aws, IdentityFormat.provider(IdentityFormat.AWS_ARN));
     assertEquals(CloudProviderType.gcp, IdentityFormat.provider(IdentityFormat.GCP_SA_EMAIL));
-    assertEquals(CloudProviderType.azure, IdentityFormat.provider(IdentityFormat.AZURE_RESOURCE_ID));
+    assertEquals(CloudProviderType.azure,
+        IdentityFormat.provider(IdentityFormat.AZURE_RESOURCE_ID));
     assertNull(IdentityFormat.provider("future-token"));
-    assertEquals(List.of(IdentityFormat.AWS_ARN), IdentityFormat.defaultOrder(CloudProviderType.aws));
+    assertEquals(List.of(IdentityFormat.AWS_ARN),
+        IdentityFormat.defaultOrder(CloudProviderType.aws));
   }
 
   @Test
@@ -53,7 +58,8 @@ public class IdentityFormatTest {
 
   @Test
   void iamUserFallsBackToRawArn() {
-    List<Candidate> valid = List.of(new Candidate(IdentityFormat.AWS_ARN, "arn:aws:iam::1:user/alice"));
+    List<Candidate> valid = List
+        .of(new Candidate(IdentityFormat.AWS_ARN, "arn:aws:iam::1:user/alice"));
     Candidate chosen = IdentityFormat.select(CloudProviderType.aws, valid,
         List.of(IdentityFormat.AWS_IAM_ROLE_ARN, IdentityFormat.AWS_ARN),
         IdentityFormat.defaultOrder(CloudProviderType.aws));

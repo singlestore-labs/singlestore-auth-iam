@@ -95,7 +95,8 @@ public class S2IAMJwtAssumeRoleTest {
       assertTrue(assumedIdentifier.startsWith("arn:aws:sts::"),
           "default AWS identity should be the raw STS assumed-role ARN, got " + assumedIdentifier);
       assertTrue(assumedIdentifier.contains(":assumed-role/" + roleNameFragment + "/"),
-          "default AWS identity should be an assumed-role ARN for the role, got " + assumedIdentifier);
+          "default AWS identity should be an assumed-role ARN for the role, got "
+              + assumedIdentifier);
       assertEquals(IdentityFormat.AWS_ARN,
           assumedReq.path("identity").path("identityFormat").asText(),
           "default AWS identity format should be aws-arn");

@@ -11,10 +11,10 @@ import java.util.Map;
  *
  * <p>
  * Clients send an ordered preference list of these tokens and the verifier
- * chooses the first one that is both server-supported and valid for the attested
- * identity. Tokens are stable forever and unknown/removed tokens are ignored, so
- * the vocabulary is forward- and backward-compatible across client/server
- * versions. This mirrors the Go reference
+ * chooses the first one that is both server-supported and valid for the
+ * attested identity. Tokens are stable forever and unknown/removed tokens are
+ * ignored, so the vocabulary is forward- and backward-compatible across
+ * client/server versions. This mirrors the Go reference
  * (go/s2iam/models/identity_format.go).
  */
 public final class IdentityFormat {
@@ -25,13 +25,15 @@ public final class IdentityFormat {
   public static final String AWS_ARN = "aws-arn";
   // AWS: base IAM role ARN (assumed-role sessions only).
   public static final String AWS_IAM_ROLE_ARN = "aws-iam-role-arn";
-  // AWS: immutable RoleId (AROA...), the prefix of the STS UserId (assumed-role only).
+  // AWS: immutable RoleId (AROA...), the prefix of the STS UserId (assumed-role
+  // only).
   public static final String AWS_ROLE_ID = "aws-role-id";
   // GCP: service-account email (verified email only); GCP default (first).
   public static final String GCP_SA_EMAIL = "gcp-sa-email";
   // GCP: numeric subject (sub), immutable; always valid; GCP default (floor).
   public static final String GCP_SA_UNIQUE_ID = "gcp-sa-unique-id";
-  // Azure: oid principal GUID; Azure default and floor (keeps oid-else-sub internally).
+  // Azure: oid principal GUID; Azure default and floor (keeps oid-else-sub
+  // internally).
   public static final String AZURE_OBJECT_ID = "azure-object-id";
   // Azure: xms_mirid managed-identity ARM resource path (user-assigned MI only).
   public static final String AZURE_RESOURCE_ID = "azure-resource-id";
@@ -110,8 +112,8 @@ public final class IdentityFormat {
   }
 
   /**
-   * Parses a comma-separated preference list: values are trimmed and empty entries
-   * dropped. Unknown tokens are preserved verbatim (ignored later during
+   * Parses a comma-separated preference list: values are trimmed and empty
+   * entries dropped. Unknown tokens are preserved verbatim (ignored later during
    * negotiation).
    */
   public static List<String> parsePreference(String value) {
@@ -130,16 +132,17 @@ public final class IdentityFormat {
    * Deterministically chooses the single identity format (and JWT sub).
    *
    * <p>
-   * {@code valid} is the verifier-derived, ordered list of candidate formats valid
-   * for this identity (floor first; must be non-empty). {@code clientPref} is the
-   * client's requested ordering (may span providers and include unknown tokens).
-   * {@code serverDefault} is the configured default ordering for this provider.
+   * {@code valid} is the verifier-derived, ordered list of candidate formats
+   * valid for this identity (floor first; must be non-empty). {@code clientPref}
+   * is the client's requested ordering (may span providers and include unknown
+   * tokens). {@code serverDefault} is the configured default ordering for this
+   * provider.
    *
    * <p>
-   * Algorithm: candidate order = clientPref filtered to this provider (unknown and
-   * other-provider tokens dropped), else serverDefault; choose the first candidate
-   * that is server-supported AND valid; fail closed to serverDefault, then to the
-   * floor ({@code valid.get(0)}), which is always valid.
+   * Algorithm: candidate order = clientPref filtered to this provider (unknown
+   * and other-provider tokens dropped), else serverDefault; choose the first
+   * candidate that is server-supported AND valid; fail closed to serverDefault,
+   * then to the floor ({@code valid.get(0)}), which is always valid.
    */
   public static Candidate select(CloudProviderType provider, List<Candidate> valid,
       List<String> clientPref, List<String> serverDefault) {

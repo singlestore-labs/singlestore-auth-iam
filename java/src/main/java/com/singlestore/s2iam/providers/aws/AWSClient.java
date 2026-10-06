@@ -176,8 +176,8 @@ public class AWSClient extends AbstractBaseClient {
       }
       List<IdentityFormat.Candidate> candidates = awsCandidates(arn, account, userId);
       IdentityFormat.Candidate floor = candidates.get(0);
-      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, floor.value, account, region,
-          resourceType, extra, floor.format, candidates);
+      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, floor.value, account,
+          region, resourceType, extra, floor.format, candidates);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
@@ -200,8 +200,8 @@ public class AWSClient extends AbstractBaseClient {
    * <ul>
    * <li>aws-arn (floor, always): the raw caller ARN.
    * <li>aws-iam-role-arn (assumed-role only): the base IAM role ARN.
-   * <li>aws-role-id (assumed-role only): the immutable RoleId (AROA...), the prefix
-   * of the STS UserId.
+   * <li>aws-role-id (assumed-role only): the immutable RoleId (AROA...), the
+   * prefix of the STS UserId.
    * </ul>
    *
    * This must stay identical to the Go verifier so the client-computed identity

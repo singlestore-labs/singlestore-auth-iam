@@ -98,9 +98,6 @@ help:
 	@echo "   AZURE_POSITIVE_*, AZURE_NEGATIVE_*)"
 	@echo ""
 	@echo "Coverage files are automatically timestamped (e.g., go-coverage-20250807-143022.out)"
-	@echo ""
-	@echo "Helper Scripts (doodles/):"
-	@echo "  doodles/install-all                      Run dev-setup across all remote test hosts"
 
 # Test targets
 test: test-local

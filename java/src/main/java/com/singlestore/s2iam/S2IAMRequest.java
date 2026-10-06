@@ -75,10 +75,10 @@ public final class S2IAMRequest {
   }
 
   /**
-   * Ordered identity-format preference (content negotiation). The verifier chooses
-   * the first supported-and-valid format for the attested identity (e.g.
-   * "aws-iam-role-arn", "aws-arn"). Overrides the S2IAM_IDENTITY_FORMAT_PREFERENCE
-   * environment variable.
+   * Ordered identity-format preference (content negotiation). The verifier
+   * chooses the first supported-and-valid format for the attested identity (e.g.
+   * "aws-iam-role-arn", "aws-arn"). Overrides the
+   * S2IAM_IDENTITY_FORMAT_PREFERENCE environment variable.
    */
   public S2IAMRequest identityFormatPreference(String... formats) {
     this.identityFormatPreference = formats;
