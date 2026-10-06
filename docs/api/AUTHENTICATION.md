@@ -73,6 +73,11 @@ name does not affect this form. Register cloud principals and create database us
 match whichever `sub` form you request. The base role ARN is path-less: a role under a
 non-root IAM path is represented without its path.
 
+Note that the default (session-bearing) ARN can only be pre-configured when the session
+name is stable; for most assumed-role workloads (notably EC2 instance profiles) prefer
+`aws-iam-role-arn`. See [Identity format preferences](#identity-format-preferences)
+for when a session name is stable.
+
 ### Database JWT: required `workspaceGroupID` query parameter
 
 Database JWT requests (`POST /auth/iam/database`) require a `workspaceGroupID`
@@ -225,7 +230,7 @@ that provider — the `sub` you get when you send no preference.
 
 | Format token | Meaning | Example `sub` |
 |--------------|---------|---------------|
-| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below) | `arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456` |
+| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below) | `arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session` |
 | `aws-iam-role-arn` | Session-stripped base IAM role ARN (assumed-role only) | `arn:aws:iam::123456789012:role/MyRole` |
 | `aws-role-id` | Stable `RoleId`, prefix of the STS `UserId` (assumed-role only) | `AROAEXAMPLEID1234567` |
 | `gcp-sa-email` * | Service account email (verified email only) | `my-sa@my-project.iam.gserviceaccount.com` |
@@ -259,7 +264,8 @@ The response then reports `"identityFormat": "aws-iam-role-arn"` and the JWT `su
 `WithIdentityFormatPreference(...)` (Go), `identity_format_preference=[...]` (Python),
 `Options.withIdentityFormatPreference(...)` / `.identityFormatPreference(...)` (Java),
 the `--identity-format-preference` CLI flag, or the `S2IAM_IDENTITY_FORMAT_PREFERENCE`
-environment variable.
+environment variable. When more than one is set, precedence is: explicit option >
+`S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default.
 
 ## Common mistakes
 
@@ -274,6 +280,7 @@ environment variable.
 | Omitting `workspaceGroupID`, or sending a non-UUID, on database JWT requests | Add `?workspaceGroupID=<uuid>` to `/auth/iam/database` (canonical `8-4-4-4-12` form or 32 hex digits) |
 | Confusing inbound vs outbound JWTs | Inbound = cloud provider token in headers; outbound = SingleStore `jwt` in JSON body |
 | Registering the cloud principal / database user for the wrong identity form (e.g. expecting the base IAM role ARN but the `sub` is the raw STS ARN, or vice versa) | Decode the issued JWT and inspect its `sub` to see the exact identity, then either register that value or request a matching format (see below) |
+| Using `aws-arn` with an unstable session name (EC2 instance-profile sessions use the instance id; many assumed-role sessions vary per run) — the session-bearing `sub` can never match a pre-configured principal | Prefer `aws-iam-role-arn` (session-stripped), or ensure a stable session name: the library's `AssumeRole` default (`s2iam-session`), your own `--assume-role-session-name`, or `AWS_ROLE_SESSION_NAME` for EKS IRSA |
 
 ### Checking the identity (`sub`) you actually get
 
@@ -281,12 +288,14 @@ The identity used for authorization is the JWT `sub` claim. The `s2iam` CLI can 
 directly with `--print-sub` (written to stderr, so the JWT on stdout is unaffected):
 
 ```shell
-# Default identity:
-s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 --print-sub >/dev/null
-# e.g. arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456
+# Default identity (here the library's AssumeRole uses the stable s2iam-session):
+s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 \
+  --assume-role=arn:aws:iam::123456789012:role/MyRole --print-sub >/dev/null
+# e.g. arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session
 
 # Request a different format and re-check; the `sub` changes accordingly:
 s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 \
+  --assume-role=arn:aws:iam::123456789012:role/MyRole \
   --identity-format-preference=aws-iam-role-arn,aws-arn --print-sub >/dev/null
 # e.g. arn:aws:iam::123456789012:role/MyRole
 ```
