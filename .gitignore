@@ -161,6 +161,9 @@ Thumbs.db
 # local evelopment-specific copilot instructions 
 .github/copilot-dev-guide.md
 
+# Local, uncommitted developer helper scripts
+doodles/
+
 # Python-specific excludes
 python/LICENSE
 
