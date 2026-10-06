@@ -29,7 +29,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - id: set-matrix
         run: |
@@ -52,7 +52,7 @@ jobs:
     steps:
     - name: Checkout repository
       if: github.event.inputs.hostname == '' || github.event.inputs.hostname == matrix.hostname
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Skip host not selected
       if: github.event.inputs.hostname != '' && github.event.inputs.hostname != matrix.hostname
