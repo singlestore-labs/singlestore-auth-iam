@@ -113,7 +113,7 @@ test-local-patterns:
 	   exit 1; \
 	 fi
 
-test-local: test-local-patterns test-local-go test-local-python test-local-java
+test-local: test-local-patterns lint test-local-go test-local-python test-local-java
 	@echo "✓ All local tests passed"
 
 test-local-go:
