@@ -220,6 +220,7 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
+- `--print-sub`: Print the issued JWT's `sub` claim (the verified identity) to stderr; useful for confirming which identity format you'll be authorized as
 - `--verbose`: Enable verbose logging
 - `--timeout`: Timeout for operations (default: 10s)
 
@@ -272,6 +273,9 @@ s2iam --workspace-group-id=my-workspace
 
 # Or per-invocation
 s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace
+
+# Confirm which identity you'll be authorized as (prints the JWT `sub` to stderr)
+s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace --print-sub >/dev/null
 ```
 
 Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**.

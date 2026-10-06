@@ -270,21 +270,24 @@ environment variable.
 
 ### Checking the identity (`sub`) you actually get
 
-The identity used for authorization is the JWT `sub` claim. Decode the token the CLI
-prints to see it:
+The identity used for authorization is the JWT `sub` claim. The `s2iam` CLI can print it
+directly with `--print-sub` (written to stderr, so the JWT on stdout is unaffected):
 
 ```shell
-# Decode a JWT's payload and print the `sub` (handles base64url padding).
-jwt_sub() { cut -d. -f2 | python3 -c 'import sys,base64,json; d=sys.stdin.read().strip(); d+="="*(-len(d)%4); print(json.loads(base64.urlsafe_b64decode(d))["sub"])'; }
-
 # Default identity:
-s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 | jwt_sub
+s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 --print-sub >/dev/null
 # e.g. arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456
 
 # Request a different format and re-check; the `sub` changes accordingly:
 s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 \
-  --identity-format-preference=aws-iam-role-arn,aws-arn | jwt_sub
+  --identity-format-preference=aws-iam-role-arn,aws-arn --print-sub >/dev/null
 # e.g. arn:aws:iam::123456789012:role/MyRole
+```
+
+If you only have the raw JWT, you can decode its payload (handling base64url padding):
+
+```shell
+echo "$TOKEN" | cut -d. -f2 | python3 -c 'import sys,base64,json; d=sys.stdin.read().strip(); d+="="*(-len(d)%4); print(json.loads(base64.urlsafe_b64decode(d))["sub"])'
 ```
 
 Register your cloud principal and create the database user for whichever `sub` form you
