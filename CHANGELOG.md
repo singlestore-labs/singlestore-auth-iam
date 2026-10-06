@@ -4,7 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v0.6.0-verifier]
+
+> **Interim release — most users should wait for `v0.6.0`.** `v0.6.0-verifier` ships the
+> content-negotiation capability (client-selectable identity formats plus the verifier that
+> honors them) while keeping every provider's default identity byte-identical to prior
+> releases, so it stays fully compatible with the auth server deployed today. It is one step
+> in a staged rollout:
+> 1. **`v0.6.0-verifier`** (this release) adds negotiation with the historical defaults.
+> 2. The auth-service verifier that honors the `X-S2IAM-Identity-Format-Preference` header is
+>    deployed (takes a few days).
+> 3. **`v0.6.0`** then flips the built-in AWS default to the session-stripped base IAM role
+>    ARN (`[aws-iam-role-arn, aws-arn]`).
+>
+> Unless you need to opt into a non-default identity format now, or you are deploying your own
+> verifier, wait for `v0.6.0`.
+
 ### Added
 - **Client-selectable identity-format preference lists (content negotiation).** Clients
   may now request an ordered list of identity representations; the verifier picks the
