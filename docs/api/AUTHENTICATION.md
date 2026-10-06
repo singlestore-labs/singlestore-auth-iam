@@ -230,7 +230,7 @@ that provider — the `sub` you get when you send no preference.
 
 | Format token | Meaning | Example `sub` |
 |--------------|---------|---------------|
-| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below) | `arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session` |
+| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below), plain and stable for IAM users | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
 | `aws-iam-role-arn` | Session-stripped base IAM role ARN (assumed-role only) | `arn:aws:iam::123456789012:role/MyRole` |
 | `aws-role-id` | Stable `RoleId`, prefix of the STS `UserId` (assumed-role only) | `AROAEXAMPLEID1234567` |
 | `gcp-sa-email` * | Service account email (verified email only) | `my-sa@my-project.iam.gserviceaccount.com` |
@@ -288,7 +288,11 @@ The identity used for authorization is the JWT `sub` claim. The `s2iam` CLI can 
 directly with `--print-sub` (written to stderr, so the JWT on stdout is unaffected):
 
 ```shell
-# Default identity (here the library's AssumeRole uses the stable s2iam-session):
+# Default identity for an IAM user (no assumed role, no session — always stable):
+s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 --print-sub >/dev/null
+# e.g. arn:aws:iam::123456789012:user/MyUser
+
+# Default identity for an assumed role (here the library's AssumeRole uses the stable s2iam-session):
 s2iam --workspace-group-id=11111111-1111-4111-8111-111111111111 \
   --assume-role=arn:aws:iam::123456789012:role/MyRole --print-sub >/dev/null
 # e.g. arn:aws:sts::123456789012:assumed-role/MyRole/s2iam-session
