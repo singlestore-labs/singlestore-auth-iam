@@ -451,9 +451,12 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 }
 
 // identityFromCallerIdentity converts a GetCallerIdentityOutput to a
-// CloudIdentity, applying the canonical AWS identity mapping (assumed-role
-// sessions collapse to their base IAM role ARN). This must stay identical to the
-// verifier's mapping so the client-side identity matches the issued JWT sub.
+// CloudIdentity. It populates the full set of valid identity-format candidates
+// (shared with the verifier) and defaults Identifier to the always-valid floor
+// (the raw caller ARN, format aws-arn), which is byte-identical to the historical
+// behavior. The negotiated format may select an alternate (e.g. the base IAM
+// role ARN) when a preference is supplied; the candidate set lets the client
+// re-derive the chosen value and confirm it matches the issued JWT sub.
 func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *models.CloudIdentity {
 	// Region is taken from the raw ARN (empty for assumed-role STS ARNs), matching
 	// historical behavior.
@@ -462,19 +465,21 @@ func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *mo
 		region = arnParts[3]
 	}
 
-	identifier, resourceType, claims := canonicalIdentity(
-		*callerIdentity.Arn,
-		*callerIdentity.Account,
-		aws.ToString(callerIdentity.UserId),
-	)
+	arn := *callerIdentity.Arn
+	account := *callerIdentity.Account
+	userID := aws.ToString(callerIdentity.UserId)
+
+	candidates := awsCandidates(arn, account, userID)
 
 	return &models.CloudIdentity{
 		Provider:         models.ProviderAWS,
-		Identifier:       identifier,
-		AccountID:        *callerIdentity.Account,
+		Identifier:       candidates[0].Value,
+		IdentityFormat:   candidates[0].Format,
+		AccountID:        account,
 		Region:           region,
-		ResourceType:     resourceType,
-		AdditionalClaims: claims,
+		ResourceType:     arnResourceType(arn),
+		AdditionalClaims: awsIdentityClaims(arn, userID),
+		Candidates:       candidates,
 	}
 }
 

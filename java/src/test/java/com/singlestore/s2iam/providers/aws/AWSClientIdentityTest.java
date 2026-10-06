@@ -2,42 +2,63 @@ package com.singlestore.s2iam.providers.aws;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.singlestore.s2iam.IdentityFormat;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Unit tests for the AWS assumed-role ARN parsing used by the canonical
- * identity mapping. Mirrors the Go TestCanonicalIdentity and Python
- * test_aws_identity.
+ * Unit tests for the AWS identity-format candidates. The raw ARN (floor) keeps
+ * the session (byte-identical to today); only aws-iam-role-arn / aws-role-id
+ * strip it. Mirrors the Go TestAWSCandidates and Python test_aws_identity.
  */
 public class AWSClientIdentityTest {
 
   @Test
-  void parsesAssumedRoleArn() {
-    String[] r = AWSClient.parseAssumedRoleArn(
-        "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session");
-    assertNotNull(r);
-    assertEquals("ExampleCloudPrincipalRole", r[0]);
-    assertEquals("example-session", r[1]);
+  void assumedRoleCandidates() {
+    String arn = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session";
+    List<IdentityFormat.Candidate> c = AWSClient.awsCandidates(arn, "111122223333",
+        "AROAEXAMPLE1234567890:example-session");
+    assertEquals(3, c.size());
+    assertEquals(new IdentityFormat.Candidate(IdentityFormat.AWS_ARN, arn), c.get(0));
+    assertEquals(new IdentityFormat.Candidate(IdentityFormat.AWS_IAM_ROLE_ARN,
+        "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"), c.get(1));
+    assertEquals(new IdentityFormat.Candidate(IdentityFormat.AWS_ROLE_ID, "AROAEXAMPLE1234567890"),
+        c.get(2));
   }
 
   @Test
   void baseRoleArnIsSessionIndependent() {
-    // The derived base role ARN depends only on account + role name, not session.
-    String[] a = AWSClient.parseAssumedRoleArn(
-        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session");
-    String[] b = AWSClient.parseAssumedRoleArn(
-        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/other-session");
-    assertNotNull(a);
-    assertNotNull(b);
-    assertEquals(a[0], b[0]);
-    assertEquals("arn:aws:iam::503396375767:role/" + a[0],
-        "arn:aws:iam::503396375767:role/" + b[0]);
+    IdentityFormat.Candidate a = AWSClient
+        .awsCandidates("arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+            "503396375767", "AROAX:s2iam-session")
+        .get(1);
+    IdentityFormat.Candidate b = AWSClient
+        .awsCandidates("arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/other-session",
+            "503396375767", "AROAX:other-session")
+        .get(1);
+    assertEquals(a, b);
+    assertEquals("arn:aws:iam::503396375767:role/NoPermissionsRole", a.value);
   }
 
   @Test
-  void iamUserIsNotAnAssumedRole() {
+  void iamUserHasOnlyTheRawArnFloor() {
+    String arn = "arn:aws:iam::123456789012:user/Alice";
+    List<IdentityFormat.Candidate> c = AWSClient.awsCandidates(arn, "123456789012", "AIDAEXAMPLE");
+    assertEquals(1, c.size());
+    assertEquals(new IdentityFormat.Candidate(IdentityFormat.AWS_ARN, arn), c.get(0));
+  }
+
+  @Test
+  void parseAssumedRoleArnRejectsNonAssumedRole() {
     assertNull(AWSClient.parseAssumedRoleArn("arn:aws:iam::123456789012:user/Alice"));
     assertNull(AWSClient.parseAssumedRoleArn("arn:aws:iam::123456789012:role/MyRole"));
     assertNull(AWSClient.parseAssumedRoleArn("not-an-arn"));
+  }
+
+  @Test
+  void roleIdFromUserId() {
+    assertEquals("AROAEXAMPLE", AWSClient.roleIdFromUserId("AROAEXAMPLE:session"));
+    assertEquals("", AWSClient.roleIdFromUserId("AIDANOSESSION"));
+    assertEquals("", AWSClient.roleIdFromUserId(null));
   }
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/gates"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
 func TestValidatePrincipal(t *testing.T) {
@@ -62,75 +63,71 @@ func TestValidatePrincipal(t *testing.T) {
 	}
 }
 
-func TestCanonicalIdentity(t *testing.T) {
+func TestAWSCandidates(t *testing.T) {
 	tests := []struct {
-		name            string
-		arn             string
-		account         string
-		userID          string
-		wantIdentifier  string
-		wantResource    string
-		wantAssumedRole string // expected AssumedRoleArn claim ("" means absent)
-		wantSession     string // expected RoleSessionName claim ("" means absent)
+		name           string
+		arn            string
+		account        string
+		userID         string
+		wantCandidates []models.IdentityCandidate
 	}{
 		{
-			name:            "assumed-role collapses to base role ARN",
-			arn:             "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
-			account:         "111122223333",
-			userID:          "AROAEXAMPLE1234567890:example-session",
-			wantIdentifier:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
-			wantResource:    "role",
-			wantAssumedRole: "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
-			wantSession:     "example-session",
+			name:    "assumed-role exposes raw ARN, base role ARN, and RoleId",
+			arn:     "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
+			account: "111122223333",
+			userID:  "AROAEXAMPLE1234567890:example-session",
+			wantCandidates: []models.IdentityCandidate{
+				{Format: models.FormatAWSARN, Value: "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"},
+				{Format: models.FormatAWSIAMRoleARN, Value: "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"},
+				{Format: models.FormatAWSRoleID, Value: "AROAEXAMPLE1234567890"},
+			},
 		},
 		{
-			name:            "session name does not affect identity",
-			arn:             "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
-			account:         "503396375767",
-			userID:          "AROAXKNGDDTLTYVC4AL2R:s2iam-session",
-			wantIdentifier:  "arn:aws:iam::503396375767:role/NoPermissionsRole",
-			wantResource:    "role",
-			wantAssumedRole: "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
-			wantSession:     "s2iam-session",
+			name:    "base role ARN and RoleId are session-independent",
+			arn:     "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/i-083dd42864c3524d8",
+			account: "503396375767",
+			userID:  "AROAXKNGDDTL645XYO7VP:i-083dd42864c3524d8",
+			wantCandidates: []models.IdentityCandidate{
+				{Format: models.FormatAWSARN, Value: "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/i-083dd42864c3524d8"},
+				{Format: models.FormatAWSIAMRoleARN, Value: "arn:aws:iam::503396375767:role/NoPermissionsRole"},
+				{Format: models.FormatAWSRoleID, Value: "AROAXKNGDDTL645XYO7VP"},
+			},
 		},
 		{
-			name:           "instance-profile session collapses to role",
-			arn:            "arn:aws:sts::503396375767:assumed-role/AllowAssumeNoPermissionsRole/i-083dd42864c3524d8",
-			account:        "503396375767",
-			userID:         "AROAXKNGDDTL645XYO7VP:i-083dd42864c3524d8",
-			wantIdentifier: "arn:aws:iam::503396375767:role/AllowAssumeNoPermissionsRole",
-			wantResource:   "role",
-			// session (instance id) preserved as a claim but not asserted here
-			wantAssumedRole: "arn:aws:sts::503396375767:assumed-role/AllowAssumeNoPermissionsRole/i-083dd42864c3524d8",
-			wantSession:     "i-083dd42864c3524d8",
-		},
-		{
-			name:           "IAM user is returned unchanged",
-			arn:            "arn:aws:iam::123456789012:user/Alice",
-			account:        "123456789012",
-			userID:         "AIDAEXAMPLE",
-			wantIdentifier: "arn:aws:iam::123456789012:user/Alice",
-			wantResource:   "user",
+			name:    "IAM user exposes only the raw ARN (always-valid floor)",
+			arn:     "arn:aws:iam::123456789012:user/Alice",
+			account: "123456789012",
+			userID:  "AIDAEXAMPLE",
+			wantCandidates: []models.IdentityCandidate{
+				{Format: models.FormatAWSARN, Value: "arn:aws:iam::123456789012:user/Alice"},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			identifier, resourceType, claims := canonicalIdentity(tt.arn, tt.account, tt.userID)
-			require.Equal(t, tt.wantIdentifier, identifier)
-			require.Equal(t, tt.wantResource, resourceType)
-			if tt.userID != "" {
-				require.Equal(t, tt.userID, claims[ClaimUserID])
-			}
-			if tt.wantAssumedRole != "" {
-				require.Equal(t, tt.wantAssumedRole, claims[ClaimAssumedRoleArn])
-			} else {
-				_, ok := claims[ClaimAssumedRoleArn]
-				require.False(t, ok, "non-assumed-role identity must not carry AssumedRoleArn claim")
-			}
-			if tt.wantSession != "" {
-				require.Equal(t, tt.wantSession, claims[ClaimRoleSessionName])
-			}
+			candidates := awsCandidates(tt.arn, tt.account, tt.userID)
+			require.Equal(t, tt.wantCandidates, candidates)
+			// The always-valid floor must be the raw caller ARN (aws-arn), which is
+			// byte-identical to the historical default.
+			require.Equal(t, models.FormatAWSARN, candidates[0].Format)
+			require.Equal(t, tt.arn, candidates[0].Value)
 		})
 	}
+}
+
+func TestAWSIdentityClaims(t *testing.T) {
+	// Assumed-role sessions preserve the raw ARN, session name, and UserId for
+	// audit regardless of which format is negotiated.
+	arn := "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
+	claims := awsIdentityClaims(arn, "AROAEXAMPLE1234567890:example-session")
+	require.Equal(t, arn, claims[ClaimAssumedRoleArn])
+	require.Equal(t, "example-session", claims[ClaimRoleSessionName])
+	require.Equal(t, "AROAEXAMPLE1234567890:example-session", claims[ClaimUserID])
+
+	// IAM users carry only the UserId and no assumed-role alternates.
+	userClaims := awsIdentityClaims("arn:aws:iam::123456789012:user/Alice", "AIDAEXAMPLE")
+	require.Equal(t, "AIDAEXAMPLE", userClaims[ClaimUserID])
+	_, ok := userClaims[ClaimAssumedRoleArn]
+	require.False(t, ok, "non-assumed-role identity must not carry AssumedRoleArn claim")
 }

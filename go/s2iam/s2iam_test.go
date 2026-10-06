@@ -78,10 +78,11 @@ type fakeServerFlags struct {
 	requireWorkspaceID bool
 
 	// Track requests for assertions
-	requestCount   int
-	lastProvider   string
-	lastIdentifier string
-	lastJWTType    string
+	requestCount       int
+	lastProvider       string
+	lastIdentifier     string
+	lastJWTType        string
+	lastIdentityFormat string
 }
 
 func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
@@ -139,8 +140,10 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 
 		flags.lastProvider = string(cloudIdentity.Provider)
 		flags.lastIdentifier = cloudIdentity.Identifier
+		flags.lastIdentityFormat = string(cloudIdentity.IdentityFormat)
 
-		t.Logf("[server] service account verified: %s %s", cloudIdentity.Provider, cloudIdentity.Identifier)
+		t.Logf("[server] service account verified: %s %s (format %s)",
+			cloudIdentity.Provider, cloudIdentity.Identifier, cloudIdentity.IdentityFormat)
 
 		// Return various error conditions if requested
 		if flags.returnInvalidJSON {
@@ -173,7 +176,8 @@ func startFakeServer(t *testing.T, flags *fakeServerFlags) *httptest.Server {
 		}
 
 		enc, err := json.Marshal(map[string]any{
-			"jwt": tokenString,
+			"jwt":            tokenString,
+			"identityFormat": string(cloudIdentity.IdentityFormat),
 		})
 		if err != nil {
 			t.Logf("[server] jwt creation failed: %s", err)
@@ -521,11 +525,15 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
 	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
-		// AWS assumed-role sessions collapse to the base IAM role ARN. For a
-		// root-path role the canonical identity equals the role ARN exactly, and
-		// the (deprecated) session name must not affect it.
-		assert.Equal(t, roleIdentifier, assumedIdentifier,
-			"Assumed AWS identity should be the base IAM role ARN (session name must not affect it)")
+		// With the default (legacy) preference the identity is the raw STS
+		// assumed-role ARN (session-bearing), byte-identical to historical
+		// behavior. The negotiated base-role-ARN form is exercised below.
+		assert.True(t, strings.HasPrefix(assumedIdentifier, "arn:aws:sts::"),
+			"default AWS identity should be the raw STS assumed-role ARN, got: %s", assumedIdentifier)
+		assert.Contains(t, assumedIdentifier, ":assumed-role/"+expectedRoleName+"/",
+			"default AWS identity should be an assumed-role ARN for the role, got: %s", assumedIdentifier)
+		assert.Equal(t, "aws-arn", flags.lastIdentityFormat,
+			"default AWS identity format should be aws-arn")
 	}
 	assert.Equal(t, flags.lastIdentifier, assumedIdentifier,
 		"Fake server identity should match JWT sub claim")
@@ -533,6 +541,31 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		"JWT sub claim should match assumed identity ARN")
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
+
+	// Content negotiation: opt into the new AWS ordering and confirm the issued
+	// identity collapses to the base IAM role ARN, with identityFormat reported as
+	// aws-iam-role-arn. This is the opt-in format from MCDB-102857.
+	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
+		flags.requestCount = 0
+		flags.lastIdentifier = ""
+		flags.lastIdentityFormat = ""
+
+		negotiatedOpts := append([]s2iam.JWTOption{}, opts...)
+		negotiatedOpts = append(negotiatedOpts,
+			s2iam.WithIdentityFormatPreference("aws-iam-role-arn", "aws-arn"))
+		negotiatedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", negotiatedOpts...)
+		require.NoError(t, err)
+		negotiatedClaims := validateJWT(t, negotiatedJWT)
+		negotiatedIdentifier := negotiatedClaims["sub"].(string)
+
+		assert.Equal(t, roleIdentifier, negotiatedIdentifier,
+			"negotiated AWS identity should be the base IAM role ARN (session must not affect it)")
+		assert.Equal(t, "aws-iam-role-arn", flags.lastIdentityFormat,
+			"negotiated AWS identity format should be aws-iam-role-arn")
+		assert.Equal(t, flags.lastIdentifier, negotiatedIdentifier,
+			"fake server identity should match negotiated JWT sub claim")
+		t.Logf("Negotiated base role ARN: %s (format %s)", negotiatedIdentifier, flags.lastIdentityFormat)
+	}
 }
 
 // Test AssumeRole with invalid role (should fail)

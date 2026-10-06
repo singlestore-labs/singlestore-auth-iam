@@ -91,6 +91,7 @@ paths:
           schema:
             type: string
             example: 11111111-1111-4111-8111-111111111111
+        - $ref: '#/components/parameters/identityFormatPreference'
       security:
         - awsAccessKeyId: []
           awsSecretAccessKey: []
@@ -173,6 +174,8 @@ paths:
             schema:
               type: object
               additionalProperties: true
+      parameters:
+        - $ref: '#/components/parameters/identityFormatPreference'
       security:
         - awsAccessKeyId: []
           awsSecretAccessKey: []
@@ -303,6 +306,44 @@ components:
 
         Acquire the token for resource `https://management.azure.com/`.
 
+  parameters:
+    identityFormatPreference:
+      name: X-S2IAM-Identity-Format-Preference
+      in: header
+      required: false
+      description: |
+        Optional, ordered, comma-separated list of preferred identity formats
+        (content negotiation). The verifier selects the first format it supports and
+        can derive for the authenticated identity, reporting the choice in the
+        `identityFormat` response field.
+
+        Negotiation only reorders among representations the verifier has already
+        derived for the same identity; it never broadens a match or crosses
+        identities. Tokens for other providers or unknown tokens are ignored, and if
+        no listed format applies the verifier falls back to its configured default
+        ordering and ultimately to the always-valid floor for the provider
+        (`aws-arn`, `gcp-sa-unique-id`, `azure-object-id`).
+
+        **This header is additive and optional. When omitted, the issued identity is
+        byte-identical to prior releases:** the raw caller ARN for AWS
+        (`aws-arn`), the service-account email (else numeric id) for GCP, and the
+        `oid` principal for Azure.
+
+        Format vocabulary:
+        - `aws-arn` — raw STS/IAM caller ARN, session-bearing (always valid; AWS default/floor)
+        - `aws-iam-role-arn` — session-stripped base IAM role ARN (assumed-role sessions only)
+        - `aws-role-id` — stable `RoleId` (`AROA…`; assumed-role sessions only)
+        - `gcp-sa-email` — service account email (verified email only; GCP default)
+        - `gcp-sa-unique-id` — numeric service account unique id (always valid; GCP floor)
+        - `azure-object-id` — `oid` principal / object id (always valid; Azure default/floor)
+        - `azure-resource-id` — `xms_mirid` resource id (user-assigned managed identity only)
+      schema:
+        type: string
+      examples:
+        awsBaseRoleArn:
+          summary: Prefer the session-stripped base IAM role ARN for AWS
+          value: aws-iam-role-arn,aws-arn
+
   schemas:
     ServiceIdentityJWT:
       type: object
@@ -323,6 +364,21 @@ components:
             Intended audience (`engine` for database, `portal` for management API).
             Present on production responses; reference clients only require `jwt`.
           enum: [engine, portal]
+        identityFormat:
+          type: string
+          description: |
+            The identity format the verifier selected for this request (content
+            negotiation). Names which representation the JWT `sub` claim uses, honoring
+            the client's `X-S2IAM-Identity-Format-Preference` header when applicable and
+            otherwise reflecting the verifier's default ordering for the provider.
+          enum:
+            - aws-arn
+            - aws-iam-role-arn
+            - aws-role-id
+            - gcp-sa-email
+            - gcp-sa-unique-id
+            - azure-object-id
+            - azure-resource-id
     Error:
       type: object
       properties:

@@ -24,6 +24,7 @@ public final class S2IAMRequest {
   private String workspaceGroupId;
   private String assumeRoleId;
   private String assumeRoleSessionName;
+  private String[] identityFormatPreference;
   private Duration timeout;
   private String serverUrl;
   private boolean allowHttp;
@@ -70,6 +71,17 @@ public final class S2IAMRequest {
   @Deprecated
   public S2IAMRequest assumeRoleSessionName(String assumeRoleSessionName) {
     this.assumeRoleSessionName = assumeRoleSessionName;
+    return this;
+  }
+
+  /**
+   * Ordered identity-format preference (content negotiation). The verifier chooses
+   * the first supported-and-valid format for the attested identity (e.g.
+   * "aws-iam-role-arn", "aws-arn"). Overrides the S2IAM_IDENTITY_FORMAT_PREFERENCE
+   * environment variable.
+   */
+  public S2IAMRequest identityFormatPreference(String... formats) {
+    this.identityFormatPreference = formats;
     return this;
   }
 
@@ -130,6 +142,8 @@ public final class S2IAMRequest {
       jwtOpts.add(Options.withAssumeRole(assumeRoleId));
     if (assumeRoleSessionName != null)
       jwtOpts.add(Options.withAssumeRoleSessionName(assumeRoleSessionName));
+    if (identityFormatPreference != null)
+      jwtOpts.add(Options.withIdentityFormatPreference(identityFormatPreference));
     if (serverUrl != null)
       jwtOpts.add(Options.withServerUrl(serverUrl));
     if (allowHttp)

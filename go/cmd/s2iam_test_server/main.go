@@ -40,6 +40,14 @@ type Config struct {
 	Timeout          time.Duration
 	InfoFile         string // Path to atomically written server info
 	ShutdownOnStdin  bool   // Graceful shutdown when stdin closes
+
+	// Per-provider default identity-format ordering (comma-separated tokens) used
+	// when a request carries no preference header. Empty -> built-in default. This
+	// lets tests exercise the configurable default ordering (e.g. the new AWS
+	// default) and model versioned auth-server endpoints.
+	AWSDefaultIdentityFormat   string
+	GCPDefaultIdentityFormat   string
+	AzureDefaultIdentityFormat string
 }
 
 // Standardized timeouts (avoid magic numbers)
@@ -128,6 +136,9 @@ func parseFlags() Config {
 	flag.DurationVar(&config.Timeout, "timeout", 0, "Auto-shutdown timeout (0 = no timeout)")
 	flag.StringVar(&config.InfoFile, "info-file", "", "Write server info JSON atomically to this file")
 	flag.BoolVar(&config.ShutdownOnStdin, "shutdown-on-stdin-close", false, "Shutdown when stdin closes (for test cleanup)")
+	flag.StringVar(&config.AWSDefaultIdentityFormat, "aws-default-identity-format", "", "Comma-separated AWS default identity-format ordering (e.g. 'aws-iam-role-arn,aws-arn'); empty = built-in")
+	flag.StringVar(&config.GCPDefaultIdentityFormat, "gcp-default-identity-format", "", "Comma-separated GCP default identity-format ordering; empty = built-in")
+	flag.StringVar(&config.AzureDefaultIdentityFormat, "azure-default-identity-format", "", "Comma-separated Azure default identity-format ordering; empty = built-in")
 
 	flag.Parse()
 
@@ -151,6 +162,21 @@ func NewServer(config Config) (*Server, error) {
 	verifierConfig := s2verifier.VerifierConfig{
 		AllowedAudiences: config.AllowedAudiences,
 		AzureTenant:      config.AzureTenant,
+	}
+
+	// Wire any configured per-provider default identity-format ordering.
+	defaults := map[models.CloudProviderType][]models.IdentityFormat{}
+	if order := models.ParseIdentityFormatPreference(config.AWSDefaultIdentityFormat); len(order) > 0 {
+		defaults[models.ProviderAWS] = order
+	}
+	if order := models.ParseIdentityFormatPreference(config.GCPDefaultIdentityFormat); len(order) > 0 {
+		defaults[models.ProviderGCP] = order
+	}
+	if order := models.ParseIdentityFormatPreference(config.AzureDefaultIdentityFormat); len(order) > 0 {
+		defaults[models.ProviderAzure] = order
+	}
+	if len(defaults) > 0 {
+		verifierConfig.DefaultIdentityFormats = defaults
 	}
 
 	if config.Verbose {
@@ -454,14 +480,15 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 	if s.config.ReturnEmptyJWT {
 		// Still record identity structure
 		reqInfo.Identity = map[string]string{
-			"provider":     string(identity.Provider),
-			"identifier":   identity.Identifier,
-			"accountID":    identity.AccountID,
-			"region":       identity.Region,
-			"resourceType": identity.ResourceType,
+			"provider":       string(identity.Provider),
+			"identifier":     identity.Identifier,
+			"accountID":      identity.AccountID,
+			"region":         identity.Region,
+			"resourceType":   identity.ResourceType,
+			"identityFormat": string(identity.IdentityFormat),
 		}
 		s.requestLog = append(s.requestLog, reqInfo)
-		response := map[string]string{"jwt": ""}
+		response := map[string]string{"jwt": "", "identityFormat": string(identity.IdentityFormat)}
 		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
@@ -475,11 +502,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	// Attach structured identity and claims for test inspection
 	reqInfo.Identity = map[string]string{
-		"provider":     string(identity.Provider),
-		"identifier":   identity.Identifier,
-		"accountID":    identity.AccountID,
-		"region":       identity.Region,
-		"resourceType": identity.ResourceType,
+		"provider":       string(identity.Provider),
+		"identifier":     identity.Identifier,
+		"accountID":      identity.AccountID,
+		"region":         identity.Region,
+		"resourceType":   identity.ResourceType,
+		"identityFormat": string(identity.IdentityFormat),
 	}
 	// Copy claims map[string]interface{} to plain map (already map[string]interface{})
 	reqInfo.Claims = make(map[string]interface{}, len(claims))
@@ -490,7 +518,7 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 
 	s.requestLog = append(s.requestLog, reqInfo)
 
-	response := map[string]string{"jwt": tokenString}
+	response := map[string]string{"jwt": tokenString, "identityFormat": string(identity.IdentityFormat)}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }

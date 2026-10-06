@@ -280,12 +280,27 @@ class TestAssumeRole:
         role_name = role.rsplit("/", 1)[-1] if "/" in role else role
         assert role_name in assumed_identifier, "assumed identity should contain role name"
         if role.startswith("arn:aws:iam:"):
-            # AWS assumed-role sessions collapse to the base IAM role ARN. For a
-            # root-path role the canonical identity equals the role ARN exactly, and
-            # the (deprecated) session name must not affect it.
-            assert assumed_identifier == role, (
-                f"assumed AWS identity should be the base IAM role ARN {role!r} "
-                f"(session name must not affect it), got {assumed_identifier!r}"
+            # With the default (legacy) preference the identity is the raw STS
+            # assumed-role ARN (session-bearing), byte-identical to historical
+            # behavior. The negotiated base-role-ARN form is exercised below.
+            assert assumed_identifier.startswith(
+                "arn:aws:sts::"
+            ), f"default AWS identity should be the raw STS assumed-role ARN, got {assumed_identifier!r}"
+            assert (
+                f":assumed-role/{role_name}/" in assumed_identifier
+            ), f"default AWS identity should be an assumed-role ARN for the role, got {assumed_identifier!r}"
+
+            # Content negotiation: opt into the new AWS ordering and confirm the
+            # issued identity collapses to the base IAM role ARN (session stripped).
+            negotiated_jwt = await s2iam.get_jwt_database(
+                **kwargs,
+                identity_format_preference=["aws-iam-role-arn", "aws-arn"],
+            )
+            negotiated_claims = _decode_jwt_payload(negotiated_jwt)
+            negotiated_identifier = negotiated_claims.get("sub", "")
+            assert negotiated_identifier == role, (
+                f"negotiated AWS identity should be the base IAM role ARN {role!r} "
+                f"(session name must not affect it), got {negotiated_identifier!r}"
             )
 
 

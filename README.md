@@ -189,8 +189,12 @@ echo $TOKEN
 #### Advanced Usage
 
 ```bash
-# AWS with assumed role (identity becomes arn:aws:iam::123456789012:role/MyRole)
+# AWS with assumed role (identity is the raw STS assumed-role ARN by default)
 s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole
+
+# Opt into the session-stripped base IAM role ARN (arn:aws:iam::123456789012:role/MyRole)
+s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole \
+      --identity-format-preference=aws-iam-role-arn,aws-arn
 
 # GCP with service account impersonation
 s2iam --provider=gcp --assume-role=service-account@project-id.iam.gserviceaccount.com
@@ -211,7 +215,8 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--workspace-group-id`: Workspace group ID (required for database JWT)
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
-- `--assume-role-session-name`: **Deprecated** (no longer affects identity). AWS STS `RoleSessionName` when using `--assume-role`; still sent to AWS for CloudTrail visibility
+- `--assume-role-session-name`: AWS STS `RoleSessionName` when using `--assume-role` (visible in CloudTrail; does not affect the base IAM role ARN form)
+- `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (e.g. `aws-iam-role-arn,aws-arn`). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
@@ -226,25 +231,76 @@ s2iam --verbose --workspace-group-id=my-workspace
 
 The libraries automatically detect the cloud provider and obtain appropriate credentials from metadata services.
 
-### AWS identity and database user matching
+### Identity format preferences (content negotiation)
 
-For AWS, the authenticated identity is the **base IAM role ARN**:
+By default the authenticated identity (JWT `sub`) is **unchanged from prior releases**:
 
-`arn:aws:iam::ACCOUNT:role/ROLE_NAME`
+| Provider | Default identity (JWT `sub`) |
+|----------|------------------------------|
+| AWS | Raw caller ARN from STS, e.g. `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION` (or `arn:aws:iam::ACCOUNT:user/NAME` for IAM users) |
+| GCP | Service account email, or the numeric unique id when the email is unverified |
+| Azure | The `oid` principal (object id) |
 
-Every AWS STS assumed-role session collapses to this form — whether the credentials come from an EC2 instance profile, EKS IRSA, or an explicit `AssumeRole` call. SingleStore database users and cloud principals must be pre-created to match this role ARN exactly (JWT `sub` claim).
+Clients can **opt into** alternate representations by sending an ordered preference
+list. The verifier picks the first format it supports and can derive for the
+authenticated identity, and reports the choice back in the response `identityFormat`
+field. Negotiation only reorders among representations the verifier has already derived
+for the same identity — it never broadens a match or crosses identities, and it always
+falls back to the default (and ultimately the always-valid floor) when a preference
+cannot be honored.
 
-The STS session name (e.g. `.../assumed-role/ROLE_NAME/SESSION_NAME` reported by `aws sts get-caller-identity`) is **not** part of the identity. It is caller-chosen and therefore not a trustworthy authorization boundary; the IAM role is gated by its trust policy. AWS guarantees role names are unique within an account, so the base role ARN uniquely identifies the role.
+#### Format vocabulary
 
-| Credentials | Identity (JWT `sub`) |
-|-------------|----------------------|
+| Format token | Provider | Meaning | Applicability |
+|--------------|----------|---------|---------------|
+| `aws-arn` | AWS | Raw STS/IAM caller ARN (session-bearing) | Always (floor / default) |
+| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` | Assumed-role sessions only |
+| `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`) | Assumed-role sessions only |
+| `gcp-sa-email` | GCP | Service account email | Verified email only |
+| `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) |
+| `azure-object-id` | Azure | `oid` principal (object id) | Always (floor / default) |
+| `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only |
+
+#### Selecting a preference
+
+Set the preference (highest priority first) programmatically, via CLI, or via environment:
+
+```bash
+# Adopt the session-stripped base IAM role ARN for AWS, fall back to the raw ARN
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-iam-role-arn,aws-arn"
+s2iam --workspace-group-id=my-workspace
+
+# Or per-invocation
+s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace
+```
+
+Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**.
+Language options: `WithIdentityFormatPreference(...)` (Go),
+`identity_format_preference=[...]` (Python),
+`Options.withIdentityFormatPreference(...)` / `.identityFormatPreference(...)` (Java).
+
+#### AWS: base IAM role ARN vs. raw ARN
+
+With the preference `["aws-iam-role-arn", "aws-arn"]`, every AWS STS assumed-role
+session — EC2 instance profile, EKS IRSA, or explicit `AssumeRole` — collapses to the
+**base IAM role ARN**:
+
+| Credentials | `sub` with `aws-iam-role-arn` preference |
+|-------------|------------------------------------------|
 | EC2 instance profile `MyRole` | `arn:aws:iam::123456789012:role/MyRole` |
 | EKS IRSA role `MyRole` | `arn:aws:iam::123456789012:role/MyRole` |
 | `AssumeRole arn:aws:iam::123456789012:role/MyRole` (any session name) | `arn:aws:iam::123456789012:role/MyRole` |
 
-> **Note:** the identity is path-less. A role created under a non-root IAM path (e.g. `/team/MyRole`) is represented as `arn:aws:iam::ACCOUNT:role/MyRole`; register the cloud principal using that path-less form.
+The caller-chosen STS session name is **not** part of the base role ARN; it is not a
+trustworthy authorization boundary (the IAM role is gated by its trust policy), and AWS
+guarantees role names are unique within an account. Note the base role ARN is path-less:
+a role under a non-root IAM path (e.g. `/team/MyRole`) is represented as
+`arn:aws:iam::ACCOUNT:role/MyRole`. Register the cloud principal and create database
+users to match whichever `sub` form you choose.
 
-The raw STS assumed-role ARN and session name remain available in the identity's additional claims for auditing.
+The raw STS assumed-role ARN, session name, and STS `UserId` (whose prefix is the stable
+`RoleId`) always remain available in the identity's additional claims for auditing,
+regardless of the selected format.
 
 ## Documentation
 

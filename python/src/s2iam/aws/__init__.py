@@ -9,6 +9,12 @@ import asyncio
 import os
 from typing import Any, Optional
 
+from ..identity_format import (
+    FORMAT_AWS_ARN,
+    FORMAT_AWS_IAM_ROLE_ARN,
+    FORMAT_AWS_ROLE_ID,
+    IdentityCandidate,
+)
 from ..models import (
     CloudIdentity,
     CloudProviderClient,
@@ -61,36 +67,64 @@ def _arn_resource_type(arn: str) -> str:
     return ""
 
 
-def canonical_identity(arn: str, account: str, user_id: str = "") -> tuple[str, str, dict[str, str]]:
-    """Derive the single, stable principal identity from a GetCallerIdentity ARN.
+def _role_id_from_user_id(user_id: str) -> str:
+    """Return the immutable RoleId portion of an STS UserId.
 
-    AWS STS assumed-role sessions collapse to their base IAM role ARN
-    (arn:aws:iam::ACCOUNT:role/ROLE). The STS session name is caller-chosen and is
-    not a trustworthy authorization boundary; the IAM role is gated by its trust
-    policy, and role names are unique within an account. The raw assumed-role ARN
-    and session name are preserved in the returned claims for audit. All other
-    identities (IAM users, etc.) are returned unchanged.
+    UserId is "AROA...:session" for assumed roles; the RoleId is the segment
+    before the ':'.
+    """
+    if ":" in user_id:
+        return user_id.split(":", 1)[0]
+    return ""
 
-    Note: the STS assumed-role ARN omits the IAM path, so for a pathed role the
-    derived identity is the path-less canonical form.
+
+def aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCandidate]:
+    """Return the identity formats valid for the attested GetCallerIdentity result.
+
+    Natural order with the always-valid floor (the raw caller ARN) first:
+
+      - aws-arn (floor, always): the raw caller ARN.
+      - aws-iam-role-arn (assumed-role only): the base IAM role ARN
+        (arn:aws:iam::ACCOUNT:role/ROLE). The STS session name is caller-chosen and
+        is not a trustworthy authorization boundary; the IAM role is gated by its
+        trust policy, and role names are unique within an account.
+      - aws-role-id (assumed-role only): the immutable RoleId (AROA...), the prefix
+        of the STS UserId.
+
+    Note: the STS assumed-role ARN omits the IAM path, so the derived base role ARN
+    is the path-less canonical form. This must stay identical between the client and
+    the Go verifier so the client-computed identity matches the issued JWT sub.
+    """
+    candidates = [IdentityCandidate(FORMAT_AWS_ARN, arn)]
+
+    parsed = _parse_assumed_role_arn(arn)
+    if parsed is not None:
+        role_name, _ = parsed
+        candidates.append(IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, f"arn:aws:iam::{account}:role/{role_name}"))
+        role_id = _role_id_from_user_id(user_id)
+        if role_id:
+            candidates.append(IdentityCandidate(FORMAT_AWS_ROLE_ID, role_id))
+
+    return candidates
+
+
+def aws_identity_claims(arn: str, user_id: str = "") -> dict[str, str]:
+    """Build AdditionalClaims for an AWS identity.
+
+    The raw STS assumed-role ARN, the role session name, and the STS UserId (whose
+    prefix is the role's immutable RoleId) are preserved for registration-preview
+    and audit, independent of the negotiated identity format.
     """
     claims: dict[str, str] = {}
     if user_id:
         claims[CLAIM_USER_ID] = user_id
-
-    identifier = arn
-    resource_type = _arn_resource_type(arn)
-
     parsed = _parse_assumed_role_arn(arn)
     if parsed is not None:
-        role_name, session_name = parsed
-        identifier = f"arn:aws:iam::{account}:role/{role_name}"
-        resource_type = "role"
+        _, session_name = parsed
         claims[CLAIM_ASSUMED_ROLE_ARN] = arn
         if session_name:
             claims[CLAIM_ROLE_SESSION_NAME] = session_name
-
-    return identifier, resource_type, claims
+    return claims
 
 
 class AWSClient(CloudProviderClient):
@@ -324,19 +358,25 @@ class AWSClient(CloudProviderClient):
                 self._region = region_from_arn
                 self._log(f"Derived region from ARN: {self._region}")
 
-            # Collapse assumed-role sessions to the base IAM role ARN (the single,
-            # stable mapping shared with the Go verifier / authority).
-            identifier, resource_type, claims = canonical_identity(
-                arn, identity_resp["Account"], identity_resp.get("UserId", "")
-            )
+            # Build the valid identity-format candidates and default the identifier
+            # to the always-valid floor (the raw caller ARN, format aws-arn), which
+            # is byte-identical to the historical behavior. The negotiated format
+            # (chosen by the verifier from the preference header) may select an
+            # alternate such as the base IAM role ARN; the candidate set lets the
+            # client re-derive the chosen value.
+            account = identity_resp["Account"]
+            user_id = identity_resp.get("UserId", "")
+            candidates = aws_candidates(arn, account, user_id)
 
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
-                identifier=identifier,
-                account_id=identity_resp["Account"],
+                identifier=candidates[0].value,
+                account_id=account,
                 region=region_from_arn,
-                resource_type=resource_type,
-                additional_claims=claims,
+                resource_type=_arn_resource_type(arn),
+                additional_claims=aws_identity_claims(arn, user_id),
+                identity_format=candidates[0].format,
+                candidates=[(c.format, c.value) for c in candidates],
             )
             self._log(f"Generated headers for identity: {identity.identifier}")
             return headers, identity

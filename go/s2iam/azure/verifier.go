@@ -39,19 +39,48 @@ type AzureVerifier struct {
 	tenant           string
 	logger           models.Logger
 	jwksManager      *jwksManager
+	defaultOrder     []models.IdentityFormat
 }
 
-// NewVerifier creates or configures the Azure verifier
-func NewVerifier(allowedAudiences []string, tenant string, logger models.Logger) models.CloudProviderVerifier {
+// NewVerifier creates or configures the Azure verifier. The optional defaultOrder
+// sets the identity-format ordering used when a request carries no (valid)
+// preference; when empty the built-in default ([azure-object-id], byte-identical
+// to historical behavior with an internal sub floor) is used.
+func NewVerifier(allowedAudiences []string, tenant string, logger models.Logger, defaultOrder ...models.IdentityFormat) models.CloudProviderVerifier {
 	if tenant == "" {
 		tenant = defaultAzureTenant // Use the common endpoint by default
+	}
+	if len(defaultOrder) == 0 {
+		defaultOrder = models.DefaultIdentityFormatOrder(models.ProviderAzure)
 	}
 	return &AzureVerifier{
 		allowedAudiences: allowedAudiences,
 		tenant:           tenant,
 		logger:           logger,
 		jwksManager:      getJWKSManager(tenant),
+		defaultOrder:     defaultOrder,
 	}
+}
+
+// azureCandidates returns the identity formats valid for a verified Azure token,
+// in natural order with the always-valid floor first.
+//
+//   - azure-object-id (floor, always): the principal id. For managed identities
+//     this is the oid; the oid-else-sub-else-appid fallback is kept internally so
+//     this token always resolves (preserving today's identifier).
+//   - azure-resource-id (user-assigned MI only): the xms_mirid ARM resource path,
+//     present only for user-assigned managed identities.
+func azureCandidates(principalID, resourceID string) []models.IdentityCandidate {
+	candidates := []models.IdentityCandidate{
+		{Format: models.FormatAzureObjectID, Value: principalID},
+	}
+	if resourceID != "" {
+		candidates = append(candidates, models.IdentityCandidate{
+			Format: models.FormatAzureResourceID,
+			Value:  resourceID,
+		})
+	}
+	return candidates
 }
 
 // HasHeaders returns true if the request has Azure authentication headers
@@ -273,17 +302,28 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 		}
 	}
 
+	// Negotiate the chosen identity format against the client's preference and
+	// this verifier's configured default ordering. The floor (azure-object-id,
+	// which keeps the oid-else-sub principal) is always valid, so selection never
+	// fails.
+	resourceID, _ := claims["xms_mirid"].(string)
+	candidates := azureCandidates(principalID, resourceID)
+	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
+	format, identifier := models.SelectIdentityFormat(models.ProviderAzure, candidates, clientPref, v.defaultOrder)
+
 	if logger != nil {
-		logger.Logf("Successfully verified Azure identity: %s", principalID)
+		logger.Logf("Successfully verified Azure identity: %s (format: %s)", identifier, format)
 	}
 
 	return &models.CloudIdentity{
 		Provider:         models.ProviderAzure,
-		Identifier:       principalID,
+		Identifier:       identifier,
+		IdentityFormat:   format,
 		AccountID:        tenantID,
 		Region:           region,
 		ResourceType:     resourceType,
 		AdditionalClaims: additionalClaims,
+		Candidates:       candidates,
 	}, nil
 }
 

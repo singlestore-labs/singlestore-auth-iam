@@ -8,6 +8,10 @@ with SingleStore's IAM service.
 __version__ = "0.1.0"
 
 from .api import DETECT_PROVIDER_DEFAULT_TIMEOUT, detect_provider
+from .identity_format import (
+    IDENTITY_FORMAT_PREFERENCE_ENV,
+    IDENTITY_FORMAT_PREFERENCE_HEADER,
+)
 from .jwt import get_jwt, get_jwt_api, get_jwt_database
 from .models import (
     AssumeRoleNotSupported,
@@ -32,4 +36,6 @@ __all__ = [
     "ProviderNotDetected",
     "ProviderIdentityUnavailable",
     "AssumeRoleNotSupported",
+    "IDENTITY_FORMAT_PREFERENCE_HEADER",
+    "IDENTITY_FORMAT_PREFERENCE_ENV",
 ]

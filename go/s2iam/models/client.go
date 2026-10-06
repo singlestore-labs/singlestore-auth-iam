@@ -35,6 +35,30 @@ type CloudIdentity struct {
 	Region           string            // Cloud provider region (when available)
 	ResourceType     string            // Type of resource (VM, function, etc.)
 	AdditionalClaims map[string]string // Any additional relevant claims from tokens
+
+	// IdentityFormat is the negotiated format token that produced Identifier
+	// (for example "aws-arn" or "aws-iam-role-arn"). The verifier sets this to the
+	// chosen token; the auth service echoes it back to the client as the
+	// identityFormat response field. On the client side it reflects the format of
+	// the computed Identifier.
+	IdentityFormat IdentityFormat
+
+	// Candidates is the verifier-derived, ordered list of identity formats that
+	// are valid for this identity (floor first). It is used to negotiate the
+	// chosen format and is also preserved so later matching concerns (e.g. legacy
+	// registrations) can consider alternates without re-negotiating.
+	Candidates []IdentityCandidate
+}
+
+// Candidate returns the value for the given format among this identity's valid
+// candidates, if present.
+func (i *CloudIdentity) Candidate(format IdentityFormat) (string, bool) {
+	for _, c := range i.Candidates {
+		if c.Format == format {
+			return c.Value, true
+		}
+	}
+	return "", false
 }
 
 // Logger is a simple logging interface

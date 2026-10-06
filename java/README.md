@@ -40,11 +40,30 @@ Use `.audience()` (builder) or `Options.withAudience()` (static API) ONLY when t
 
 Assume Role / Impersonation
 ---------------------------
-- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). The issued identity is the base IAM role ARN regardless of session name; `Options.withAssumeRoleSessionName` is deprecated and no longer affects identity.
+- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). By default the issued identity is the raw STS assumed-role ARN; opt into the session-stripped base IAM role ARN via identity-format negotiation (below).
 - GCP: Provide a service account email for impersonation.
 - Azure: Provide a managed identity client (object) ID (UUID format).
 
 Validation is strict; malformed identifiers raise `S2IAMException` before network calls.
+
+Identity Format Preferences
+---------------------------
+By default the issued identity (JWT `sub`) is byte-identical to prior releases. Clients may opt into alternate representations by supplying an ordered preference list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary and semantics.
+
+```java
+// Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
+String jwt = S2IAMRequest.newRequest()
+    .databaseWorkspaceGroup("workspace-group-id")
+    .assumeRole("arn:aws:iam::123456789012:role/AppRole")
+    .identityFormatPreference("aws-iam-role-arn", "aws-arn")
+    .get();
+
+// Or with the static API:
+String jwt2 = S2IAM.getDatabaseJWT("workspace-group-id",
+    Options.withIdentityFormatPreference("aws-iam-role-arn", "aws-arn"));
+```
+
+Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) > built-in default.
 
 Functional Options (Static API)
 -------------------------------
@@ -75,6 +94,7 @@ Selected Options helpers:
 - `Options.withTimeout(Duration)`
 - `Options.withAudience(String)` (GCP only)
 - `Options.withAssumeRole(String)`
+- `Options.withIdentityFormatPreference(String...)`
 - `Options.withServerUrl(String)`
 - `Options.withProvider(CloudProviderClient)` (explicit injection / test)
 

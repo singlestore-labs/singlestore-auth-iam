@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
@@ -27,6 +28,7 @@ type Config struct {
 	Provider              string
 	AssumeRole            string
 	AssumeRoleSessionName string
+	IdentityFormatPref    string
 	Timeout               time.Duration
 	ServerURL             string
 	AllowHTTP             bool
@@ -81,6 +83,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.Provider, "provider", "", "Cloud provider: 'aws', 'gcp', or 'azure' (auto-detect if not specified)")
 	flagSet.StringVar(&config.AssumeRole, "assume-role", "", "Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)")
 	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "DEPRECATED (no longer affects identity): AWS STS RoleSessionName when assuming a role")
+	flagSet.StringVar(&config.IdentityFormatPref, "identity-format-preference", "", "Comma-separated identity-format preference (e.g. 'aws-iam-role-arn,aws-arn'); overrides S2IAM_IDENTITY_FORMAT_PREFERENCE")
 	flagSet.DurationVar(&config.Timeout, "timeout", 10*time.Second, "Timeout for operations")
 	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (uses default if not specified)")
 	flagSet.BoolVar(&config.AllowHTTP, "allow-http", false, "Allow http:// authentication server URLs (for testing only)")
@@ -191,6 +194,10 @@ func run(config Config) error {
 
 	if config.GCPAudience != "" {
 		opts = append(opts, s2iam.WithGCPAudience(config.GCPAudience))
+	}
+
+	if config.IdentityFormatPref != "" {
+		opts = append(opts, s2iam.WithIdentityFormatPreference(strings.Split(config.IdentityFormatPref, ",")...))
 	}
 
 	if config.ServerURL != "" {

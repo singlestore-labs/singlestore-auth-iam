@@ -53,15 +53,16 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 		config.AllowedAudiences = []string{"https://authsvc.singlestore.com"}
 	}
 
-	// Create verifiers for each cloud provider
-	awsVerifier := aws.NewVerifier(config.Logger)
+	// Create verifiers for each cloud provider, passing any configured per-provider
+	// default identity-format ordering (empty -> built-in default).
+	awsVerifier := aws.NewVerifier(config.Logger, config.DefaultIdentityFormats[models.ProviderAWS]...)
 
-	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger)
+	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, config.DefaultIdentityFormats[models.ProviderGCP]...)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
 	}
 
-	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger)
+	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, config.DefaultIdentityFormats[models.ProviderAzure]...)
 
 	verifiers := map[models.CloudProviderType]models.CloudProviderVerifier{
 		models.ProviderAWS:   awsVerifier,

@@ -1,44 +1,62 @@
-"""Unit tests for the AWS canonical identity mapping.
+"""Unit tests for the AWS identity-format candidates and claims.
 
-Assumed-role sessions collapse to their base IAM role ARN; the caller-chosen STS
-session name does not affect the issued identity. Mirrors the Go
-TestCanonicalIdentity.
+Assumed-role sessions expose the raw ARN (floor), the base IAM role ARN, and the
+immutable RoleId; the raw ARN preserves the session (byte-identical to today) and
+only aws-iam-role-arn / aws-role-id strip it. Mirrors the Go TestAWSCandidates.
 """
 
 from s2iam.aws import (
     CLAIM_ASSUMED_ROLE_ARN,
     CLAIM_ROLE_SESSION_NAME,
     CLAIM_USER_ID,
-    canonical_identity,
+    aws_candidates,
+    aws_identity_claims,
+)
+from s2iam.identity_format import (
+    FORMAT_AWS_ARN,
+    FORMAT_AWS_IAM_ROLE_ARN,
+    FORMAT_AWS_ROLE_ID,
+    IdentityCandidate,
 )
 
 
-def test_assumed_role_collapses_to_base_role_arn():
+def test_assumed_role_candidates():
     arn = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
-    identifier, resource_type, claims = canonical_identity(arn, "111122223333", "AROAEXAMPLE1234567890:example-session")
-    assert identifier == "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"
-    assert resource_type == "role"
+    candidates = aws_candidates(arn, "111122223333", "AROAEXAMPLE1234567890:example-session")
+    assert candidates == [
+        IdentityCandidate(FORMAT_AWS_ARN, arn),
+        IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"),
+        IdentityCandidate(FORMAT_AWS_ROLE_ID, "AROAEXAMPLE1234567890"),
+    ]
+    # The always-valid floor is the raw caller ARN (session kept).
+    assert candidates[0] == IdentityCandidate(FORMAT_AWS_ARN, arn)
+
+
+def test_base_role_arn_is_session_independent():
+    a = aws_candidates(
+        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+        "503396375767",
+    )[1]
+    b = aws_candidates(
+        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/some-other-session",
+        "503396375767",
+    )[1]
+    assert a == b == IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, "arn:aws:iam::503396375767:role/NoPermissionsRole")
+
+
+def test_iam_user_has_only_the_raw_arn_floor():
+    arn = "arn:aws:iam::123456789012:user/Alice"
+    candidates = aws_candidates(arn, "123456789012", "AIDAEXAMPLE")
+    assert candidates == [IdentityCandidate(FORMAT_AWS_ARN, arn)]
+
+
+def test_identity_claims_preserve_alternates():
+    arn = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
+    claims = aws_identity_claims(arn, "AROAEXAMPLE1234567890:example-session")
     assert claims[CLAIM_ASSUMED_ROLE_ARN] == arn
     assert claims[CLAIM_ROLE_SESSION_NAME] == "example-session"
     assert claims[CLAIM_USER_ID] == "AROAEXAMPLE1234567890:example-session"
 
-
-def test_session_name_does_not_affect_identity():
-    a = canonical_identity(
-        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
-        "503396375767",
-    )[0]
-    b = canonical_identity(
-        "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/some-other-session",
-        "503396375767",
-    )[0]
-    assert a == b == "arn:aws:iam::503396375767:role/NoPermissionsRole"
-
-
-def test_iam_user_unchanged():
-    identifier, resource_type, claims = canonical_identity(
-        "arn:aws:iam::123456789012:user/Alice", "123456789012", "AIDAEXAMPLE"
-    )
-    assert identifier == "arn:aws:iam::123456789012:user/Alice"
-    assert resource_type == "user"
-    assert CLAIM_ASSUMED_ROLE_ARN not in claims
+    user_claims = aws_identity_claims("arn:aws:iam::123456789012:user/Alice", "AIDAEXAMPLE")
+    assert user_claims[CLAIM_USER_ID] == "AIDAEXAMPLE"
+    assert CLAIM_ASSUMED_ROLE_ARN not in user_claims

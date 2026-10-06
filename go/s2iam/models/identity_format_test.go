@@ -1,0 +1,188 @@
+package models
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestIdentityFormatProvider(t *testing.T) {
+	cases := map[IdentityFormat]CloudProviderType{
+		FormatAWSARN:           ProviderAWS,
+		FormatAWSIAMRoleARN:    ProviderAWS,
+		FormatAWSRoleID:        ProviderAWS,
+		FormatGCPSAEmail:       ProviderGCP,
+		FormatGCPSAUniqueID:    ProviderGCP,
+		FormatAzureObjectID:    ProviderAzure,
+		FormatAzureResourceID:  ProviderAzure,
+		IdentityFormat("nope"): "",
+		IdentityFormat(""):     "",
+	}
+	for format, want := range cases {
+		assert.Equalf(t, want, format.Provider(), "provider for %q", format)
+	}
+}
+
+func TestParseIdentityFormatPreference(t *testing.T) {
+	assert.Nil(t, ParseIdentityFormatPreference(""))
+	assert.Equal(t,
+		[]IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
+		ParseIdentityFormatPreference("aws-iam-role-arn,aws-arn"))
+	// Trimming, empty entries dropped, unknown tokens preserved verbatim.
+	assert.Equal(t,
+		[]IdentityFormat{FormatAWSARN, IdentityFormat("future-token")},
+		ParseIdentityFormatPreference(" aws-arn , , future-token "))
+}
+
+func TestDefaultIdentityFormatOrder(t *testing.T) {
+	assert.Equal(t, []IdentityFormat{FormatAWSARN}, DefaultIdentityFormatOrder(ProviderAWS))
+	assert.Equal(t, []IdentityFormat{FormatGCPSAEmail, FormatGCPSAUniqueID}, DefaultIdentityFormatOrder(ProviderGCP))
+	assert.Equal(t, []IdentityFormat{FormatAzureObjectID}, DefaultIdentityFormatOrder(ProviderAzure))
+	assert.Nil(t, DefaultIdentityFormatOrder("other"))
+}
+
+// awsAssumedRoleCandidates are the golden candidate values from the ticket's
+// worked example (AWS assumed-role caller).
+var awsAssumedRoleCandidates = []IdentityCandidate{
+	{Format: FormatAWSARN, Value: "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"},
+	{Format: FormatAWSIAMRoleARN, Value: "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"},
+	{Format: FormatAWSRoleID, Value: "AROAEXAMPLE1234567890"},
+}
+
+func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   CloudProviderType
+		valid      []IdentityCandidate
+		clientPref []IdentityFormat
+		serverDflt []IdentityFormat
+		wantFormat IdentityFormat
+		wantValue  string
+	}{
+		{
+			name:       "AWS new preference selects base role ARN",
+			provider:   ProviderAWS,
+			valid:      awsAssumedRoleCandidates,
+			clientPref: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
+			serverDflt: DefaultIdentityFormatOrder(ProviderAWS),
+			wantFormat: FormatAWSIAMRoleARN,
+			wantValue:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
+		},
+		{
+			name:       "AWS legacy preference selects raw STS ARN (session kept)",
+			provider:   ProviderAWS,
+			valid:      awsAssumedRoleCandidates,
+			clientPref: []IdentityFormat{FormatAWSARN},
+			serverDflt: DefaultIdentityFormatOrder(ProviderAWS),
+			wantFormat: FormatAWSARN,
+			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
+		},
+		{
+			name:     "AWS new preference on an IAM user falls back to raw ARN (role token invalid)",
+			provider: ProviderAWS,
+			valid: []IdentityCandidate{
+				{Format: FormatAWSARN, Value: "arn:aws:iam::111122223333:user/alice"},
+			},
+			clientPref: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
+			serverDflt: DefaultIdentityFormatOrder(ProviderAWS),
+			wantFormat: FormatAWSARN,
+			wantValue:  "arn:aws:iam::111122223333:user/alice",
+		},
+		{
+			name:       "no preference uses server default ordering",
+			provider:   ProviderAWS,
+			valid:      awsAssumedRoleCandidates,
+			clientPref: nil,
+			serverDflt: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
+			wantFormat: FormatAWSIAMRoleARN,
+			wantValue:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
+		},
+		{
+			name:     "other-provider and unknown tokens are ignored, default applies",
+			provider: ProviderAWS,
+			valid:    awsAssumedRoleCandidates,
+			// Only non-AWS / unknown tokens -> filtered to empty -> server default.
+			clientPref: []IdentityFormat{FormatGCPSAEmail, IdentityFormat("future-token")},
+			serverDflt: DefaultIdentityFormatOrder(ProviderAWS),
+			wantFormat: FormatAWSARN,
+			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
+		},
+		{
+			name:     "empty intersection fails closed to server default then floor",
+			provider: ProviderAWS,
+			// Only the floor is valid (IAM user), but client asked for role formats.
+			valid: []IdentityCandidate{
+				{Format: FormatAWSARN, Value: "arn:aws:iam::111122223333:user/alice"},
+			},
+			clientPref: []IdentityFormat{FormatAWSRoleID},
+			serverDflt: []IdentityFormat{FormatAWSIAMRoleARN}, // also invalid -> floor
+			wantFormat: FormatAWSARN,
+			wantValue:  "arn:aws:iam::111122223333:user/alice",
+		},
+		{
+			name:     "GCP verified email preferred, numeric is the floor",
+			provider: ProviderGCP,
+			valid: []IdentityCandidate{
+				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
+				{Format: FormatGCPSAEmail, Value: "my-sa@my-project.iam.gserviceaccount.com"},
+			},
+			clientPref: nil,
+			serverDflt: DefaultIdentityFormatOrder(ProviderGCP),
+			wantFormat: FormatGCPSAEmail,
+			wantValue:  "my-sa@my-project.iam.gserviceaccount.com",
+		},
+		{
+			name:     "GCP unverified email: only numeric valid, default falls through",
+			provider: ProviderGCP,
+			valid: []IdentityCandidate{
+				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
+			},
+			clientPref: nil,
+			serverDflt: DefaultIdentityFormatOrder(ProviderGCP),
+			wantFormat: FormatGCPSAUniqueID,
+			wantValue:  "104561834567890123456",
+		},
+		{
+			name:     "Azure user-assigned MI can select resource id",
+			provider: ProviderAzure,
+			valid: []IdentityCandidate{
+				{Format: FormatAzureObjectID, Value: "11111111-2222-3333-4444-555555555555"},
+				{Format: FormatAzureResourceID, Value: "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity"},
+			},
+			clientPref: []IdentityFormat{FormatAzureResourceID, FormatAzureObjectID},
+			serverDflt: DefaultIdentityFormatOrder(ProviderAzure),
+			wantFormat: FormatAzureResourceID,
+			wantValue:  "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity",
+		},
+		{
+			name:     "Azure default keeps object id (sub floor)",
+			provider: ProviderAzure,
+			valid: []IdentityCandidate{
+				{Format: FormatAzureObjectID, Value: "11111111-2222-3333-4444-555555555555"},
+			},
+			clientPref: nil,
+			serverDflt: DefaultIdentityFormatOrder(ProviderAzure),
+			wantFormat: FormatAzureObjectID,
+			wantValue:  "11111111-2222-3333-4444-555555555555",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			format, value := SelectIdentityFormat(tt.provider, tt.valid, tt.clientPref, tt.serverDflt)
+			assert.Equal(t, tt.wantFormat, format, "chosen format")
+			assert.Equal(t, tt.wantValue, value, "chosen value")
+		})
+	}
+}
+
+func TestSelectIdentityFormat_FloorAlwaysWins(t *testing.T) {
+	// Even if client preference, server default, and the valid set share no
+	// supported token in common, selection returns the floor (valid[0]).
+	valid := []IdentityCandidate{{Format: FormatAWSARN, Value: "arn:aws:iam::1:user/x"}}
+	format, value := SelectIdentityFormat(ProviderAWS, valid,
+		[]IdentityFormat{FormatAWSRoleID}, []IdentityFormat{FormatAWSIAMRoleARN})
+	require.Equal(t, FormatAWSARN, format)
+	require.Equal(t, "arn:aws:iam::1:user/x", value)
+}

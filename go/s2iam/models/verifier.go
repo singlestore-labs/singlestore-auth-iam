@@ -16,6 +16,14 @@ type VerifierConfig struct {
 	AzureTenant string
 	// Logger provides a logging interface (if nil, no logging occurs)
 	Logger Logger
+	// DefaultIdentityFormats overrides, per provider, the identity-format ordering
+	// used when a request carries no (valid) X-S2IAM-Identity-Format-Preference.
+	// A provider absent from the map (or an empty slice) uses the built-in default
+	// from DefaultIdentityFormatOrder, which is byte-identical to the historical
+	// behavior. This is how an auth-service instance opts into (for example) the
+	// new AWS default [aws-iam-role-arn, aws-arn] without a client change, and how
+	// versioned endpoints can differ only in their default ordering.
+	DefaultIdentityFormats map[CloudProviderType][]IdentityFormat
 }
 
 // CloudProviderVerifier is implemented for each cloud provider.

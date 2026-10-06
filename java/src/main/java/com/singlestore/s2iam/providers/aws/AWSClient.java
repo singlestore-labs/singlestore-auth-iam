@@ -7,7 +7,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
@@ -158,23 +160,24 @@ public class AWSClient extends AbstractBaseClient {
       }
       Map<String, String> extra = new HashMap<>();
       extra.put("account", account);
-      if (who.userId() != null && !who.userId().isEmpty())
-        extra.put("userId", who.userId());
-      // Collapse assumed-role sessions to the base IAM role ARN (the single, stable
-      // mapping shared with the Go verifier / authority). The caller-chosen session
-      // name does not affect identity; the raw ARN and session name are preserved as
-      // claims for audit.
-      String identifier = arn;
+      String userId = who.userId();
+      if (userId != null && !userId.isEmpty())
+        extra.put("userId", userId);
+      // Build the valid identity-format candidates and default the identifier to the
+      // always-valid floor (the raw caller ARN, format aws-arn), byte-identical to
+      // the historical behavior. The negotiated format (chosen by the verifier from
+      // the preference header) may select an alternate such as the base IAM role
+      // ARN; the raw ARN and session name are preserved as claims for audit.
       String[] assumed = parseAssumedRoleArn(arn);
       if (assumed != null) {
-        identifier = "arn:aws:iam::" + account + ":role/" + assumed[0];
-        resourceType = "role";
         extra.put("assumedRoleArn", arn);
         if (!assumed[1].isEmpty())
           extra.put("roleSessionName", assumed[1]);
       }
-      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, identifier, account, region,
-          resourceType, extra);
+      List<IdentityFormat.Candidate> candidates = awsCandidates(arn, account, userId);
+      IdentityFormat.Candidate floor = candidates.get(0);
+      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, floor.value, account, region,
+          resourceType, extra, floor.format, candidates);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
@@ -188,6 +191,45 @@ public class AWSClient extends AbstractBaseClient {
         return name;
     }
     return DEFAULT_ROLE_SESSION_NAME;
+  }
+
+  /**
+   * Returns the identity formats valid for the attested GetCallerIdentity result,
+   * in natural order with the always-valid floor (the raw caller ARN) first:
+   *
+   * <ul>
+   * <li>aws-arn (floor, always): the raw caller ARN.
+   * <li>aws-iam-role-arn (assumed-role only): the base IAM role ARN.
+   * <li>aws-role-id (assumed-role only): the immutable RoleId (AROA...), the prefix
+   * of the STS UserId.
+   * </ul>
+   *
+   * This must stay identical to the Go verifier so the client-computed identity
+   * matches the issued JWT sub.
+   */
+  static List<IdentityFormat.Candidate> awsCandidates(String arn, String account, String userId) {
+    List<IdentityFormat.Candidate> candidates = new ArrayList<>();
+    candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ARN, arn));
+    String[] assumed = parseAssumedRoleArn(arn);
+    if (assumed != null) {
+      candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_IAM_ROLE_ARN,
+          "arn:aws:iam::" + account + ":role/" + assumed[0]));
+      String roleId = roleIdFromUserId(userId);
+      if (!roleId.isEmpty())
+        candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ROLE_ID, roleId));
+    }
+    return candidates;
+  }
+
+  /**
+   * Returns the immutable RoleId portion of an STS UserId (the segment before the
+   * ':'; UserId is "AROA...:session" for assumed roles), or "" if absent.
+   */
+  static String roleIdFromUserId(String userId) {
+    if (userId == null)
+      return "";
+    int i = userId.indexOf(':');
+    return i >= 0 ? userId.substring(0, i) : "";
   }
 
   /**

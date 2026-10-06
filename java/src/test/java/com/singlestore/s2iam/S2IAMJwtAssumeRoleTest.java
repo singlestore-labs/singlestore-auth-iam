@@ -90,11 +90,29 @@ public class S2IAMJwtAssumeRoleTest {
     assertTrue(assumedIdentifier.contains(roleNameFragment),
         "assumed identifier should contain role fragment");
     if (role.startsWith("arn:aws:iam:")) {
-      // AWS assumed-role sessions collapse to the base IAM role ARN. For a root-path
-      // role the canonical identity equals the role ARN exactly; the (deprecated)
-      // session name must not affect it.
-      assertEquals(role, assumedIdentifier,
-          "assumed AWS identity should be the base IAM role ARN (session name must not affect it)");
+      // With the default (legacy) preference the identity is the raw STS
+      // assumed-role ARN (session-bearing), byte-identical to historical behavior.
+      assertTrue(assumedIdentifier.startsWith("arn:aws:sts::"),
+          "default AWS identity should be the raw STS assumed-role ARN, got " + assumedIdentifier);
+      assertTrue(assumedIdentifier.contains(":assumed-role/" + roleNameFragment + "/"),
+          "default AWS identity should be an assumed-role ARN for the role, got " + assumedIdentifier);
+      assertEquals(IdentityFormat.AWS_ARN,
+          assumedReq.path("identity").path("identityFormat").asText(),
+          "default AWS identity format should be aws-arn");
+
+      // Content negotiation: opt into the new AWS ordering and confirm the issued
+      // identity collapses to the base IAM role ARN (session stripped).
+      List<JwtOption> negotiatedOpts = new ArrayList<>(assumeOpts);
+      negotiatedOpts.add(Options.withIdentityFormatPreference("aws-iam-role-arn", "aws-arn"));
+      String negotiatedJwt = S2IAM.getDatabaseJWT("test-workspace",
+          negotiatedOpts.toArray(new JwtOption[0]));
+      String negotiatedSub = decodeSub(negotiatedJwt);
+      JsonNode negotiatedReq = fetchLastRequest();
+      assertEquals(role, negotiatedSub,
+          "negotiated AWS identity should be the base IAM role ARN (session must not affect it)");
+      assertEquals(IdentityFormat.AWS_IAM_ROLE_ARN,
+          negotiatedReq.path("identity").path("identityFormat").asText(),
+          "negotiated AWS identity format should be aws-iam-role-arn");
     }
   }
 

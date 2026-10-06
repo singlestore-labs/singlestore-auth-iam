@@ -40,11 +40,16 @@ type GCPVerifier struct {
 	validator        *idtoken.Validator
 	allowedAudiences []string
 	logger           models.Logger
+	defaultOrder     []models.IdentityFormat
 	mu               sync.RWMutex // Added for concurrency safety
 }
 
-// NewVerifier creates a new GCP verifier instance
-func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.Logger) (models.CloudProviderVerifier, error) {
+// NewVerifier creates a new GCP verifier instance. The optional defaultOrder
+// sets the identity-format ordering used when a request carries no (valid)
+// preference; when empty the built-in default
+// ([gcp-sa-email, gcp-sa-unique-id], byte-identical to historical behavior) is
+// used.
+func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.Logger, defaultOrder ...models.IdentityFormat) (models.CloudProviderVerifier, error) {
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP token validator: %w", err)
@@ -54,11 +59,39 @@ func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.L
 		return nil, errors.Errorf("at least one allowed audience must be specified")
 	}
 
+	if len(defaultOrder) == 0 {
+		defaultOrder = models.DefaultIdentityFormatOrder(models.ProviderGCP)
+	}
+
 	return &GCPVerifier{
 		validator:        validator,
 		allowedAudiences: allowedAudiences,
 		logger:           logger,
+		defaultOrder:     defaultOrder,
 	}, nil
+}
+
+// gcpCandidates returns the identity formats valid for a verified GCP token, in
+// natural order with the always-valid floor (the numeric subject) first.
+//
+//   - gcp-sa-unique-id (floor, always): the numeric subject (sub), immutable.
+//   - gcp-sa-email (verified email only): the service-account email, included
+//     only when email is present AND email_verified is true.
+//
+// Note: the natural order places the floor first (so SelectIdentityFormat always
+// has a fallback), while the default ordering prefers the verified email,
+// preserving the historical "verified-email-else-numeric-id" behavior.
+func gcpCandidates(sub, email string, emailVerified bool) []models.IdentityCandidate {
+	candidates := []models.IdentityCandidate{
+		{Format: models.FormatGCPSAUniqueID, Value: sub},
+	}
+	if email != "" && emailVerified {
+		candidates = append(candidates, models.IdentityCandidate{
+			Format: models.FormatGCPSAEmail,
+			Value:  email,
+		})
+	}
+	return candidates
 }
 
 // truncateString safely truncates a string to the specified length with ellipsis
@@ -221,7 +254,25 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		logger.Logf("DEBUG: Extracting identity from token using shared function")
 	}
 
-	return extractGCPIdentityFromToken(ctx, payload, logger)
+	identity, err := extractGCPIdentityFromToken(ctx, payload, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Negotiate the chosen identity format against the client's preference and
+	// this verifier's configured default ordering. The floor (gcp-sa-unique-id) is
+	// always valid, so selection never fails.
+	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
+	format, chosen := models.SelectIdentityFormat(models.ProviderGCP, identity.Candidates, clientPref, v.defaultOrder)
+	if err := validatePrincipal(chosen); err != nil {
+		if logger != nil {
+			logger.Logf("Invalid GCP principal: %v", err)
+		}
+		return nil, err
+	}
+	identity.Identifier = chosen
+	identity.IdentityFormat = format
+	return identity, nil
 }
 
 // extractGCPIdentityFromToken extracts identity information from a GCP ID token payload
@@ -235,23 +286,16 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 		return nil, errors.Errorf("no subject claim found in GCP token")
 	}
 
-	// Determine the primary identifier - prefer verified email if available, fallback to sub
-	identifier := sub // Default to numeric ID
-	if email, ok := payload.Claims["email"].(string); ok && email != "" {
-		if emailVerified, ok := payload.Claims["email_verified"].(bool); ok && emailVerified {
-			identifier = email
-			if logger != nil {
-				logger.Logf("DEBUG: Using verified email claim as identifier: %s", identifier)
-			}
-		} else {
-			if logger != nil {
-				logger.Logf("DEBUG: Email present but not verified, using subject: %s", sub)
-			}
-		}
-	} else {
-		if logger != nil {
-			logger.Logf("DEBUG: Using subject claim as identifier: %s", sub)
-		}
+	// Build the valid identity-format candidates. The default ordering prefers a
+	// verified service-account email and falls back to the numeric subject,
+	// preserving the historical identifier.
+	email, _ := payload.Claims["email"].(string)
+	emailVerified, _ := payload.Claims["email_verified"].(bool)
+	candidates := gcpCandidates(sub, email, emailVerified)
+	format, identifier := models.SelectIdentityFormat(
+		models.ProviderGCP, candidates, nil, models.DefaultIdentityFormatOrder(models.ProviderGCP))
+	if logger != nil {
+		logger.Logf("DEBUG: Default GCP identity format %s -> %s (email_verified=%t)", format, identifier, emailVerified)
 	}
 
 	if err := validatePrincipal(identifier); err != nil {
@@ -307,9 +351,11 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 	return &models.CloudIdentity{
 		Provider:         models.ProviderGCP,
 		Identifier:       identifier,
+		IdentityFormat:   format,
 		AccountID:        sub,
 		Region:           region,       // May be empty for non-Compute Engine services
 		ResourceType:     resourceType, // Determined from google section
 		AdditionalClaims: additionalClaims,
+		Candidates:       candidates,
 	}, nil
 }

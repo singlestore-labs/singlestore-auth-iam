@@ -41,6 +41,26 @@ public final class Options {
     return o -> o.assumeRoleSessionName = sessionName;
   }
 
+  /**
+   * Sets the ordered identity-format preference sent to the auth service via the
+   * X-S2IAM-Identity-Format-Preference header. The verifier chooses the first
+   * format that is both server-supported and valid for the attested identity (for
+   * example prefer "aws-iam-role-arn" and fall back to "aws-arn"). Tokens are
+   * provider-prefixed, so a single list can serve a heterogeneous fleet; unknown
+   * or inapplicable tokens are ignored.
+   *
+   * <p>
+   * Precedence: this explicit option &gt; the S2IAM_IDENTITY_FORMAT_PREFERENCE
+   * environment variable &gt; the built-in default ("aws-arn", byte-identical to
+   * the historical behavior).
+   */
+  public static JwtOption withIdentityFormatPreference(String... formats) {
+    return o -> {
+      o.identityFormatPreference = java.util.Arrays.asList(formats);
+      o.identityFormatPreferenceSet = true;
+    };
+  }
+
   // Re-export provider options for convenience
   public static ProviderOption withTimeout(Duration d) {
     return ProviderOption.withTimeout(d);

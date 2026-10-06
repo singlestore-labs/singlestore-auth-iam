@@ -31,13 +31,21 @@ func validatePrincipal(principal string) error {
 
 // AWSVerifier implements the CloudProviderVerifier interface for AWS
 type AWSVerifier struct {
-	logger models.Logger
+	logger       models.Logger
+	defaultOrder []models.IdentityFormat
 }
 
-// NewVerifier and configures the AWS verifier
-func NewVerifier(logger models.Logger) models.CloudProviderVerifier {
+// NewVerifier configures the AWS verifier. The optional defaultOrder sets the
+// identity-format ordering used when a request carries no (valid) preference;
+// when empty the built-in default ([aws-arn], byte-identical to historical
+// behavior) is used.
+func NewVerifier(logger models.Logger, defaultOrder ...models.IdentityFormat) models.CloudProviderVerifier {
+	if len(defaultOrder) == 0 {
+		defaultOrder = models.DefaultIdentityFormatOrder(models.ProviderAWS)
+	}
 	return &AWSVerifier{
-		logger: logger,
+		logger:       logger,
+		defaultOrder: defaultOrder,
 	}
 }
 
@@ -135,25 +143,31 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, err
 	}
 
-	// Collapse assumed-role sessions to the base IAM role ARN (the single, stable
-	// mapping). This is the authoritative identity the auth service issues.
-	identifier, resourceType, claims := canonicalIdentity(
-		*getCallerIdentityOutput.Arn,
-		*getCallerIdentityOutput.Account,
-		aws.ToString(getCallerIdentityOutput.UserId),
-	)
+	arn := *getCallerIdentityOutput.Arn
+	account := *getCallerIdentityOutput.Account
+	userID := aws.ToString(getCallerIdentityOutput.UserId)
+
+	// Compute every identity format valid for this attested identity, then
+	// negotiate the single chosen format against the client's preference (if any)
+	// and this verifier's configured default ordering. The always-valid floor is
+	// aws-arn (the raw caller ARN), so selection never fails.
+	candidates := awsCandidates(arn, account, userID)
+	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
+	format, identifier := models.SelectIdentityFormat(models.ProviderAWS, candidates, clientPref, v.defaultOrder)
 
 	if logger != nil {
-		logger.Logf("Successfully verified AWS identity: %s (attested: %s)",
-			identifier, *getCallerIdentityOutput.Arn)
+		logger.Logf("Successfully verified AWS identity: %s (format: %s, attested: %s)",
+			identifier, format, arn)
 	}
 
 	return &models.CloudIdentity{
 		Provider:         models.ProviderAWS,
 		Identifier:       identifier,
-		AccountID:        *getCallerIdentityOutput.Account,
+		IdentityFormat:   format,
+		AccountID:        account,
 		Region:           region,
-		ResourceType:     resourceType,
-		AdditionalClaims: claims,
+		ResourceType:     arnResourceType(arn),
+		AdditionalClaims: awsIdentityClaims(arn, userID),
+		Candidates:       candidates,
 	}, nil
 }
