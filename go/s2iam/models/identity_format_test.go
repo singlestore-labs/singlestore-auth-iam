@@ -19,18 +19,14 @@ func TestParseIdentityFormatPreference(t *testing.T) {
 }
 
 func TestDefaultIdentityFormats(t *testing.T) {
-	// The single flat built-in default ordering spanning providers; the full list
-	// is supplied as-is to every verifier (other-provider tokens are harmlessly
-	// skipped during negotiation).
+	// Lock the single flat built-in default ordering spanning providers (the final
+	// fallback inside SelectIdentityFormat). Keep it byte-identical to historical
+	// behavior: AWS raw ARN, GCP verified-email-else-numeric, Azure oid.
 	assert.Equal(t, []IdentityFormat{
 		FormatAWSARN,
 		FormatGCPSAEmail, FormatGCPSAUniqueID,
 		FormatAzureObjectID,
-	}, DefaultIdentityFormats())
-	// A fresh slice each call so callers cannot mutate the shared default.
-	a := DefaultIdentityFormats()
-	a[0] = FormatAWSIAMRoleARN
-	assert.Equal(t, FormatAWSARN, DefaultIdentityFormats()[0])
+	}, defaultIdentityFormats)
 }
 
 // awsAssumedRoleCandidates are the golden candidate values from the ticket's
@@ -54,7 +50,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			name:       "AWS new preference selects base role ARN",
 			valid:      awsAssumedRoleCandidates,
 			clientPref: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAWSIAMRoleARN,
 			wantValue:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
 		},
@@ -62,7 +58,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			name:       "AWS aws-arn preference selects raw STS ARN (session kept)",
 			valid:      awsAssumedRoleCandidates,
 			clientPref: []IdentityFormat{FormatAWSARN},
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAWSARN,
 			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
 		},
@@ -72,7 +68,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 				{Format: FormatAWSARN, Value: "arn:aws:iam::111122223333:user/alice"},
 			},
 			clientPref: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAWSARN,
 			wantValue:  "arn:aws:iam::111122223333:user/alice",
 		},
@@ -90,7 +86,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			// Non-AWS / unknown tokens simply miss the valid set and are skipped,
 			// so the server default applies.
 			clientPref: []IdentityFormat{FormatGCPSAEmail, IdentityFormat("future-token")},
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAWSARN,
 			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
 		},
@@ -112,7 +108,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 				{Format: FormatGCPSAEmail, Value: "my-sa@my-project.iam.gserviceaccount.com"},
 			},
 			clientPref: nil,
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatGCPSAEmail,
 			wantValue:  "my-sa@my-project.iam.gserviceaccount.com",
 		},
@@ -135,7 +131,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
 			},
 			clientPref: nil,
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatGCPSAUniqueID,
 			wantValue:  "104561834567890123456",
 		},
@@ -146,7 +142,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 				{Format: FormatAzureResourceID, Value: "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity"},
 			},
 			clientPref: []IdentityFormat{FormatAzureResourceID, FormatAzureObjectID},
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAzureResourceID,
 			wantValue:  "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity",
 		},
@@ -156,7 +152,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 				{Format: FormatAzureObjectID, Value: "11111111-2222-3333-4444-555555555555"},
 			},
 			clientPref: nil,
-			serverDflt: DefaultIdentityFormats(),
+			serverDflt: nil,
 			wantFormat: FormatAzureObjectID,
 			wantValue:  "11111111-2222-3333-4444-555555555555",
 		},

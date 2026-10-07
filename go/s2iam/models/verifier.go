@@ -22,9 +22,9 @@ type VerifierConfig struct {
 	// wire format: each token names its own provider, so only the relative order
 	// within a provider is meaningful and tokens for other providers are ignored
 	// by each verifier (they never match that identity's valid set). A provider
-	// with no token here
-	// uses the built-in default from DefaultIdentityFormats, which is
-	// byte-identical to the historical behavior. This is how an auth-service
+	// with no token here keeps the built-in default (byte-identical to the
+	// historical behavior), which SelectIdentityFormat always appends as the final
+	// fallback. This is how an auth-service
 	// instance opts into (for example) the new AWS default
 	// [aws-iam-role-arn, aws-arn] without a client change, and how versioned
 	// endpoints can differ only in their default ordering.

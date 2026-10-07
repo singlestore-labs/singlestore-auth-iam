@@ -46,10 +46,9 @@ type AzureVerifier struct {
 // sets the identity-format ordering used when a request carries no (valid)
 // preference. It may be empty and may span providers; non-Azure tokens are
 // harmlessly ignored, and SelectIdentityFormat always falls back to the built-in
-// default (models.DefaultIdentityFormats, which for Azure resolves to
-// azure-object-id, byte-identical to historical behavior with an internal sub
-// floor), so Azure keeps its default even when defaultOrder names only other
-// providers.
+// default (which for Azure resolves to azure-object-id, byte-identical to
+// historical behavior with an internal sub floor), so Azure keeps its default
+// even when defaultOrder names only other providers.
 func NewVerifier(allowedAudiences []string, tenant string, logger models.Logger, defaultOrder ...models.IdentityFormat) models.CloudProviderVerifier {
 	if tenant == "" {
 		tenant = defaultAzureTenant // Use the common endpoint by default

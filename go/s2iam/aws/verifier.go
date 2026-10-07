@@ -42,10 +42,9 @@ type AWSVerifier struct {
 // NewVerifier configures the AWS verifier. The optional defaultOrder sets the
 // identity-format ordering used when a request carries no (valid) preference. It
 // may be empty and may span providers; non-AWS tokens are harmlessly ignored,
-// and SelectIdentityFormat always falls back to the built-in default
-// (models.DefaultIdentityFormats, which for AWS resolves to aws-arn,
-// byte-identical to historical behavior), so AWS keeps its default even when
-// defaultOrder names only other providers.
+// and SelectIdentityFormat always falls back to the built-in default (which for
+// AWS resolves to aws-arn, byte-identical to historical behavior), so AWS keeps
+// its default even when defaultOrder names only other providers.
 func NewVerifier(logger models.Logger, defaultOrder ...models.IdentityFormat) models.CloudProviderVerifier {
 	return &AWSVerifier{
 		logger:       logger,

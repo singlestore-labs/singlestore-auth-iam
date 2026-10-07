@@ -67,24 +67,18 @@ type IdentityCandidate struct {
 	Value  string
 }
 
-// DefaultIdentityFormats returns the single built-in default ordering: a flat
-// list spanning providers (each token names its own provider). A verifier uses
-// it when a request carries no (valid) preference and no server default is
-// configured. The full list is supplied as-is to every provider verifier — no
-// per-provider filtering is needed, because negotiation only ever returns a
-// format that is valid for the identity at hand, so tokens belonging to other
-// providers are harmlessly skipped. These defaults are deliberately byte-
-// identical to the historical behavior: AWS keeps the raw ARN, GCP keeps
+// defaultIdentityFormats is the single built-in default ordering: a flat list
+// spanning providers (each token names its own provider), used by
+// SelectIdentityFormat as the final fallback when neither the client preference
+// nor the server override selects a format. It is deliberately byte-identical to
+// the historical behavior: AWS keeps the raw ARN, GCP keeps
 // verified-email-else-numeric-id, and Azure keeps the oid (with an internal sub
 // floor). The new AWS ordering ([aws-iam-role-arn, aws-arn]) is opt-in via
-// preference or server config. A fresh slice is returned so callers cannot
-// mutate the shared default.
-func DefaultIdentityFormats() []IdentityFormat {
-	return []IdentityFormat{
-		FormatAWSARN,
-		FormatGCPSAEmail, FormatGCPSAUniqueID,
-		FormatAzureObjectID,
-	}
+// client preference or server override. Treat as read-only.
+var defaultIdentityFormats = []IdentityFormat{
+	FormatAWSARN,
+	FormatGCPSAEmail, FormatGCPSAUniqueID,
+	FormatAzureObjectID,
 }
 
 // ParseIdentityFormatPreference parses a comma-separated preference list: values
@@ -116,7 +110,7 @@ func ParseIdentityFormatPreference(s string) []IdentityFormat {
 // serverOverride is the instance's configured override ordering (may be empty).
 //
 // The algorithm walks three preference lists in priority order — the client
-// preference, the server override, then the static built-in DefaultIdentityFormats
+// preference, the server override, then the static built-in defaultIdentityFormats
 // — and returns the first token valid for this identity; if none match it fails
 // closed to the floor (valid[0]), which is always valid, so selection never
 // fails. Concatenating the built-in last means every provider keeps its
@@ -133,7 +127,7 @@ func SelectIdentityFormat(valid []IdentityCandidate, clientPref, serverOverride 
 		validByFormat[c.Format] = c.Value
 	}
 
-	for _, list := range [][]IdentityFormat{clientPref, serverOverride, DefaultIdentityFormats()} {
+	for _, list := range [][]IdentityFormat{clientPref, serverOverride, defaultIdentityFormats} {
 		for _, f := range list {
 			if v, ok := validByFormat[f]; ok {
 				return f, v
