@@ -25,11 +25,17 @@ _PREFERENCE_UNSET = object()
 def _resolve_identity_format_preference(preference: Any) -> list[str]:
     """Resolve the effective preference using option > env var > built-in default.
 
+    A bare string is parsed as a comma-separated list, matching the env var and CLI
+    forms; list() would otherwise split it into individual characters. Any other
+    iterable is taken as an already-split sequence of tokens.
+
     The built-in default is [aws-arn], byte-identical to the historical behavior:
     GCP/Azure tokens are absent, so those providers fall through to the verifier's
     default ordering (also unchanged).
     """
     if preference is not _PREFERENCE_UNSET and preference is not None:
+        if isinstance(preference, str):
+            return parse_identity_format_preference(preference)
         return list(preference)
     import os
 

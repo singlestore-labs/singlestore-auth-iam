@@ -115,8 +115,14 @@ test-local-patterns:
 	   exit 1; \
 	 fi
 
-# lint comes last so a missing or broken linter does not stop the tests from running.
-test-local: test-local-patterns test-local-go test-local-python test-local-java lint
+# Sequenced inside the recipe rather than as sibling prerequisites so the ordering
+# still holds under make -j: run the tests first, then lint, so a missing or broken
+# linter cannot stop the tests from running.
+test-local: test-local-patterns
+	$(MAKE) test-local-go
+	$(MAKE) test-local-python
+	$(MAKE) test-local-java
+	$(MAKE) lint
 	@echo "✓ All local tests passed"
 
 test-local-go:
