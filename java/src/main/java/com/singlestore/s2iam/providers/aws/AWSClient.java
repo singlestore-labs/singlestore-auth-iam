@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import software.amazon.awssdk.arns.Arn;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -171,8 +172,8 @@ public class AWSClient extends AbstractBaseClient {
       String[] assumed = parseAssumedRoleArn(arn);
       if (assumed != null) {
         extra.put("assumedRoleArn", arn);
-        if (!assumed[1].isEmpty())
-          extra.put("roleSessionName", assumed[1]);
+        if (!assumed[2].isEmpty())
+          extra.put("roleSessionName", assumed[2]);
       }
       List<IdentityFormat.Candidate> candidates = awsCandidates(arn, account, userId);
       IdentityFormat.Candidate floor = candidates.get(0);
@@ -212,8 +213,11 @@ public class AWSClient extends AbstractBaseClient {
     candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ARN, arn));
     String[] assumed = parseAssumedRoleArn(arn);
     if (assumed != null) {
+      // Preserve the source partition (aws, aws-us-gov, aws-cn); the STS
+      // assumed-role ARN omits the IAM path, so this is the path-less canonical
+      // form arn:PARTITION:iam::ACCOUNT:role/ROLE.
       candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_IAM_ROLE_ARN,
-          "arn:aws:iam::" + account + ":role/" + assumed[0]));
+          "arn:" + assumed[0] + ":iam::" + account + ":role/" + assumed[1]));
       String roleId = roleIdFromUserId(userId);
       if (!roleId.isEmpty())
         candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ROLE_ID, roleId));
@@ -232,22 +236,32 @@ public class AWSClient extends AbstractBaseClient {
     return i >= 0 ? userId.substring(0, i) : "";
   }
 
-  /**
-   * Returns {roleName, sessionName} for an STS assumed-role ARN
-   * (arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION), or null for any other ARN
-   * shape. Neither ROLE nor SESSION may contain '/'.
-   */
-  static String[] parseAssumedRoleArn(String arn) {
+  /** Parse an ARN with the AWS SDK, or null if the string is not a valid ARN. */
+  private static Arn parseArn(String arn) {
     if (arn == null)
       return null;
-    String[] parts = arn.split(":");
-    if (parts.length < 6 || !"sts".equals(parts[2]))
+    try {
+      return Arn.fromString(arn);
+    } catch (RuntimeException e) {
       return null;
-    String[] seg = parts[5].split("/", 3);
+    }
+  }
+
+  /**
+   * Returns {partition, roleName, sessionName} for an STS assumed-role ARN
+   * (arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION), or null for any other
+   * ARN shape. The resource sub-structure is not modeled by the SDK's Arn type,
+   * so it is split here; neither ROLE nor SESSION may contain '/'.
+   */
+  static String[] parseAssumedRoleArn(String arn) {
+    Arn parsed = parseArn(arn);
+    if (parsed == null || !"sts".equals(parsed.service()))
+      return null;
+    String[] seg = parsed.resourceAsString().split("/", 3);
     if (seg.length < 2 || !"assumed-role".equals(seg[0]) || seg[1].isEmpty())
       return null;
     String session = seg.length == 3 ? seg[2] : "";
-    return new String[]{seg[1], session};
+    return new String[]{parsed.partition(), seg[1], session};
   }
 
   private void ensureSTS() {
@@ -264,8 +278,8 @@ public class AWSClient extends AbstractBaseClient {
     }
   }
   private static String deriveRegion(String arn) {
-    String[] parts = arn.split(":");
-    return parts.length > 3 ? parts[3] : "";
+    Arn parsed = parseArn(arn);
+    return parsed != null ? parsed.region().orElse("") : "";
   }
   private static String deriveResourceTypeDetailed(String arn) {
     if (arn.contains(":instance/"))

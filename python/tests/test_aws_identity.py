@@ -44,6 +44,16 @@ def test_base_role_arn_is_session_independent():
     assert a == b == IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, "arn:aws:iam::503396375767:role/NoPermissionsRole")
 
 
+def test_base_role_arn_preserves_partition():
+    # GovCloud/China: the derived base role ARN must keep the source partition so
+    # it stays byte-identical to the Go verifier's issued JWT sub.
+    gov = aws_candidates(
+        "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+        "503396375767",
+    )[1]
+    assert gov == IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, "arn:aws-us-gov:iam::503396375767:role/NoPermissionsRole")
+
+
 def test_iam_user_has_only_the_raw_arn_floor():
     arn = "arn:aws:iam::123456789012:user/Alice"
     candidates = aws_candidates(arn, "123456789012", "AIDAEXAMPLE")

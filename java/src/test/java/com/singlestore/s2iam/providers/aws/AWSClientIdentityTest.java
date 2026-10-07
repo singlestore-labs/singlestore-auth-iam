@@ -41,6 +41,16 @@ public class AWSClientIdentityTest {
   }
 
   @Test
+  void baseRoleArnPreservesPartition() {
+    // GovCloud/China: the derived base role ARN must keep the source partition so
+    // it stays byte-identical to the Go verifier's issued JWT sub.
+    IdentityFormat.Candidate gov = AWSClient.awsCandidates(
+        "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+        "503396375767", "AROAX:s2iam-session").get(1);
+    assertEquals("arn:aws-us-gov:iam::503396375767:role/NoPermissionsRole", gov.value);
+  }
+
+  @Test
   void iamUserHasOnlyTheRawArnFloor() {
     String arn = "arn:aws:iam::123456789012:user/Alice";
     List<IdentityFormat.Candidate> c = AWSClient.awsCandidates(arn, "123456789012", "AIDAEXAMPLE");

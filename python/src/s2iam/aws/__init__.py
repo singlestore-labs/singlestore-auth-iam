@@ -9,6 +9,13 @@ import asyncio
 import os
 from typing import Any, Optional
 
+from botocore.utils import ArnParser
+
+try:  # botocore moved this between versions
+    from botocore.exceptions import InvalidArnException
+except ImportError:  # pragma: no cover
+    from botocore.utils import InvalidArnException
+
 from ..identity_format import (
     FORMAT_AWS_ARN,
     FORMAT_AWS_IAM_ROLE_ARN,
@@ -42,29 +49,47 @@ def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) 
     return DEFAULT_ROLE_SESSION_NAME
 
 
-def _parse_assumed_role_arn(arn: str) -> Optional[tuple[str, str]]:
-    """Return (role_name, session_name) for an STS assumed-role ARN, else None.
+_ARN_PARSER = ArnParser()
 
-    Format: arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION. Neither ROLE nor
-    SESSION may contain '/'.
+
+def _parse_arn(arn: str) -> Optional[dict[str, str]]:
+    """Parse an ARN into its components with botocore, or None if malformed.
+
+    Returns a dict with keys partition, service, region, account, resource.
+    Uses botocore (already a dependency via boto3) rather than hand-rolled
+    ':'-splitting; the resource keeps any internal delimiters verbatim.
     """
-    parts = arn.split(":")
-    if len(parts) < 6 or parts[2] != "sts":
+    try:
+        parsed: dict[str, str] = _ARN_PARSER.parse_arn(arn)
+    except InvalidArnException:
         return None
-    segments = parts[5].split("/", 2)
+    return parsed
+
+
+def _parse_assumed_role_arn(arn: str) -> Optional[tuple[str, str, str]]:
+    """Return (partition, role_name, session_name) for an STS assumed-role ARN, else None.
+
+    Format: arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION. The resource
+    sub-structure is not modeled by the parser, so it is split here; neither ROLE
+    nor SESSION may contain '/'.
+    """
+    parsed = _parse_arn(arn)
+    if parsed is None or parsed["service"] != "sts":
+        return None
+    segments = parsed["resource"].split("/", 2)
     if len(segments) < 2 or segments[0] != "assumed-role" or not segments[1]:
         return None
     session_name = segments[2] if len(segments) == 3 else ""
-    return segments[1], session_name
+    return parsed["partition"], segments[1], session_name
 
 
 def _arn_resource_type(arn: str) -> str:
-    parts = arn.split(":")
-    if len(parts) >= 6:
-        resource_parts = parts[5].split("/")
-        if len(resource_parts) >= 2 and resource_parts[0]:
-            return resource_parts[0]
-    return ""
+    parsed = _parse_arn(arn)
+    if parsed is None:
+        return ""
+    resource = parsed["resource"]
+    resource_type = resource.split("/", 1)[0] if "/" in resource else ""
+    return resource_type
 
 
 def _role_id_from_user_id(user_id: str) -> str:
@@ -99,8 +124,12 @@ def aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCa
 
     parsed = _parse_assumed_role_arn(arn)
     if parsed is not None:
-        role_name, _ = parsed
-        candidates.append(IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, f"arn:aws:iam::{account}:role/{role_name}"))
+        partition, role_name, _ = parsed
+        # Preserve the source partition (aws, aws-us-gov, aws-cn); the STS
+        # assumed-role ARN omits the IAM path, so this is the path-less canonical
+        # form arn:PARTITION:iam::ACCOUNT:role/ROLE.
+        base_role_arn = f"arn:{partition}:iam::{account}:role/{role_name}"
+        candidates.append(IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, base_role_arn))
         role_id = _role_id_from_user_id(user_id)
         if role_id:
             candidates.append(IdentityCandidate(FORMAT_AWS_ROLE_ID, role_id))
@@ -120,7 +149,7 @@ def aws_identity_claims(arn: str, user_id: str = "") -> dict[str, str]:
         claims[CLAIM_USER_ID] = user_id
     parsed = _parse_assumed_role_arn(arn)
     if parsed is not None:
-        _, session_name = parsed
+        _, _, session_name = parsed
         claims[CLAIM_ASSUMED_ROLE_ARN] = arn
         if session_name:
             claims[CLAIM_ROLE_SESSION_NAME] = session_name
@@ -349,9 +378,9 @@ class AWSClient(CloudProviderClient):
                     }
 
             arn = identity_resp["Arn"]
-            parts = arn.split(":")
             # Region comes from the raw ARN (empty for assumed-role STS ARNs).
-            region_from_arn = parts[3] if len(parts) > 3 else ""
+            parsed_arn = _parse_arn(arn)
+            region_from_arn = parsed_arn["region"] if parsed_arn else ""
 
             # If region unset locally (IRSA path without env/metadata), adopt ARN region
             if not self._region and region_from_arn:
