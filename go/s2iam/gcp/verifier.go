@@ -46,9 +46,10 @@ type GCPVerifier struct {
 
 // NewVerifier creates a new GCP verifier instance. The optional defaultOrder
 // sets the identity-format ordering used when a request carries no (valid)
-// preference; when empty the built-in default
-// ([gcp-sa-email, gcp-sa-unique-id], byte-identical to historical behavior) is
-// used.
+// preference; when empty the built-in default (models.DefaultIdentityFormats,
+// which for GCP resolves to [gcp-sa-email, gcp-sa-unique-id], byte-identical to
+// historical behavior) is used. The ordering may span providers; non-GCP tokens
+// are harmlessly ignored.
 func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.Logger, defaultOrder ...models.IdentityFormat) (models.CloudProviderVerifier, error) {
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
@@ -60,7 +61,7 @@ func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.L
 	}
 
 	if len(defaultOrder) == 0 {
-		defaultOrder = models.DefaultIdentityFormatOrder(models.ProviderGCP)
+		defaultOrder = models.DefaultIdentityFormats()
 	}
 
 	return &GCPVerifier{
@@ -293,7 +294,7 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 	emailVerified, _ := payload.Claims["email_verified"].(bool)
 	candidates := gcpCandidates(sub, email, emailVerified)
 	format, identifier := models.SelectIdentityFormat(
-		models.ProviderGCP, candidates, nil, models.DefaultIdentityFormatOrder(models.ProviderGCP))
+		models.ProviderGCP, candidates, nil, models.DefaultIdentityFormats())
 	if logger != nil {
 		logger.Logf("DEBUG: Default GCP identity format %s -> %s (email_verified=%t)", format, identifier, emailVerified)
 	}

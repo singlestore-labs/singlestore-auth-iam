@@ -22,7 +22,7 @@ type VerifierConfig struct {
 	// wire format: each token names its own provider (see IdentityFormat.Provider),
 	// so only the relative order within a provider is meaningful and tokens for
 	// other providers are ignored by each verifier. A provider with no token here
-	// uses the built-in default from DefaultIdentityFormatOrder, which is
+	// uses the built-in default from DefaultIdentityFormats, which is
 	// byte-identical to the historical behavior. This is how an auth-service
 	// instance opts into (for example) the new AWS default
 	// [aws-iam-role-arn, aws-arn] without a client change, and how versioned

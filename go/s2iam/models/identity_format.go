@@ -82,37 +82,24 @@ type IdentityCandidate struct {
 	Value  string
 }
 
-// defaultIdentityFormats is the single built-in default ordering: a flat list
-// spanning providers (each token names its own provider). Per-provider defaults
-// are obtained by filtering it with DefaultsForProvider, so there is exactly one
-// place that declares the built-in behavior. These defaults are deliberately
-// byte-identical to the historical behavior: AWS keeps the raw ARN, GCP keeps
+// DefaultIdentityFormats returns the single built-in default ordering: a flat
+// list spanning providers (each token names its own provider). A verifier uses
+// it when a request carries no (valid) preference and no server default is
+// configured. The full list is supplied as-is to every provider verifier — no
+// per-provider filtering is needed, because negotiation only ever returns a
+// format that is valid for the identity at hand, so tokens belonging to other
+// providers are harmlessly skipped. These defaults are deliberately byte-
+// identical to the historical behavior: AWS keeps the raw ARN, GCP keeps
 // verified-email-else-numeric-id, and Azure keeps the oid (with an internal sub
 // floor). The new AWS ordering ([aws-iam-role-arn, aws-arn]) is opt-in via
-// preference or server config.
-var defaultIdentityFormats = []IdentityFormat{
-	FormatAWSARN,
-	FormatGCPSAEmail, FormatGCPSAUniqueID,
-	FormatAzureObjectID,
-}
-
-// DefaultsForProvider returns the tokens in a flat, cross-provider ordering that
-// belong to the given provider, preserving their relative order. An empty result
-// lets a provider verifier fall back to its built-in default.
-func DefaultsForProvider(formats []IdentityFormat, provider CloudProviderType) []IdentityFormat {
-	var out []IdentityFormat
-	for _, f := range formats {
-		if f.Provider() == provider {
-			out = append(out, f)
-		}
+// preference or server config. A fresh slice is returned so callers cannot
+// mutate the shared default.
+func DefaultIdentityFormats() []IdentityFormat {
+	return []IdentityFormat{
+		FormatAWSARN,
+		FormatGCPSAEmail, FormatGCPSAUniqueID,
+		FormatAzureObjectID,
 	}
-	return out
-}
-
-// DefaultIdentityFormatOrder returns the built-in default ordering for a provider
-// (the slice of defaultIdentityFormats belonging to that provider).
-func DefaultIdentityFormatOrder(provider CloudProviderType) []IdentityFormat {
-	return DefaultsForProvider(defaultIdentityFormats, provider)
 }
 
 // ParseIdentityFormatPreference parses a comma-separated preference list: values

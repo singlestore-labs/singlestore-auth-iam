@@ -54,17 +54,18 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 	}
 
 	// Create verifiers for each cloud provider, passing the configured default
-	// identity-format ordering filtered to that provider (empty -> built-in
-	// default). DefaultIdentityFormats is a single flat list spanning providers;
-	// each token names its own provider, so we partition it here.
-	awsVerifier := aws.NewVerifier(config.Logger, models.DefaultsForProvider(config.DefaultIdentityFormats, models.ProviderAWS)...)
+	// identity-format ordering (a single flat list spanning providers; empty ->
+	// built-in default). The full list is handed to every verifier unfiltered:
+	// negotiation only ever returns a format valid for the identity at hand, so
+	// tokens for other providers are harmlessly ignored.
+	awsVerifier := aws.NewVerifier(config.Logger, config.DefaultIdentityFormats...)
 
-	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, models.DefaultsForProvider(config.DefaultIdentityFormats, models.ProviderGCP)...)
+	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, config.DefaultIdentityFormats...)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
 	}
 
-	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, models.DefaultsForProvider(config.DefaultIdentityFormats, models.ProviderAzure)...)
+	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, config.DefaultIdentityFormats...)
 
 	verifiers := map[models.CloudProviderType]models.CloudProviderVerifier{
 		models.ProviderAWS:   awsVerifier,
