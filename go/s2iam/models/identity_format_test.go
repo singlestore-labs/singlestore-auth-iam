@@ -19,13 +19,14 @@ func TestParseIdentityFormatPreference(t *testing.T) {
 }
 
 func TestDefaultIdentityFormats(t *testing.T) {
-	// Lock the single flat built-in default ordering spanning providers (the final
-	// fallback inside SelectIdentityFormat). Keep it byte-identical to historical
-	// behavior: AWS raw ARN, GCP verified-email-else-numeric, Azure oid.
+	// Lock the single canonical ordering of all formats (the final fallback inside
+	// SelectIdentityFormat). Each provider's historical default must come first so
+	// the no-preference behavior stays byte-identical: AWS raw ARN, GCP
+	// verified-email-else-numeric, Azure oid; the opt-in alternates follow.
 	assert.Equal(t, []IdentityFormat{
-		FormatAWSARN,
+		FormatAWSARN, FormatAWSIAMRoleARN, FormatAWSRoleID,
 		FormatGCPSAEmail, FormatGCPSAUniqueID,
-		FormatAzureObjectID,
+		FormatAzureObjectID, FormatAzureResourceID,
 	}, defaultIdentityFormats)
 }
 

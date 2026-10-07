@@ -67,18 +67,22 @@ type IdentityCandidate struct {
 	Value  string
 }
 
-// defaultIdentityFormats is the single built-in default ordering: a flat list
-// spanning providers (each token names its own provider), used by
-// SelectIdentityFormat as the final fallback when neither the client preference
-// nor the server override selects a format. It is deliberately byte-identical to
-// the historical behavior: AWS keeps the raw ARN, GCP keeps
-// verified-email-else-numeric-id, and Azure keeps the oid (with an internal sub
-// floor). The new AWS ordering ([aws-iam-role-arn, aws-arn]) is opt-in via
-// client preference or server override. Treat as read-only.
+// defaultIdentityFormats is the single canonical ordering of every identity
+// format, and the only place this ordering is defined. SelectIdentityFormat uses
+// it as the final fallback when neither the client preference nor the server
+// override selects a format.
+//
+// It lists all formats, but order is what matters: within each provider the
+// historical default comes first, so for an identity with no preference the
+// first valid token reproduces today's behavior byte-for-byte — AWS the raw ARN,
+// GCP the verified email else the numeric id, Azure the oid. The remaining
+// per-provider formats (aws-iam-role-arn, aws-role-id, azure-resource-id) follow
+// their provider's default and are therefore only ever chosen when explicitly
+// requested via the client preference or server override. Treat as read-only.
 var defaultIdentityFormats = []IdentityFormat{
-	FormatAWSARN,
+	FormatAWSARN, FormatAWSIAMRoleARN, FormatAWSRoleID,
 	FormatGCPSAEmail, FormatGCPSAUniqueID,
-	FormatAzureObjectID,
+	FormatAzureObjectID, FormatAzureResourceID,
 }
 
 // ParseIdentityFormatPreference parses a comma-separated preference list: values
