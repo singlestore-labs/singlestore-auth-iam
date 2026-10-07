@@ -41,13 +41,12 @@ type Config struct {
 	InfoFile         string // Path to atomically written server info
 	ShutdownOnStdin  bool   // Graceful shutdown when stdin closes
 
-	// Per-provider default identity-format ordering (comma-separated tokens) used
-	// when a request carries no preference header. Empty -> built-in default. This
-	// lets tests exercise the configurable default ordering (e.g. the new AWS
-	// default) and model versioned auth-server endpoints.
-	AWSDefaultIdentityFormat   string
-	GCPDefaultIdentityFormat   string
-	AzureDefaultIdentityFormat string
+	// Default identity-format ordering (comma-separated tokens, spanning providers)
+	// used when a request carries no preference header. Empty -> built-in default.
+	// Each token names its own provider, so one flat list suffices. This lets tests
+	// exercise the configurable default ordering (e.g. the new AWS default) and
+	// model versioned auth-server endpoints.
+	DefaultIdentityFormat string
 }
 
 // Standardized timeouts (avoid magic numbers)
@@ -136,9 +135,7 @@ func parseFlags() Config {
 	flag.DurationVar(&config.Timeout, "timeout", 0, "Auto-shutdown timeout (0 = no timeout)")
 	flag.StringVar(&config.InfoFile, "info-file", "", "Write server info JSON atomically to this file")
 	flag.BoolVar(&config.ShutdownOnStdin, "shutdown-on-stdin-close", false, "Shutdown when stdin closes (for test cleanup)")
-	flag.StringVar(&config.AWSDefaultIdentityFormat, "aws-default-identity-format", "", "Comma-separated AWS default identity-format ordering (e.g. 'aws-iam-role-arn,aws-arn'); empty = built-in")
-	flag.StringVar(&config.GCPDefaultIdentityFormat, "gcp-default-identity-format", "", "Comma-separated GCP default identity-format ordering; empty = built-in")
-	flag.StringVar(&config.AzureDefaultIdentityFormat, "azure-default-identity-format", "", "Comma-separated Azure default identity-format ordering; empty = built-in")
+	flag.StringVar(&config.DefaultIdentityFormat, "default-identity-format", "", "Comma-separated default identity-format ordering spanning providers (e.g. 'aws-iam-role-arn,aws-arn,gcp-sa-email'); empty = built-in")
 
 	flag.Parse()
 
@@ -164,13 +161,9 @@ func NewServer(config Config) (*Server, error) {
 		AzureTenant:      config.AzureTenant,
 	}
 
-	// Wire any configured default identity-format ordering as a single flat list
-	// spanning providers (each token names its own provider).
-	var defaults []models.IdentityFormat
-	defaults = append(defaults, models.ParseIdentityFormatPreference(config.AWSDefaultIdentityFormat)...)
-	defaults = append(defaults, models.ParseIdentityFormatPreference(config.GCPDefaultIdentityFormat)...)
-	defaults = append(defaults, models.ParseIdentityFormatPreference(config.AzureDefaultIdentityFormat)...)
-	verifierConfig.DefaultIdentityFormats = defaults
+	// Wire the configured default identity-format ordering (a single flat list
+	// spanning providers; each token names its own provider).
+	verifierConfig.DefaultIdentityFormats = models.ParseIdentityFormatPreference(config.DefaultIdentityFormat)
 
 	if config.Verbose {
 		verifierConfig.Logger = logger{}
