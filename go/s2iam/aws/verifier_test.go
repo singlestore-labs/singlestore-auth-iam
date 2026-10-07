@@ -94,6 +94,19 @@ func TestAWSCandidates(t *testing.T) {
 			},
 		},
 		{
+			// GovCloud/China: the derived base role ARN keeps the source partition,
+			// so it stays byte-identical across the client libraries and this verifier.
+			name:    "base role ARN preserves the source partition",
+			arn:     "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+			account: "503396375767",
+			userID:  "AROAXKNGDDTL645XYO7VP:s2iam-session",
+			wantCandidates: []models.IdentityCandidate{
+				{Format: models.FormatAWSARN, Value: "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session"},
+				{Format: models.FormatAWSIAMRoleARN, Value: "arn:aws-us-gov:iam::503396375767:role/NoPermissionsRole"},
+				{Format: models.FormatAWSRoleID, Value: "AROAXKNGDDTL645XYO7VP"},
+			},
+		},
+		{
 			name:    "IAM user exposes only the raw ARN (always-valid floor)",
 			arn:     "arn:aws:iam::123456789012:user/Alice",
 			account: "123456789012",

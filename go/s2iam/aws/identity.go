@@ -1,9 +1,9 @@
 package aws
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
@@ -27,13 +27,13 @@ const (
 // the role's immutable RoleId) are preserved so the auth service can show
 // alternates for registration-preview and audit, independent of the negotiated
 // identity format.
-func awsIdentityClaims(arn, userID string) map[string]string {
+func awsIdentityClaims(callerARN, userID string) map[string]string {
 	claims := map[string]string{}
 	if userID != "" {
 		claims[ClaimUserID] = userID
 	}
-	if _, sessionName, ok := parseAssumedRoleARN(arn); ok {
-		claims[ClaimAssumedRoleArn] = arn
+	if _, _, sessionName, ok := parseAssumedRoleARN(callerARN); ok {
+		claims[ClaimAssumedRoleArn] = callerARN
 		if sessionName != "" {
 			claims[ClaimRoleSessionName] = sessionName
 		}
@@ -60,15 +60,25 @@ func awsIdentityClaims(arn, userID string) map[string]string {
 //
 // This must stay identical between the client and the verifier so the
 // client-computed identity matches the issued JWT sub.
-func awsCandidates(arn, account, userID string) []models.IdentityCandidate {
+func awsCandidates(callerARN, account, userID string) []models.IdentityCandidate {
 	candidates := []models.IdentityCandidate{
-		{Format: models.FormatAWSARN, Value: arn},
+		{Format: models.FormatAWSARN, Value: callerARN},
 	}
 
-	if roleName, _, ok := parseAssumedRoleARN(arn); ok {
+	if parsed, roleName, _, ok := parseAssumedRoleARN(callerARN); ok {
+		// Derive the base IAM role ARN, preserving the source partition (aws,
+		// aws-us-gov, aws-cn) and dropping the region (IAM is global). The STS
+		// assumed-role ARN omits the IAM path, so this is the path-less canonical
+		// form arn:PARTITION:iam::ACCOUNT:role/ROLE.
+		baseRoleARN := arn.ARN{
+			Partition: parsed.Partition,
+			Service:   "iam",
+			AccountID: account,
+			Resource:  "role/" + roleName,
+		}.String()
 		candidates = append(candidates, models.IdentityCandidate{
 			Format: models.FormatAWSIAMRoleARN,
-			Value:  fmt.Sprintf("arn:aws:iam::%s:role/%s", account, roleName),
+			Value:  baseRoleARN,
 		})
 		if roleID := roleIDFromUserID(userID); roleID != "" {
 			candidates = append(candidates, models.IdentityCandidate{
@@ -90,34 +100,37 @@ func roleIDFromUserID(userID string) string {
 	return ""
 }
 
-// parseAssumedRoleARN returns the role name and session name of an STS
-// assumed-role ARN (arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION). ok is false
-// for any other ARN shape.
-func parseAssumedRoleARN(arn string) (roleName, sessionName string, ok bool) {
-	parts := strings.Split(arn, ":")
-	if len(parts) < 6 || parts[2] != "sts" {
-		return "", "", false
+// parseAssumedRoleARN returns the parsed ARN plus the role name and session name
+// of an STS assumed-role ARN (arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION).
+// ok is false for any other ARN shape. The resource sub-structure
+// (assumed-role/ROLE/SESSION) is not modeled by the SDK's arn package, so it is
+// split here; neither ROLE nor SESSION may contain '/'.
+func parseAssumedRoleARN(s string) (parsed arn.ARN, roleName, sessionName string, ok bool) {
+	parsed, err := arn.Parse(s)
+	if err != nil || parsed.Service != "sts" {
+		return arn.ARN{}, "", "", false
 	}
-	// resource = assumed-role/ROLE/SESSION; neither ROLE nor SESSION may contain '/'.
-	segments := strings.SplitN(parts[5], "/", 3)
+	segments := strings.SplitN(parsed.Resource, "/", 3)
 	if len(segments) < 2 || segments[0] != "assumed-role" || segments[1] == "" {
-		return "", "", false
+		return arn.ARN{}, "", "", false
 	}
 	if len(segments) == 3 {
 		sessionName = segments[2]
 	}
-	return segments[1], sessionName, true
+	return parsed, segments[1], sessionName, true
 }
 
 // arnResourceType extracts the resource type (the segment before the first '/'
 // in the resource portion of an ARN), e.g. "role", "user", "assumed-role".
-func arnResourceType(arn string) string {
-	parts := strings.Split(arn, ":")
-	if len(parts) >= 6 {
-		resourceParts := strings.Split(parts[5], "/")
-		if len(resourceParts) >= 2 {
-			return resourceParts[0]
-		}
+// Returns "" for a malformed ARN or a resource with no '/' delimiter.
+func arnResourceType(s string) string {
+	parsed, err := arn.Parse(s)
+	if err != nil {
+		return ""
 	}
-	return ""
+	resourceType, _, found := strings.Cut(parsed.Resource, "/")
+	if !found {
+		return ""
+	}
+	return resourceType
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 	"regexp"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
@@ -131,10 +131,9 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 
 	// Extract region from the raw ARN if possible (assumed-role STS ARNs carry no
 	// region, which matches historical behavior of an empty region here).
-	arnParts := strings.Split(*getCallerIdentityOutput.Arn, ":")
 	var region string
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
+	if parsed, err := arn.Parse(*getCallerIdentityOutput.Arn); err == nil {
+		region = parsed.Region
 	}
 
 	if err := validatePrincipal(*getCallerIdentityOutput.Arn); err != nil {
@@ -144,7 +143,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, err
 	}
 
-	arn := *getCallerIdentityOutput.Arn
+	callerARN := *getCallerIdentityOutput.Arn
 	account := *getCallerIdentityOutput.Account
 	userID := aws.ToString(getCallerIdentityOutput.UserId)
 
@@ -152,13 +151,13 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 	// negotiate the single chosen format against the client's preference (if any)
 	// and this verifier's configured default ordering. The always-valid floor is
 	// aws-arn (the raw caller ARN), so selection never fails.
-	candidates := awsCandidates(arn, account, userID)
+	candidates := awsCandidates(callerARN, account, userID)
 	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
 	format, identifier := models.SelectIdentityFormat(models.ProviderAWS, candidates, clientPref, v.defaultOrder)
 
 	if logger != nil {
 		logger.Logf("Successfully verified AWS identity: %s (format: %s, attested: %s)",
-			identifier, format, arn)
+			identifier, format, callerARN)
 	}
 
 	return &models.CloudIdentity{
@@ -167,8 +166,8 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		IdentityFormat:   format,
 		AccountID:        account,
 		Region:           region,
-		ResourceType:     arnResourceType(arn),
-		AdditionalClaims: awsIdentityClaims(arn, userID),
+		ResourceType:     arnResourceType(callerARN),
+		AdditionalClaims: awsIdentityClaims(callerARN, userID),
 		Candidates:       candidates,
 	}, nil
 }

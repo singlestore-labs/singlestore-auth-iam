@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
@@ -374,9 +375,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	// If region still empty (e.g., IRSA with no env vars and metadata blocked) attempt to derive from ARN
 	if c.region == "" && callerIdentity.Arn != nil {
-		arnParts := strings.Split(*callerIdentity.Arn, ":")
-		if len(arnParts) >= 4 && arnParts[3] != "" {
-			c.region = arnParts[3]
+		if parsed, err := arn.Parse(*callerIdentity.Arn); err == nil && parsed.Region != "" {
+			c.region = parsed.Region
 			if c.logger != nil {
 				c.logger.Logf("AWS GetIdentityHeaders - Derived region from ARN: %s", c.region)
 			}
@@ -461,15 +461,15 @@ func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *mo
 	// Region is taken from the raw ARN (empty for assumed-role STS ARNs), matching
 	// historical behavior.
 	var region string
-	if arnParts := strings.Split(*callerIdentity.Arn, ":"); len(arnParts) >= 4 {
-		region = arnParts[3]
+	if parsed, err := arn.Parse(*callerIdentity.Arn); err == nil {
+		region = parsed.Region
 	}
 
-	arn := *callerIdentity.Arn
+	callerARN := *callerIdentity.Arn
 	account := *callerIdentity.Account
 	userID := aws.ToString(callerIdentity.UserId)
 
-	candidates := awsCandidates(arn, account, userID)
+	candidates := awsCandidates(callerARN, account, userID)
 
 	return &models.CloudIdentity{
 		Provider:         models.ProviderAWS,
@@ -477,8 +477,8 @@ func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *mo
 		IdentityFormat:   candidates[0].Format,
 		AccountID:        account,
 		Region:           region,
-		ResourceType:     arnResourceType(arn),
-		AdditionalClaims: awsIdentityClaims(arn, userID),
+		ResourceType:     arnResourceType(callerARN),
+		AdditionalClaims: awsIdentityClaims(callerARN, userID),
 		Candidates:       candidates,
 	}
 }
