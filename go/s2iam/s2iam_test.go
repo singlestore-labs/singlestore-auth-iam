@@ -557,8 +557,16 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		negotiatedClaims := validateJWT(t, negotiatedJWT)
 		negotiatedIdentifier := negotiatedClaims["sub"].(string)
 
-		assert.Equal(t, roleIdentifier, negotiatedIdentifier,
-			"negotiated AWS identity should be the base IAM role ARN (session must not affect it)")
+		// The base IAM role ARN is path-less: the STS assumed-role ARN omits any
+		// IAM path, so derive the expected value from the role prefix and the
+		// path-less role name rather than the (possibly path-bearing) input ARN.
+		// For a root-path role this equals roleIdentifier exactly.
+		expectedBaseRoleARN := roleIdentifier
+		if i := strings.Index(roleIdentifier, ":role/"); i >= 0 {
+			expectedBaseRoleARN = roleIdentifier[:i+len(":role/")] + expectedRoleName
+		}
+		assert.Equal(t, expectedBaseRoleARN, negotiatedIdentifier,
+			"negotiated AWS identity should be the path-less base IAM role ARN (session must not affect it)")
 		assert.Equal(t, "aws-iam-role-arn", flags.lastIdentityFormat,
 			"negotiated AWS identity format should be aws-iam-role-arn")
 		assert.Equal(t, flags.lastIdentifier, negotiatedIdentifier,

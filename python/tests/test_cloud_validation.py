@@ -298,9 +298,14 @@ class TestAssumeRole:
             )
             negotiated_claims = _decode_jwt_payload(negotiated_jwt)
             negotiated_identifier = negotiated_claims.get("sub", "")
-            assert negotiated_identifier == role, (
-                f"negotiated AWS identity should be the base IAM role ARN {role!r} "
-                f"(session name must not affect it), got {negotiated_identifier!r}"
+            # The base IAM role ARN is path-less: the STS assumed-role ARN omits any
+            # IAM path, so derive the expected value from the role prefix and the
+            # path-less role name rather than the (possibly path-bearing) input ARN.
+            # For a root-path role this equals `role` exactly.
+            expected_base_role_arn = role[: role.index(":role/") + len(":role/")] + role_name
+            assert negotiated_identifier == expected_base_role_arn, (
+                f"negotiated AWS identity should be the path-less base IAM role ARN "
+                f"{expected_base_role_arn!r} (session name must not affect it), got {negotiated_identifier!r}"
             )
 
 
