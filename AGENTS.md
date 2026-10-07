@@ -12,6 +12,10 @@ Keep the implementations structurally aligned — same names, ordering, and
 vocabulary, with parallel comments — so they can be audited by eye across
 languages. Diverge only where justified (e.g. the verifier is Go-only).
 
+For large cross-language changes, settle the Go design first, then consider
+delegating the Python/Java ports to subagents — and review the results for
+structural alignment.
+
 ## Compatibility
 The wire protocol is additive: format tokens are stable forever, unknown tokens
 are ignored, and the default on-the-wire behavior must not change. Make new
