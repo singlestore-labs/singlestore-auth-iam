@@ -51,6 +51,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
     providers (each token names its own provider); the built-in defaults preserve historical
     behavior (`[aws-arn]`, `[gcp-sa-email, gcp-sa-unique-id]`, `[azure-object-id]`).
 
+### Changed
+- **Python now requires 3.10 or newer** (was 3.9). Python 3.9 reached end of life in
+  October 2025 and is no longer supported by the type checker the project pins.
+
 ### Fixed
 - Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.
 
