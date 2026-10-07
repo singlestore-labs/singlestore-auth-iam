@@ -53,9 +53,10 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 		config.AllowedAudiences = []string{"https://authsvc.singlestore.com"}
 	}
 
-	// Create verifiers for each cloud provider, passing the configured default
-	// identity-format ordering (a single flat list spanning providers; empty ->
-	// built-in default). The full list is handed to every verifier unfiltered:
+	// Pass the operator's configured override ordering (may be empty) to every
+	// verifier. SelectIdentityFormat concatenates client preference, this override,
+	// and the static built-in default, so a provider the operator didn't mention
+	// still keeps its historical default. The full flat list is used unfiltered —
 	// negotiation only ever returns a format valid for the identity at hand, so
 	// tokens for other providers are harmlessly ignored.
 	awsVerifier := aws.NewVerifier(config.Logger, config.DefaultIdentityFormats...)

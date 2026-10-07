@@ -113,39 +113,31 @@ func ParseIdentityFormatPreference(s string) []IdentityFormat {
 // valid is the verifier-derived, ordered list of candidate formats that are
 // valid for this identity (floor first; must be non-empty). clientPref is the
 // client's requested ordering (may span providers and include unknown tokens).
-// serverDefault is the instance's configured default ordering (may be nil, and
-// may name only some providers).
+// serverOverride is the instance's configured override ordering (may be empty).
 //
-// The algorithm: walk clientPref, then serverDefault, then the built-in
-// DefaultIdentityFormats, and return the first token that is valid for this
-// identity; if none match, fail closed to the floor (valid[0]), which is always
-// valid — so selection never fails.
+// The algorithm walks three preference lists in priority order — the client
+// preference, the server override, then the static built-in DefaultIdentityFormats
+// — and returns the first token valid for this identity; if none match it fails
+// closed to the floor (valid[0]), which is always valid, so selection never
+// fails. Concatenating the built-in last means every provider keeps its
+// historical default even when the override names only other providers.
 //
-// Appending the built-in defaults last guarantees that every provider keeps its
-// historical default even when serverDefault only names other providers (e.g.
-// an instance configured with an AWS-only default list must not downgrade a
-// verified GCP email to the numeric floor). No provider filtering is needed:
-// valid is already scoped to this identity's provider, so unknown tokens and
-// tokens belonging to other providers simply miss the validByFormat lookup and
-// are skipped.
-//
-// Negotiation can only reorder among already-valid, verifier-derived
-// representations of the same principal; it can never broaden a match or cross
-// identities.
-func SelectIdentityFormat(valid []IdentityCandidate, clientPref, serverDefault []IdentityFormat) (IdentityFormat, string) {
+// No provider filtering is needed: valid is already scoped to this identity's
+// provider, so unknown tokens and tokens belonging to other providers simply
+// miss the validByFormat lookup and are skipped. Negotiation can only reorder
+// among already-valid, verifier-derived representations of the same principal;
+// it can never broaden a match or cross identities.
+func SelectIdentityFormat(valid []IdentityCandidate, clientPref, serverOverride []IdentityFormat) (IdentityFormat, string) {
 	validByFormat := make(map[IdentityFormat]string, len(valid))
 	for _, c := range valid {
 		validByFormat[c.Format] = c.Value
 	}
 
-	builtin := DefaultIdentityFormats()
-	candidateOrder := make([]IdentityFormat, 0, len(clientPref)+len(serverDefault)+len(builtin))
-	candidateOrder = append(candidateOrder, clientPref...)
-	candidateOrder = append(candidateOrder, serverDefault...)
-	candidateOrder = append(candidateOrder, builtin...)
-	for _, f := range candidateOrder {
-		if v, ok := validByFormat[f]; ok {
-			return f, v
+	for _, list := range [][]IdentityFormat{clientPref, serverOverride, DefaultIdentityFormats()} {
+		for _, f := range list {
+			if v, ok := validByFormat[f]; ok {
+				return f, v
+			}
 		}
 	}
 	return valid[0].Format, valid[0].Value
