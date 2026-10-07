@@ -21,6 +21,10 @@ behavior opt-in.
 Prefer importing a well-maintained package over reimplementing (e.g. use the
 cloud SDKs' ARN parsers). Reuse existing deps before adding new ones.
 
+## Code
+No dead code — delete unused code instead of leaving it. Keep public APIs
+minimal; don't export more than callers need.
+
 ## Testing
 - Use the `make` targets; don't run tools by hand in ways that bypass them.
 - Run everything you can before pushing: `make format`, then `make test` and
