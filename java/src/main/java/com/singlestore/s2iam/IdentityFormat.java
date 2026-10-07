@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Shared identity-format vocabulary and content-negotiation logic.
@@ -120,15 +121,10 @@ public final class IdentityFormat {
    * negotiation).
    */
   public static List<String> parsePreference(String value) {
-    List<String> out = new ArrayList<>();
     if (value == null || value.isEmpty())
-      return out;
-    for (String p : value.split(",")) {
-      String t = p.trim();
-      if (!t.isEmpty())
-        out.add(t);
-    }
-    return out;
+      return new ArrayList<>();
+    return Arrays.stream(value.split(",")).map(String::trim).filter(t -> !t.isEmpty())
+        .collect(Collectors.toList());
   }
 
   /**
@@ -153,21 +149,19 @@ public final class IdentityFormat {
     for (Candidate c : valid)
       validByFormat.put(c.format, c.value);
 
+    // candidate order = clientPref filtered to this provider, then the server
+    // default appended as the fail-closed fallback; the first server-supported,
+    // valid token wins, else the floor (valid.get(0), always valid).
     List<String> candidateOrder = new ArrayList<>();
     if (clientPref != null) {
       for (String f : clientPref)
         if (provider.equals(provider(f)))
           candidateOrder.add(f);
     }
-    if (candidateOrder.isEmpty())
-      candidateOrder = serverDefault;
+    if (serverDefault != null)
+      candidateOrder.addAll(serverDefault);
 
     for (String f : candidateOrder) {
-      String v = validByFormat.get(f);
-      if (v != null)
-        return new Candidate(f, v);
-    }
-    for (String f : serverDefault) {
       String v = validByFormat.get(f);
       if (v != null)
         return new Candidate(f, v);

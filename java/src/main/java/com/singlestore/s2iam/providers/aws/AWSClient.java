@@ -28,6 +28,11 @@ public class AWSClient extends AbstractBaseClient {
   /** Stable default when AssumeRole is used without an explicit session name. */
   public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
 
+  // AdditionalClaims keys populated for AWS identities (preserved for audit /
+  // registration-preview, independent of the negotiated identity format).
+  public static final String CLAIM_ASSUMED_ROLE_ARN = "assumedRoleArn";
+  public static final String CLAIM_ROLE_SESSION_NAME = "roleSessionName";
+
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
   // Identity headers always reflect either the base credentials or an assumed
@@ -171,9 +176,9 @@ public class AWSClient extends AbstractBaseClient {
       // ARN; the raw ARN and session name are preserved as claims for audit.
       String[] assumed = parseAssumedRoleArn(arn);
       if (assumed != null) {
-        extra.put("assumedRoleArn", arn);
+        extra.put(CLAIM_ASSUMED_ROLE_ARN, arn);
         if (!assumed[2].isEmpty())
-          extra.put("roleSessionName", assumed[2]);
+          extra.put(CLAIM_ROLE_SESSION_NAME, assumed[2]);
       }
       List<IdentityFormat.Candidate> candidates = awsCandidates(arn, account, userId);
       IdentityFormat.Candidate floor = candidates.get(0);
@@ -217,7 +222,7 @@ public class AWSClient extends AbstractBaseClient {
       // assumed-role ARN omits the IAM path, so this is the path-less canonical
       // form arn:PARTITION:iam::ACCOUNT:role/ROLE.
       candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_IAM_ROLE_ARN,
-          "arn:" + assumed[0] + ":iam::" + account + ":role/" + assumed[1]));
+          String.format("arn:%s:iam::%s:role/%s", assumed[0], account, assumed[1])));
       String roleId = roleIdFromUserId(userId);
       if (!roleId.isEmpty())
         candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ROLE_ID, roleId));
@@ -251,7 +256,8 @@ public class AWSClient extends AbstractBaseClient {
    * Returns {partition, roleName, sessionName} for an STS assumed-role ARN
    * (arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION), or null for any other
    * ARN shape. The resource sub-structure is not modeled by the SDK's Arn type,
-   * so it is split here; neither ROLE nor SESSION may contain '/'.
+   * so it is split here; neither ROLE nor SESSION may contain '/'. ROLE must be
+   * non-empty; SESSION may be empty (returned as "").
    */
   static String[] parseAssumedRoleArn(String arn) {
     Arn parsed = parseArn(arn);

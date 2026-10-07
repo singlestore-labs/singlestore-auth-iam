@@ -109,8 +109,14 @@ public class S2IAMJwtAssumeRoleTest {
           negotiatedOpts.toArray(new JwtOption[0]));
       String negotiatedSub = decodeSub(negotiatedJwt);
       JsonNode negotiatedReq = fetchLastRequest();
-      assertEquals(role, negotiatedSub,
-          "negotiated AWS identity should be the base IAM role ARN (session must not affect it)");
+      // The base IAM role ARN is path-less: the STS assumed-role ARN omits any IAM
+      // path, so derive the expected value from the role prefix and the role name
+      // fragment rather than the (possibly path-bearing) input ARN. For a root-path
+      // role this equals `role` exactly; the (deprecated) session must not affect it.
+      String expectedBaseRoleArn = role.substring(0, role.indexOf(":role/") + ":role/".length())
+          + roleNameFragment;
+      assertEquals(expectedBaseRoleArn, negotiatedSub,
+          "negotiated AWS identity should be the path-less base IAM role ARN (session must not affect it)");
       assertEquals(IdentityFormat.AWS_IAM_ROLE_ARN,
           negotiatedReq.path("identity").path("identityFormat").asText(),
           "negotiated AWS identity format should be aws-iam-role-arn");
