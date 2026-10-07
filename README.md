@@ -252,15 +252,17 @@ cannot be honored.
 
 #### Format vocabulary
 
-| Format token | Provider | Meaning | Applicability |
-|--------------|----------|---------|---------------|
-| `aws-arn` | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles | Always (floor / default); pre-configurable only when the session name is stable (see below) |
-| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` | Assumed-role sessions only |
-| `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`) | Assumed-role sessions only |
-| `gcp-sa-email` | GCP | Service account email | Verified email only |
-| `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) |
-| `azure-object-id` | Azure | `oid` principal (object id) | Always (floor / default) |
-| `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only |
+| Format token | Provider | Meaning | Applicability | Example `sub` |
+|--------------|----------|---------|---------------|---------------|
+| `aws-arn` * | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles | Always (floor / default); pre-configurable only when the session name is stable (see below) | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
+| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` | Assumed-role sessions only | `arn:aws:iam::123456789012:role/MyRole` |
+| `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`) | Assumed-role sessions only | `AROAEXAMPLEID1234567` |
+| `gcp-sa-email` * | GCP | Service account email | Verified email only | `my-sa@my-project.iam.gserviceaccount.com` |
+| `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) | `103547991597142817347` |
+| `azure-object-id` * | Azure | `oid` principal (object id) | Always (floor / default) | `11111111-2222-3333-4444-555555555555` |
+| `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
+
+`*` marks the provider default — the `sub` you get when you send no preference.
 
 #### `aws-arn` and session names
 
@@ -292,6 +294,17 @@ s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-
 # Confirm which identity you'll be authorized as (prints the JWT `sub` to stderr)
 s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace --print-sub >/dev/null
 ```
+
+If you only have the raw JWT (e.g. a protocol-only client without the CLI), decode the
+payload to read the issued `sub` directly (handling base64url padding):
+
+```bash
+echo "$TOKEN" | cut -d. -f2 | python3 -c 'import sys,base64,json; d=sys.stdin.read().strip(); d+="="*(-len(d)%4); print(json.loads(base64.urlsafe_b64decode(d))["sub"])'
+```
+
+Decode the issued JWT, inspect its `sub`, and register the cloud principal / database
+user for the exact `sub` form you intend to use so the identity you authorize as matches
+what you configured.
 
 Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**.
 Language options: `WithIdentityFormatPreference(...)` (Go),

@@ -59,24 +59,17 @@ Long-lived IAM user access keys without a session token are not sufficient.
 ### Resulting identity
 
 The service verifies the credentials with STS `GetCallerIdentity`. **By default the
-verified identity is the raw caller ARN** returned by STS, e.g.
+verified identity (JWT `sub`) is the raw caller ARN** returned by STS, e.g.
 `arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME` for an assumed-role session
 (instance profile, IRSA, or explicit `AssumeRole`) or `arn:aws:iam::ACCOUNT:user/NAME`
 for an IAM user.
 
-Clients can opt into alternate representations with the
-`X-S2IAM-Identity-Format-Preference` header (see
-[Identity format preferences](#identity-format-preferences) below). In particular,
-requesting `aws-iam-role-arn,aws-arn` collapses any assumed-role session to the
-**base IAM role ARN** `arn:aws:iam::ACCOUNT:role/ROLE_NAME` — the caller-chosen session
-name does not affect this form. Register cloud principals and create database users to
-match whichever `sub` form you request. The base role ARN is path-less: a role under a
-non-root IAM path is represented without its path.
-
-Note that the default (session-bearing) ARN can only be pre-configured when the session
-name is stable; for most assumed-role workloads (notably EC2 instance profiles) prefer
-`aws-iam-role-arn`. See [Identity format preferences](#identity-format-preferences)
-for when a session name is stable.
+The issued `sub` can be negotiated to an alternate representation (for AWS, the
+session-stripped base IAM role ARN) via the `X-S2IAM-Identity-Format-Preference`
+request header; the chosen form is reported in the response `identityFormat` field. See
+[Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)
+in the main README for the vocabulary and semantics, and [openapi.yaml](openapi.yaml)
+for the schema.
 
 ### Database JWT: required `workspaceGroupID` query parameter
 
@@ -209,64 +202,6 @@ curl -X POST 'https://authsvc.singlestore.com/auth/iam/api' \
   -H 'Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIs...'
 ```
 
-## Identity format preferences
-
-The identity representation used for the JWT `sub` claim can be negotiated. Send an
-optional, ordered, comma-separated list of preferred formats in the
-`X-S2IAM-Identity-Format-Preference` header. The verifier selects the first format it
-supports **and** can derive for the authenticated identity, and names the selected form
-in the `identityFormat` field of the JSON response body.
-
-This mechanism is **additive and optional**. When the header is omitted the issued
-identity is each provider's default form (raw caller ARN for AWS, service-account
-email — else numeric id — for GCP, and the `oid` principal for Azure). Negotiation only
-reorders among representations the verifier already derived for the same identity; it
-never broadens a match or crosses identities. Tokens for other providers and unknown
-tokens are ignored, and if no listed format applies the verifier falls back to its
-default ordering and ultimately to the always-valid floor for the provider.
-
-The provider is implied by each token's prefix. A `*` marks the **default** form for
-that provider — the `sub` you get when you send no preference.
-
-| Format token | Meaning | Example `sub` |
-|--------------|---------|---------------|
-| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below), plain and stable for IAM users | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
-| `aws-iam-role-arn` | Session-stripped base IAM role ARN (assumed-role only) | `arn:aws:iam::123456789012:role/MyRole` |
-| `aws-role-id` | Stable `RoleId`, prefix of the STS `UserId` (assumed-role only) | `AROAEXAMPLEID1234567` |
-| `gcp-sa-email` * | Service account email (verified email only) | `my-sa@my-project.iam.gserviceaccount.com` |
-| `gcp-sa-unique-id` | Numeric service account unique id | `103547991597142817347` |
-| `azure-object-id` * | `oid` principal / object id | `11111111-2222-3333-4444-555555555555` |
-| `azure-resource-id` | `xms_mirid` resource id (user-assigned managed identity only) | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
-
-For GCP the default ordering also falls back to `gcp-sa-unique-id` when the email is
-unverified; `gcp-sa-unique-id` is the always-valid floor the verifier uses as a last
-resort.
-
-Because the `sub` must be pre-configured, the session-bearing `aws-arn` form is only
-usable when the session name is **stable**: an IAM user has no session, and an EC2
-instance profile's session name is the instance id and cannot be stabilized (use
-`aws-iam-role-arn` there). For the full discussion of when a session name is stable, and
-of the client-library options, CLI flag, and environment variable that select a
-preference, see
-[Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)
-in the main README.
-
-### Example: opt into the AWS base IAM role ARN
-
-```shell
-curl -X POST 'https://authsvc.singlestore.com/auth/iam/database?workspaceGroupID=11111111-1111-4111-8111-111111111111' \
-  -H 'X-AWS-Access-Key-ID: ASIAIOSFODNN7EXAMPLE' \
-  -H 'X-AWS-Secret-Access-Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' \
-  -H 'X-AWS-Session-Token: IQoJb3JpZ2luX2VjE...' \
-  -H 'X-S2IAM-Identity-Format-Preference: aws-iam-role-arn,aws-arn'
-```
-
-The response then reports `"identityFormat": "aws-iam-role-arn"` and the JWT `sub` is
-`arn:aws:iam::ACCOUNT:role/ROLE_NAME`. The `s2iam` client libraries, CLI, and
-`S2IAM_IDENTITY_FORMAT_PREFERENCE` environment variable set this header for you; see
-[Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)
-in the main README.
-
 ## Common mistakes
 
 | Mistake | What to do instead |
@@ -279,23 +214,6 @@ in the main README.
 | Mixing providers on one request | Pick AWS **or** GCP **or** Azure headers for each POST |
 | Omitting `workspaceGroupID`, or sending a non-UUID, on database JWT requests | Add `?workspaceGroupID=<uuid>` to `/auth/iam/database` (canonical `8-4-4-4-12` form or 32 hex digits) |
 | Confusing inbound vs outbound JWTs | Inbound = cloud provider token in headers; outbound = SingleStore `jwt` in JSON body |
-| Registering the cloud principal / database user for the wrong identity form (e.g. expecting the base IAM role ARN but the `sub` is the raw STS ARN, or vice versa) | Decode the issued JWT and inspect its `sub` to see the exact identity, then either register that value or request a matching format (see below) |
-| Using `aws-arn` with an unstable session name (EC2 instance-profile sessions use the instance id; many assumed-role sessions vary per run) — the session-bearing `sub` can never match a pre-configured principal | Prefer `aws-iam-role-arn` (session-stripped), or use an identity whose session name is stable (see [Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)) |
-
-### Checking the identity (`sub`) you actually get
-
-The identity used for authorization is the JWT `sub` claim. Decode the issued token's
-payload to see exactly which identity you were authorized as (handling base64url
-padding):
-
-```shell
-echo "$TOKEN" | cut -d. -f2 | python3 -c 'import sys,base64,json; d=sys.stdin.read().strip(); d+="="*(-len(d)%4); print(json.loads(base64.urlsafe_b64decode(d))["sub"])'
-```
-
-Register your cloud principal and create the database user for whichever `sub` form you
-intend to use, and send the `X-S2IAM-Identity-Format-Preference` header so the issued
-`sub` matches. (The `s2iam` CLI's `--print-sub` flag does the same decoding for you — see
-the [main README](../../README.md#identity-format-preferences-content-negotiation).)
 
 ## OpenAPI / Redoc "Authorize" button
 
