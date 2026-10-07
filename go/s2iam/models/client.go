@@ -54,17 +54,6 @@ type CloudIdentity struct {
 	Candidates []IdentityCandidate
 }
 
-// Candidate returns the value for the given format among this identity's valid
-// candidates, if present.
-func (i *CloudIdentity) Candidate(format IdentityFormat) (string, bool) {
-	for _, c := range i.Candidates {
-		if c.Format == format {
-			return c.Value, true
-		}
-	}
-	return "", false
-}
-
 // Logger is a simple logging interface
 type Logger interface {
 	Logf(format string, args ...interface{})
