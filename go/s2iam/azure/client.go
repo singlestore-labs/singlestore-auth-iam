@@ -417,8 +417,8 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 
 	// Extract resource type and region from token claims
 	resourceID, _ := claims["xms_mirid"].(string)
-	if mirid := resourceID; mirid != "" {
-		parts := strings.Split(mirid, "/")
+	if resourceID != "" {
+		parts := strings.Split(resourceID, "/")
 		if len(parts) > 2 {
 			for i := 0; i < len(parts)-1; i++ {
 				if parts[i] == "resourceGroups" && i+1 < len(parts) {

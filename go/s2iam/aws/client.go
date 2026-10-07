@@ -418,12 +418,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		}
 
 		// Create identity from the caller identity we already obtained
-		identity, err := c.parseIdentityFromCallerIdentity(callerIdentity)
-		if err != nil {
-			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
-		}
-
-		return headers, identity, nil
+		return headers, identityFromCallerIdentity(callerIdentity), nil
 	}
 
 	// We're using permanent credentials, so we can call GetSessionToken
@@ -481,11 +476,6 @@ func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *mo
 		AdditionalClaims: awsIdentityClaims(callerARN, userID),
 		Candidates:       candidates,
 	}
-}
-
-// parseIdentityFromCallerIdentity converts a GetCallerIdentityOutput to a CloudIdentity
-func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*models.CloudIdentity, error) {
-	return identityFromCallerIdentity(callerIdentity), nil
 }
 
 // getIdentityFromSTS calls GetCallerIdentity and populates a CloudIdentity object

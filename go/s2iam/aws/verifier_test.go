@@ -159,3 +159,40 @@ func TestAWSIdentityClaims(t *testing.T) {
 	_, ok := userClaims[ClaimAssumedRoleArn]
 	require.False(t, ok, "non-assumed-role identity must not carry AssumedRoleArn claim")
 }
+
+// TestVerifierDefaultOrder covers the operator-configured default ordering
+// (VerifierConfig.DefaultIdentityFormats, passed through to NewVerifier): it is
+// honored when a request carries no preference, and a client preference still
+// takes priority over it. VerifyRequest itself needs live STS credentials, so
+// this exercises the same composition it performs.
+func TestVerifierDefaultOrder(t *testing.T) {
+	const (
+		callerARN   = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
+		account     = "111122223333"
+		userID      = "AROAEXAMPLE1234567890:example-session"
+		baseRoleARN = "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"
+	)
+	candidates := awsCandidates(callerARN, account, userID)
+
+	v, ok := NewVerifier(nil, models.FormatAWSIAMRoleARN, models.FormatAWSARN).(*AWSVerifier)
+	require.True(t, ok)
+
+	// No client preference: the configured ordering wins over the built-in default.
+	format, identifier := models.SelectIdentityFormat(candidates, nil, v.defaultOrder)
+	require.Equal(t, models.FormatAWSIAMRoleARN, format)
+	require.Equal(t, baseRoleARN, identifier)
+
+	// A client preference takes priority over the configured ordering.
+	format, identifier = models.SelectIdentityFormat(candidates,
+		[]models.IdentityFormat{models.FormatAWSARN}, v.defaultOrder)
+	require.Equal(t, models.FormatAWSARN, format)
+	require.Equal(t, callerARN, identifier)
+
+	// An unconfigured verifier keeps the historical default (the raw caller ARN).
+	plain, ok := NewVerifier(nil).(*AWSVerifier)
+	require.True(t, ok)
+	require.Empty(t, plain.defaultOrder)
+	format, identifier = models.SelectIdentityFormat(candidates, nil, plain.defaultOrder)
+	require.Equal(t, models.FormatAWSARN, format)
+	require.Equal(t, callerARN, identifier)
+}

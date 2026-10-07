@@ -115,7 +115,8 @@ test-local-patterns:
 	   exit 1; \
 	 fi
 
-test-local: test-local-patterns lint test-local-go test-local-python test-local-java
+# lint comes last so a missing or broken linter does not stop the tests from running.
+test-local: test-local-patterns test-local-go test-local-python test-local-java lint
 	@echo "✓ All local tests passed"
 
 test-local-go:

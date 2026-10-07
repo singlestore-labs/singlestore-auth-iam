@@ -29,9 +29,11 @@ public class AWSClient extends AbstractBaseClient {
   public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
 
   // AdditionalClaims keys populated for AWS identities (preserved for audit /
-  // registration-preview, independent of the negotiated identity format).
-  public static final String CLAIM_ASSUMED_ROLE_ARN = "assumedRoleArn";
-  public static final String CLAIM_ROLE_SESSION_NAME = "roleSessionName";
+  // registration-preview, independent of the negotiated identity format). The
+  // values match the Go and Python clients, and are distinct from
+  // ROLE_SESSION_NAME_PARAM, which is an additionalParams request key.
+  public static final String CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn";
+  public static final String CLAIM_ROLE_SESSION_NAME = "RoleSessionName";
 
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
