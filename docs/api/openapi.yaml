@@ -333,7 +333,7 @@ components:
         - `aws-arn` — raw STS/IAM caller ARN (always valid; AWS default/floor). Session-bearing for assumed-role sessions, so pre-configurable only when the session name is stable; otherwise prefer `aws-iam-role-arn`
         - `aws-iam-role-arn` — session-stripped base IAM role ARN (assumed-role sessions only)
         - `aws-role-id` — stable `RoleId` (`AROA…`; assumed-role sessions only)
-        - `gcp-sa-email` — service account email (verified email only; GCP default)
+        - `gcp-sa-email` — the service account's own email (`…@PROJECT.iam.gserviceaccount.com`; only when the token carries that `email` claim with `email_verified`; GCP default)
         - `gcp-sa-unique-id` — numeric service account unique id (always valid; GCP floor)
         - `azure-object-id` — `oid` principal / object id (always valid; Azure default/floor)
         - `azure-resource-id` — `xms_mirid` resource id (user-assigned managed identity only)

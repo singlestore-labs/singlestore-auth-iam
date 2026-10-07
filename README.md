@@ -252,17 +252,18 @@ cannot be honored.
 
 #### Format vocabulary
 
-| Format token | Provider | Meaning | Applicability | Example `sub` |
-|--------------|----------|---------|---------------|---------------|
-| `aws-arn` * | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles | Always (floor / default); pre-configurable only when the session name is stable (see below) | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
-| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` | Assumed-role sessions only | `arn:aws:iam::123456789012:role/MyRole` |
-| `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`) | Assumed-role sessions only | `AROAEXAMPLEID1234567` |
-| `gcp-sa-email` * | GCP | Service account email | Verified email only | `my-sa@my-project.iam.gserviceaccount.com` |
-| `gcp-sa-unique-id` | GCP | Numeric service account unique id | Always (floor) | `103547991597142817347` |
-| `azure-object-id` * | Azure | `oid` principal (object id) | Always (floor / default) | `11111111-2222-3333-4444-555555555555` |
-| `azure-resource-id` | Azure | `xms_mirid` resource id | User-assigned managed identity only | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
+Each token names its own provider by prefix (`aws-`, `gcp-`, `azure-`). `*` marks the
+provider default — the `sub` you get when you send no preference.
 
-`*` marks the provider default — the `sub` you get when you send no preference.
+| Format token | Meaning | Example `sub` |
+|--------------|---------|---------------|
+| `aws-arn` * | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below). Always available (floor / default) | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
+| `aws-iam-role-arn` | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE`; assumed-role sessions only | `arn:aws:iam::123456789012:role/MyRole` |
+| `aws-role-id` | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`); assumed-role sessions only | `AROAEXAMPLEID1234567` |
+| `gcp-sa-email` * | The service account's own email (the `…@PROJECT.iam.gserviceaccount.com` identity); only when the token carries that `email` claim with `email_verified` | `my-sa@my-project.iam.gserviceaccount.com` |
+| `gcp-sa-unique-id` | Numeric service-account unique id; always available (floor) | `103547991597142817347` |
+| `azure-object-id` * | `oid` principal (object id); always available (floor / default) | `11111111-2222-3333-4444-555555555555` |
+| `azure-resource-id` | `xms_mirid` resource id; user-assigned managed identity only | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
 
 #### `aws-arn` and session names
 
