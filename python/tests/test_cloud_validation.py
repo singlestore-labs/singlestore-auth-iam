@@ -282,13 +282,22 @@ class TestAssumeRole:
         if role.startswith("arn:aws:iam:"):
             # With the default preference the identity is the raw STS assumed-role
             # ARN (session-bearing), byte-identical to historical behavior. The
-            # negotiated base-role-ARN form is exercised below.
+            # supplied session name (or the stable default) must appear in the ARN;
+            # the negotiated base-role-ARN form (session-stripped) is exercised below.
+            from s2iam.aws import DEFAULT_ROLE_SESSION_NAME
+
+            expected_session_name = session_name or DEFAULT_ROLE_SESSION_NAME
             assert assumed_identifier.startswith(
                 "arn:aws:sts::"
             ), f"default AWS identity should be the raw STS assumed-role ARN, got {assumed_identifier!r}"
-            assert (
-                f":assumed-role/{role_name}/" in assumed_identifier
-            ), f"default AWS identity should be an assumed-role ARN for the role, got {assumed_identifier!r}"
+            assert f":assumed-role/{role_name}/{expected_session_name}" in assumed_identifier, (
+                f"default AWS identity should carry the role and session name "
+                f"(expected .../assumed-role/{role_name}/{expected_session_name}), got {assumed_identifier!r}"
+            )
+            assert assumed_identifier.endswith(f"/{expected_session_name}"), (
+                f"default AWS identity ARN should end with session name "
+                f"/{expected_session_name}, got {assumed_identifier!r}"
+            )
 
             # Content negotiation: opt into the new AWS ordering and confirm the
             # issued identity collapses to the base IAM role ARN (session stripped).

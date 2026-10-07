@@ -91,12 +91,21 @@ public class S2IAMJwtAssumeRoleTest {
         "assumed identifier should contain role fragment");
     if (role.startsWith("arn:aws:iam:")) {
       // With the default preference the identity is the raw STS assumed-role ARN
-      // (session-bearing), byte-identical to historical behavior.
+      // (session-bearing), byte-identical to historical behavior. The supplied
+      // session name (or the stable default) must appear in the ARN; the
+      // negotiated base-role-ARN form (session-stripped) is exercised below.
+      String expectedSessionName = (sessionName != null && !sessionName.isEmpty())
+          ? sessionName
+          : com.singlestore.s2iam.providers.aws.AWSClient.DEFAULT_ROLE_SESSION_NAME;
       assertTrue(assumedIdentifier.startsWith("arn:aws:sts::"),
           "default AWS identity should be the raw STS assumed-role ARN, got " + assumedIdentifier);
-      assertTrue(assumedIdentifier.contains(":assumed-role/" + roleNameFragment + "/"),
-          "default AWS identity should be an assumed-role ARN for the role, got "
-              + assumedIdentifier);
+      assertTrue(
+          assumedIdentifier.contains(":assumed-role/" + roleNameFragment + "/" + expectedSessionName),
+          "default AWS identity should carry the role and session name (expected .../assumed-role/"
+              + roleNameFragment + "/" + expectedSessionName + "), got " + assumedIdentifier);
+      assertTrue(assumedIdentifier.endsWith("/" + expectedSessionName),
+          "default AWS identity ARN should end with the session name (expected suffix /"
+              + expectedSessionName + "), got " + assumedIdentifier);
       assertEquals(IdentityFormat.AWS_ARN,
           assumedReq.path("identity").path("identityFormat").asText(),
           "default AWS identity format should be aws-arn");

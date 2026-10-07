@@ -23,6 +23,7 @@ import (
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/internal/testhelp"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
+	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/s2verifier"
 )
@@ -526,11 +527,20 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
 		// With the default preference the identity is the raw STS assumed-role
 		// ARN (session-bearing), byte-identical to historical behavior. The
-		// negotiated base-role-ARN form is exercised below.
+		// supplied session name (or the stable default) must appear in the ARN;
+		// the negotiated base-role-ARN form (session-stripped) is exercised below.
+		expectedSessionName := sessionName
+		if expectedSessionName == "" {
+			expectedSessionName = aws.DefaultRoleSessionName
+		}
 		assert.True(t, strings.HasPrefix(assumedIdentifier, "arn:aws:sts::"),
 			"default AWS identity should be the raw STS assumed-role ARN, got: %s", assumedIdentifier)
-		assert.Contains(t, assumedIdentifier, ":assumed-role/"+expectedRoleName+"/",
-			"default AWS identity should be an assumed-role ARN for the role, got: %s", assumedIdentifier)
+		assert.Contains(t, assumedIdentifier, ":assumed-role/"+expectedRoleName+"/"+expectedSessionName,
+			"default AWS identity should carry the role and session name (expected .../assumed-role/%s/%s), got: %s",
+			expectedRoleName, expectedSessionName, assumedIdentifier)
+		assert.True(t, strings.HasSuffix(assumedIdentifier, "/"+expectedSessionName),
+			"default AWS identity ARN should end with the session name (expected suffix /%s), got: %s",
+			expectedSessionName, assumedIdentifier)
 		assert.Equal(t, "aws-arn", flags.lastIdentityFormat,
 			"default AWS identity format should be aws-arn")
 	}
