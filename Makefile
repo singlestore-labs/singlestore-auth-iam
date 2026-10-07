@@ -105,7 +105,9 @@ test: test-local
 
 .PHONY: test-local-patterns
 test-local-patterns:
-	! git grep -i 'jwt[ _]token'
+	# Reject the redundant phrasing (the "T" in JWT already means token). AGENTS.md
+	# is excluded because it documents the rule and would otherwise self-trip here.
+	! git grep -i 'jwt[ _]token' -- ':!AGENTS.md'
 	@violations=$$(git grep -n 'S2IAM_TEST_' -- 'go/s2iam' 'go/internal' 'python/src' 'java/src/main' 2>/dev/null | grep -v '_test.go' | grep -v '/testhelp/' || true); \
 	 if [ -n "$$violations" ]; then \
 	   echo 'ERROR: S2IAM_TEST_ variables found in library (non-test) source:'; \
@@ -192,7 +194,7 @@ dev-setup-ubuntu-go: dev-setup-common
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	mkdir -p $$HOME/bin
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.0.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.14.0
 	@echo "✓ Ubuntu Go development environment ready"
 
 dev-setup-macos-go:
