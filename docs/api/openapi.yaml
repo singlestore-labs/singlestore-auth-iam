@@ -325,7 +325,7 @@ components:
         (`aws-arn`, `gcp-sa-unique-id`, `azure-object-id`).
 
         **This header is additive and optional. When omitted, the issued identity is
-        byte-identical to prior releases:** the raw caller ARN for AWS
+        each provider's default form:** the raw caller ARN for AWS
         (`aws-arn`), the service-account email (else numeric id) for GCP, and the
         `oid` principal for Azure.
 

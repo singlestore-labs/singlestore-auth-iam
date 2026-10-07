@@ -62,7 +62,7 @@ The service verifies the credentials with STS `GetCallerIdentity`. **By default 
 verified identity is the raw caller ARN** returned by STS, e.g.
 `arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME` for an assumed-role session
 (instance profile, IRSA, or explicit `AssumeRole`) or `arn:aws:iam::ACCOUNT:user/NAME`
-for an IAM user. This default is unchanged from prior releases.
+for an IAM user.
 
 Clients can opt into alternate representations with the
 `X-S2IAM-Identity-Format-Preference` header (see
@@ -218,7 +218,7 @@ supports **and** can derive for the authenticated identity, and names the select
 in the `identityFormat` field of the JSON response body.
 
 This mechanism is **additive and optional**. When the header is omitted the issued
-identity is byte-identical to prior releases (raw caller ARN for AWS, service-account
+identity is each provider's default form (raw caller ARN for AWS, service-account
 email — else numeric id — for GCP, and the `oid` principal for Azure). Negotiation only
 reorders among representations the verifier already derived for the same identity; it
 never broadens a match or crosses identities. Tokens for other providers and unknown

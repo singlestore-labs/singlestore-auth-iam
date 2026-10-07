@@ -234,7 +234,7 @@ The libraries automatically detect the cloud provider and obtain appropriate cre
 
 ### Identity format preferences (content negotiation)
 
-By default the authenticated identity (JWT `sub`) is **unchanged from prior releases**:
+The default authenticated identity (JWT `sub`) for each provider is:
 
 | Provider | Default identity (JWT `sub`) |
 |----------|------------------------------|
