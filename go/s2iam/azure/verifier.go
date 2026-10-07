@@ -311,7 +311,7 @@ func (v *AzureVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mo
 	resourceID, _ := claims["xms_mirid"].(string)
 	candidates := azureCandidates(principalID, resourceID)
 	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
-	format, identifier := models.SelectIdentityFormat(models.ProviderAzure, candidates, clientPref, v.defaultOrder)
+	format, identifier := models.SelectIdentityFormat(candidates, clientPref, v.defaultOrder)
 
 	if logger != nil {
 		logger.Logf("Successfully verified Azure identity: %s (format: %s)", identifier, format)

@@ -264,7 +264,7 @@ func (v *GCPVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 	// this verifier's configured default ordering. The floor (gcp-sa-unique-id) is
 	// always valid, so selection never fails.
 	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
-	format, chosen := models.SelectIdentityFormat(models.ProviderGCP, identity.Candidates, clientPref, v.defaultOrder)
+	format, chosen := models.SelectIdentityFormat(identity.Candidates, clientPref, v.defaultOrder)
 	if err := validatePrincipal(chosen); err != nil {
 		if logger != nil {
 			logger.Logf("Invalid GCP principal: %v", err)
@@ -294,7 +294,7 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 	emailVerified, _ := payload.Claims["email_verified"].(bool)
 	candidates := gcpCandidates(sub, email, emailVerified)
 	format, identifier := models.SelectIdentityFormat(
-		models.ProviderGCP, candidates, nil, models.DefaultIdentityFormats())
+		candidates, nil, models.DefaultIdentityFormats())
 	if logger != nil {
 		logger.Logf("DEBUG: Default GCP identity format %s -> %s (email_verified=%t)", format, identifier, emailVerified)
 	}

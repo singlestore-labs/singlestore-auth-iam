@@ -19,9 +19,10 @@ type VerifierConfig struct {
 	// DefaultIdentityFormats overrides the identity-format ordering used when a
 	// request carries no (valid) X-S2IAM-Identity-Format-Preference. It is a single
 	// flat, ordered list that may span providers, mirroring the client preference
-	// wire format: each token names its own provider (see IdentityFormat.Provider),
-	// so only the relative order within a provider is meaningful and tokens for
-	// other providers are ignored by each verifier. A provider with no token here
+	// wire format: each token names its own provider, so only the relative order
+	// within a provider is meaningful and tokens for other providers are ignored
+	// by each verifier (they never match that identity's valid set). A provider
+	// with no token here
 	// uses the built-in default from DefaultIdentityFormats, which is
 	// byte-identical to the historical behavior. This is how an auth-service
 	// instance opts into (for example) the new AWS default

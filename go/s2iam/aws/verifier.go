@@ -153,7 +153,7 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 	// aws-arn (the raw caller ARN), so selection never fails.
 	candidates := awsCandidates(callerARN, account, userID)
 	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
-	format, identifier := models.SelectIdentityFormat(models.ProviderAWS, candidates, clientPref, v.defaultOrder)
+	format, identifier := models.SelectIdentityFormat(candidates, clientPref, v.defaultOrder)
 
 	if logger != nil {
 		logger.Logf("Successfully verified AWS identity: %s (format: %s, attested: %s)",

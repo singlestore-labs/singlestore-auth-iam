@@ -7,23 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIdentityFormatProvider(t *testing.T) {
-	cases := map[IdentityFormat]CloudProviderType{
-		FormatAWSARN:           ProviderAWS,
-		FormatAWSIAMRoleARN:    ProviderAWS,
-		FormatAWSRoleID:        ProviderAWS,
-		FormatGCPSAEmail:       ProviderGCP,
-		FormatGCPSAUniqueID:    ProviderGCP,
-		FormatAzureObjectID:    ProviderAzure,
-		FormatAzureResourceID:  ProviderAzure,
-		IdentityFormat("nope"): "",
-		IdentityFormat(""):     "",
-	}
-	for format, want := range cases {
-		assert.Equalf(t, want, format.Provider(), "provider for %q", format)
-	}
-}
-
 func TestParseIdentityFormatPreference(t *testing.T) {
 	assert.Nil(t, ParseIdentityFormatPreference(""))
 	assert.Equal(t,
@@ -61,7 +44,6 @@ var awsAssumedRoleCandidates = []IdentityCandidate{
 func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 	tests := []struct {
 		name       string
-		provider   CloudProviderType
 		valid      []IdentityCandidate
 		clientPref []IdentityFormat
 		serverDflt []IdentityFormat
@@ -70,7 +52,6 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 	}{
 		{
 			name:       "AWS new preference selects base role ARN",
-			provider:   ProviderAWS,
 			valid:      awsAssumedRoleCandidates,
 			clientPref: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
 			serverDflt: DefaultIdentityFormats(),
@@ -79,7 +60,6 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 		},
 		{
 			name:       "AWS aws-arn preference selects raw STS ARN (session kept)",
-			provider:   ProviderAWS,
 			valid:      awsAssumedRoleCandidates,
 			clientPref: []IdentityFormat{FormatAWSARN},
 			serverDflt: DefaultIdentityFormats(),
@@ -87,8 +67,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
 		},
 		{
-			name:     "AWS new preference on an IAM user falls back to raw ARN (role token invalid)",
-			provider: ProviderAWS,
+			name: "AWS new preference on an IAM user falls back to raw ARN (role token invalid)",
 			valid: []IdentityCandidate{
 				{Format: FormatAWSARN, Value: "arn:aws:iam::111122223333:user/alice"},
 			},
@@ -99,7 +78,6 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 		},
 		{
 			name:       "no preference uses server default ordering",
-			provider:   ProviderAWS,
 			valid:      awsAssumedRoleCandidates,
 			clientPref: nil,
 			serverDflt: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
@@ -107,18 +85,17 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole",
 		},
 		{
-			name:     "other-provider and unknown tokens are ignored, default applies",
-			provider: ProviderAWS,
-			valid:    awsAssumedRoleCandidates,
-			// Only non-AWS / unknown tokens -> filtered to empty -> server default.
+			name:  "other-provider and unknown tokens are ignored, default applies",
+			valid: awsAssumedRoleCandidates,
+			// Non-AWS / unknown tokens simply miss the valid set and are skipped,
+			// so the server default applies.
 			clientPref: []IdentityFormat{FormatGCPSAEmail, IdentityFormat("future-token")},
 			serverDflt: DefaultIdentityFormats(),
 			wantFormat: FormatAWSARN,
 			wantValue:  "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session",
 		},
 		{
-			name:     "empty intersection fails closed to server default then floor",
-			provider: ProviderAWS,
+			name: "empty intersection fails closed to server default then floor",
 			// Only the floor is valid (IAM user), but client asked for role formats.
 			valid: []IdentityCandidate{
 				{Format: FormatAWSARN, Value: "arn:aws:iam::111122223333:user/alice"},
@@ -129,8 +106,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "arn:aws:iam::111122223333:user/alice",
 		},
 		{
-			name:     "GCP verified email preferred, numeric is the floor",
-			provider: ProviderGCP,
+			name: "GCP verified email preferred, numeric is the floor",
 			valid: []IdentityCandidate{
 				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
 				{Format: FormatGCPSAEmail, Value: "my-sa@my-project.iam.gserviceaccount.com"},
@@ -141,8 +117,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "my-sa@my-project.iam.gserviceaccount.com",
 		},
 		{
-			name:     "GCP unverified email: only numeric valid, default falls through",
-			provider: ProviderGCP,
+			name: "GCP unverified email: only numeric valid, default falls through",
 			valid: []IdentityCandidate{
 				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
 			},
@@ -152,8 +127,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "104561834567890123456",
 		},
 		{
-			name:     "Azure user-assigned MI can select resource id",
-			provider: ProviderAzure,
+			name: "Azure user-assigned MI can select resource id",
 			valid: []IdentityCandidate{
 				{Format: FormatAzureObjectID, Value: "11111111-2222-3333-4444-555555555555"},
 				{Format: FormatAzureResourceID, Value: "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity"},
@@ -164,8 +138,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "/subscriptions/SUB/resourcegroups/RG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-identity",
 		},
 		{
-			name:     "Azure default keeps object id (sub floor)",
-			provider: ProviderAzure,
+			name: "Azure default keeps object id (sub floor)",
 			valid: []IdentityCandidate{
 				{Format: FormatAzureObjectID, Value: "11111111-2222-3333-4444-555555555555"},
 			},
@@ -178,7 +151,7 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			format, value := SelectIdentityFormat(tt.provider, tt.valid, tt.clientPref, tt.serverDflt)
+			format, value := SelectIdentityFormat(tt.valid, tt.clientPref, tt.serverDflt)
 			assert.Equal(t, tt.wantFormat, format, "chosen format")
 			assert.Equal(t, tt.wantValue, value, "chosen value")
 		})
@@ -189,7 +162,7 @@ func TestSelectIdentityFormat_FloorAlwaysWins(t *testing.T) {
 	// Even if client preference, server default, and the valid set share no
 	// supported token in common, selection returns the floor (valid[0]).
 	valid := []IdentityCandidate{{Format: FormatAWSARN, Value: "arn:aws:iam::1:user/x"}}
-	format, value := SelectIdentityFormat(ProviderAWS, valid,
+	format, value := SelectIdentityFormat(valid,
 		[]IdentityFormat{FormatAWSRoleID}, []IdentityFormat{FormatAWSIAMRoleARN})
 	require.Equal(t, FormatAWSARN, format)
 	require.Equal(t, "arn:aws:iam::1:user/x", value)

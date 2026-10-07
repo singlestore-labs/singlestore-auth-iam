@@ -59,21 +59,6 @@ const (
 	IdentityFormatPreferenceEnv = "S2IAM_IDENTITY_FORMAT_PREFERENCE"
 )
 
-// Provider returns the cloud provider a format token belongs to, or "" if the
-// token is unknown (so unknown tokens are naturally ignored by negotiation).
-func (f IdentityFormat) Provider() CloudProviderType {
-	switch f {
-	case FormatAWSARN, FormatAWSIAMRoleARN, FormatAWSRoleID:
-		return ProviderAWS
-	case FormatGCPSAEmail, FormatGCPSAUniqueID:
-		return ProviderGCP
-	case FormatAzureObjectID, FormatAzureResourceID:
-		return ProviderAzure
-	default:
-		return ""
-	}
-}
-
 // IdentityCandidate is a (format, value) pair that is valid for a verified
 // identity. The value is always verifier-derived from attested data; the client
 // supplies only format keys, never values.
@@ -128,45 +113,30 @@ func ParseIdentityFormatPreference(s string) []IdentityFormat {
 // valid is the verifier-derived, ordered list of candidate formats that are
 // valid for this identity (floor first; must be non-empty). clientPref is the
 // client's requested ordering (may span providers and include unknown tokens).
-// serverDefault is the instance's configured default ordering for this provider.
+// serverDefault is the instance's configured default ordering.
 //
-// The algorithm:
-//  1. candidate order = clientPref filtered to this provider (unknown and
-//     other-provider tokens dropped); if that is empty, use serverDefault.
-//  2. choose the first candidate that is server-supported AND valid for this
-//     identity.
-//  3. fail closed to the server default ordering, then to the floor (valid[0]),
-//     which is always valid — so selection never fails.
+// The algorithm: walk clientPref followed by serverDefault and return the first
+// token that is valid for this identity; if none match, fail closed to the
+// floor (valid[0]), which is always valid — so selection never fails.
+//
+// No provider filtering is needed: valid is already scoped to this identity's
+// provider, so unknown tokens and tokens belonging to other providers simply
+// miss the validByFormat lookup and are skipped. Appending serverDefault to
+// clientPref makes it the fail-closed fallback in a single pass.
 //
 // Negotiation can only reorder among already-valid, verifier-derived
 // representations of the same principal; it can never broaden a match or cross
 // identities.
-func SelectIdentityFormat(provider CloudProviderType, valid []IdentityCandidate, clientPref, serverDefault []IdentityFormat) (IdentityFormat, string) {
+func SelectIdentityFormat(valid []IdentityCandidate, clientPref, serverDefault []IdentityFormat) (IdentityFormat, string) {
 	validByFormat := make(map[IdentityFormat]string, len(valid))
 	for _, c := range valid {
 		validByFormat[c.Format] = c.Value
 	}
 
-	// Step 1: candidate order from client preference filtered to this provider.
-	candidateOrder := make([]IdentityFormat, 0, len(clientPref))
-	for _, f := range clientPref {
-		if f.Provider() == provider {
-			candidateOrder = append(candidateOrder, f)
-		}
-	}
-	if len(candidateOrder) == 0 {
-		candidateOrder = serverDefault
-	}
-
-	// Step 2: first candidate that is server-supported (known token) and valid.
+	candidateOrder := make([]IdentityFormat, 0, len(clientPref)+len(serverDefault))
+	candidateOrder = append(candidateOrder, clientPref...)
+	candidateOrder = append(candidateOrder, serverDefault...)
 	for _, f := range candidateOrder {
-		if v, ok := validByFormat[f]; ok {
-			return f, v
-		}
-	}
-
-	// Step 3: fail closed to the server default ordering, then to the floor.
-	for _, f := range serverDefault {
 		if v, ok := validByFormat[f]; ok {
 			return f, v
 		}
