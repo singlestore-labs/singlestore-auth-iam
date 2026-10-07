@@ -46,10 +46,12 @@ type GCPVerifier struct {
 
 // NewVerifier creates a new GCP verifier instance. The optional defaultOrder
 // sets the identity-format ordering used when a request carries no (valid)
-// preference; when empty the built-in default (models.DefaultIdentityFormats,
-// which for GCP resolves to [gcp-sa-email, gcp-sa-unique-id], byte-identical to
-// historical behavior) is used. The ordering may span providers; non-GCP tokens
-// are harmlessly ignored.
+// preference. It may be empty and may span providers; non-GCP tokens are
+// harmlessly ignored, and SelectIdentityFormat always falls back to the built-in
+// default (models.DefaultIdentityFormats, which for GCP resolves to
+// [gcp-sa-email, gcp-sa-unique-id], byte-identical to historical behavior), so
+// GCP keeps its verified-email-else-numeric default even when defaultOrder names
+// only other providers.
 func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.Logger, defaultOrder ...models.IdentityFormat) (models.CloudProviderVerifier, error) {
 	validator, err := idtoken.NewValidator(ctx)
 	if err != nil {
@@ -58,10 +60,6 @@ func NewVerifier(ctx context.Context, allowedAudiences []string, logger models.L
 
 	if len(allowedAudiences) == 0 {
 		return nil, errors.Errorf("at least one allowed audience must be specified")
-	}
-
-	if len(defaultOrder) == 0 {
-		defaultOrder = models.DefaultIdentityFormats()
 	}
 
 	return &GCPVerifier{
@@ -293,8 +291,9 @@ func extractGCPIdentityFromToken(ctx context.Context, payload *idtoken.Payload, 
 	email, _ := payload.Claims["email"].(string)
 	emailVerified, _ := payload.Claims["email_verified"].(bool)
 	candidates := gcpCandidates(sub, email, emailVerified)
-	format, identifier := models.SelectIdentityFormat(
-		candidates, nil, models.DefaultIdentityFormats())
+	// No client preference / server default here: SelectIdentityFormat falls back
+	// to the built-in default, which for GCP prefers the verified email.
+	format, identifier := models.SelectIdentityFormat(candidates, nil, nil)
 	if logger != nil {
 		logger.Logf("DEBUG: Default GCP identity format %s -> %s (email_verified=%t)", format, identifier, emailVerified)
 	}

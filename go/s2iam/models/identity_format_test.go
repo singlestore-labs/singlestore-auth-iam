@@ -117,6 +117,19 @@ func TestSelectIdentityFormat_GoldenVectors(t *testing.T) {
 			wantValue:  "my-sa@my-project.iam.gserviceaccount.com",
 		},
 		{
+			name: "GCP keeps verified-email default when server default names only AWS",
+			valid: []IdentityCandidate{
+				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},
+				{Format: FormatGCPSAEmail, Value: "my-sa@my-project.iam.gserviceaccount.com"},
+			},
+			clientPref: nil,
+			// An AWS-only instance default must not downgrade GCP to the numeric
+			// floor: the built-in default is the universal final fallback.
+			serverDflt: []IdentityFormat{FormatAWSIAMRoleARN, FormatAWSARN},
+			wantFormat: FormatGCPSAEmail,
+			wantValue:  "my-sa@my-project.iam.gserviceaccount.com",
+		},
+		{
 			name: "GCP unverified email: only numeric valid, default falls through",
 			valid: []IdentityCandidate{
 				{Format: FormatGCPSAUniqueID, Value: "104561834567890123456"},

@@ -30,6 +30,21 @@ func TestValidatePrincipal(t *testing.T) {
 			wantErr:   false,
 		},
 		{
+			name:      "valid GovCloud assumed-role ARN",
+			principal: "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
+			wantErr:   false,
+		},
+		{
+			name:      "valid China partition IAM role ARN",
+			principal: "arn:aws-cn:iam::123456789012:role/my-role",
+			wantErr:   false,
+		},
+		{
+			name:      "wrong partition prefix rejected",
+			principal: "arn:azure:iam::123456789012:role/my-role",
+			wantErr:   true,
+		},
+		{
 			name:      "empty principal",
 			principal: "",
 			wantErr:   true,

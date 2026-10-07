@@ -112,7 +112,7 @@ public class S2IAMJwtAssumeRoleTest {
       // The base IAM role ARN is path-less: the STS assumed-role ARN omits any IAM
       // path, so derive the expected value from the role prefix and the role name
       // fragment rather than the (possibly path-bearing) input ARN. For a root-path
-      // role this equals `role` exactly; the (deprecated) session must not affect it.
+      // role this equals `role` exactly; the session name must not affect it.
       String expectedBaseRoleArn = role.substring(0, role.indexOf(":role/") + ":role/".length())
           + roleNameFragment;
       assertEquals(expectedBaseRoleArn, negotiatedSub,

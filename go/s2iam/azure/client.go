@@ -416,7 +416,8 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 	region := ""
 
 	// Extract resource type and region from token claims
-	if mirid, ok := claims["xms_mirid"].(string); ok {
+	resourceID, _ := claims["xms_mirid"].(string)
+	if mirid := resourceID; mirid != "" {
 		parts := strings.Split(mirid, "/")
 		if len(parts) > 2 {
 			for i := 0; i < len(parts)-1; i++ {
@@ -464,13 +465,21 @@ func (c *AzureClient) getIdentityFromToken(ctx context.Context, tokenString stri
 		}
 	}
 
+	// Build the valid identity-format candidates and resolve the default format
+	// (no client preference / server default on the client side), mirroring the
+	// AWS and GCP client paths so the CloudIdentity contract is honored uniformly.
+	candidates := azureCandidates(principalID, resourceID)
+	format, identifier := models.SelectIdentityFormat(candidates, nil, nil)
+
 	return &models.CloudIdentity{
 		Provider:         models.ProviderAzure,
-		Identifier:       principalID,
+		Identifier:       identifier,
+		IdentityFormat:   format,
 		AccountID:        tenantID,
 		Region:           region,
 		ResourceType:     resourceType,
 		AdditionalClaims: additionalClaims,
+		Candidates:       candidates,
 	}, nil
 }
 

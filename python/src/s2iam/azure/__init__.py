@@ -10,6 +10,11 @@ from typing import Any, Optional
 
 import aiohttp
 
+from ..identity_format import (
+    FORMAT_AZURE_OBJECT_ID,
+    FORMAT_AZURE_RESOURCE_ID,
+    IdentityCandidate,
+)
 from ..models import (
     CloudIdentity,
     CloudProviderClient,
@@ -290,7 +295,9 @@ class AzureClient(CloudProviderClient):
             # cryptographically bound to the managed identity token and the server only sees the token.
             region = ""
             mirid = token_claims.get("xms_mirid", "")
-            if isinstance(mirid, str) and mirid:
+            if not isinstance(mirid, str):
+                mirid = ""
+            if mirid:
                 parts = mirid.split("/")
                 for i in range(len(parts) - 1):
                     if parts[i] == "resourceGroups" and i + 1 < len(parts):
@@ -300,6 +307,14 @@ class AzureClient(CloudProviderClient):
                             region = rg_parts[-2] + "-" + rg_parts[-1]
                             break
 
+            # Build the valid identity-format candidates (floor first: the object id
+            # is always valid; the ARM resource id is added for user-assigned managed
+            # identities) and default the identifier to the object id, byte-identical
+            # to historical behavior and mirroring the Go client.
+            candidates = [IdentityCandidate(FORMAT_AZURE_OBJECT_ID, principal_id)]
+            if mirid:
+                candidates.append(IdentityCandidate(FORMAT_AZURE_RESOURCE_ID, mirid))
+
             # Build identity with region derived only from signed data (may be empty)
             identity = CloudIdentity(
                 provider=CloudProviderType.AZURE,
@@ -307,6 +322,8 @@ class AzureClient(CloudProviderClient):
                 account_id=subscription_id,
                 region=region,
                 resource_type="azure-managed-identity",
+                identity_format=FORMAT_AZURE_OBJECT_ID,
+                candidates=[(c.format, c.value) for c in candidates],
             )
 
             # Record unsigned metadata location for observability without asserting equality

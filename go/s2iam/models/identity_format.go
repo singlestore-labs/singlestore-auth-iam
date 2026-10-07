@@ -113,16 +113,21 @@ func ParseIdentityFormatPreference(s string) []IdentityFormat {
 // valid is the verifier-derived, ordered list of candidate formats that are
 // valid for this identity (floor first; must be non-empty). clientPref is the
 // client's requested ordering (may span providers and include unknown tokens).
-// serverDefault is the instance's configured default ordering.
+// serverDefault is the instance's configured default ordering (may be nil, and
+// may name only some providers).
 //
-// The algorithm: walk clientPref followed by serverDefault and return the first
-// token that is valid for this identity; if none match, fail closed to the
-// floor (valid[0]), which is always valid — so selection never fails.
+// The algorithm: walk clientPref, then serverDefault, then the built-in
+// DefaultIdentityFormats, and return the first token that is valid for this
+// identity; if none match, fail closed to the floor (valid[0]), which is always
+// valid — so selection never fails.
 //
-// No provider filtering is needed: valid is already scoped to this identity's
-// provider, so unknown tokens and tokens belonging to other providers simply
-// miss the validByFormat lookup and are skipped. Appending serverDefault to
-// clientPref makes it the fail-closed fallback in a single pass.
+// Appending the built-in defaults last guarantees that every provider keeps its
+// historical default even when serverDefault only names other providers (e.g.
+// an instance configured with an AWS-only default list must not downgrade a
+// verified GCP email to the numeric floor). No provider filtering is needed:
+// valid is already scoped to this identity's provider, so unknown tokens and
+// tokens belonging to other providers simply miss the validByFormat lookup and
+// are skipped.
 //
 // Negotiation can only reorder among already-valid, verifier-derived
 // representations of the same principal; it can never broaden a match or cross
@@ -133,9 +138,11 @@ func SelectIdentityFormat(valid []IdentityCandidate, clientPref, serverDefault [
 		validByFormat[c.Format] = c.Value
 	}
 
-	candidateOrder := make([]IdentityFormat, 0, len(clientPref)+len(serverDefault))
+	builtin := DefaultIdentityFormats()
+	candidateOrder := make([]IdentityFormat, 0, len(clientPref)+len(serverDefault)+len(builtin))
 	candidateOrder = append(candidateOrder, clientPref...)
 	candidateOrder = append(candidateOrder, serverDefault...)
+	candidateOrder = append(candidateOrder, builtin...)
 	for _, f := range candidateOrder {
 		if v, ok := validByFormat[f]; ok {
 			return f, v
