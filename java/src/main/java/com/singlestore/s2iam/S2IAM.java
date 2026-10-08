@@ -332,8 +332,10 @@ public final class S2IAM {
   /**
    * Resolves the effective identity-format preference using the precedence
    * explicit option &gt; S2IAM_IDENTITY_FORMAT_PREFERENCE env var &gt; built-in
-   * default ("aws-arn", byte-identical to the historical behavior; GCP/Azure fall
-   * through to the verifier's default ordering).
+   * default ("aws-iam-role-arn" then "aws-arn": the session-stripped base IAM
+   * role ARN, falling back to the raw ARN for callers that are not an
+   * assumed-role session; GCP/Azure fall through to the verifier's default
+   * ordering).
    */
   private static List<String> resolveIdentityFormatPreference(JwtOptions o) {
     if (o.identityFormatPreferenceSet) {
@@ -342,7 +344,7 @@ public final class S2IAM {
     String env = System.getenv(IdentityFormat.PREFERENCE_ENV);
     if (env != null && !env.isEmpty())
       return IdentityFormat.parsePreference(env);
-    return List.of(IdentityFormat.AWS_ARN);
+    return List.of(IdentityFormat.AWS_IAM_ROLE_ARN, IdentityFormat.AWS_ARN);
   }
 
   private static String safeTrunc(String s) {

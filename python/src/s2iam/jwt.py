@@ -9,6 +9,7 @@ import aiohttp
 from .aws import ROLE_SESSION_NAME_PARAM
 from .identity_format import (
     FORMAT_AWS_ARN,
+    FORMAT_AWS_IAM_ROLE_ARN,
     IDENTITY_FORMAT_PREFERENCE_ENV,
     IDENTITY_FORMAT_PREFERENCE_HEADER,
     parse_identity_format_preference,
@@ -29,9 +30,10 @@ def _resolve_identity_format_preference(preference: Any) -> list[str]:
     forms; list() would otherwise split it into individual characters. Any other
     iterable is taken as an already-split sequence of tokens.
 
-    The built-in default is [aws-arn], byte-identical to the historical behavior:
-    GCP/Azure tokens are absent, so those providers fall through to the verifier's
-    default ordering (also unchanged).
+    The built-in default is [aws-iam-role-arn, aws-arn]: the session-stripped base
+    IAM role ARN, falling back to the raw ARN for callers that are not an
+    assumed-role session (e.g. an IAM user). GCP/Azure tokens are absent, so those
+    providers fall through to the verifier's default ordering (unchanged).
     """
     if preference is not _PREFERENCE_UNSET and preference is not None:
         if isinstance(preference, str):
@@ -42,7 +44,7 @@ def _resolve_identity_format_preference(preference: Any) -> list[str]:
     env = os.environ.get(IDENTITY_FORMAT_PREFERENCE_ENV)
     if env:
         return parse_identity_format_preference(env)
-    return [FORMAT_AWS_ARN]
+    return [FORMAT_AWS_IAM_ROLE_ARN, FORMAT_AWS_ARN]
 
 
 async def get_jwt(
@@ -199,6 +201,8 @@ async def get_jwt_database(
             "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
             stable value so the full ARN is pre-configurable. Does not affect the
             "aws-iam-role-arn" (session-stripped) format or ambient credentials.
+            Since "aws-iam-role-arn" is the default as of v0.6.0, this only matters
+            when you request "aws-arn" via identity_format_preference.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -249,6 +253,8 @@ async def get_jwt_api(
             "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
             stable value so the full ARN is pre-configurable. Does not affect the
             "aws-iam-role-arn" (session-stripped) format or ambient credentials.
+            Since "aws-iam-role-arn" is the default as of v0.6.0, this only matters
+            when you request "aws-arn" via identity_format_preference.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options

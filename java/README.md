@@ -50,17 +50,18 @@ Identity Format Preferences
 ---------------------------
 Clients may select the issued identity representation (the JWT `sub`) by supplying an ordered preference list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary, the default ordering, and semantics.
 
+As of v0.6.0 the built-in default is `"aws-iam-role-arn"` then `"aws-arn"`: the session-stripped base IAM role ARN, falling back to the raw ARN for callers that are not an assumed-role session. Request `"aws-arn"` to restore the pre-v0.6.0 session-bearing AWS identity:
+
 ```java
-// Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
 String jwt = S2IAMRequest.newRequest()
     .databaseWorkspaceGroup("workspace-group-id")
     .assumeRole("arn:aws:iam::123456789012:role/AppRole")
-    .identityFormatPreference("aws-iam-role-arn", "aws-arn")
+    .identityFormatPreference("aws-arn")
     .get();
 
 // Or with the static API:
 String jwt2 = S2IAM.getDatabaseJWT("workspace-group-id",
-    Options.withIdentityFormatPreference("aws-iam-role-arn", "aws-arn"));
+    Options.withIdentityFormatPreference("aws-arn"));
 ```
 
 Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) > built-in default.

@@ -26,12 +26,12 @@ def test_parse_identity_format_preference():
 def test_resolve_identity_format_preference_precedence(monkeypatch):
     """Option > env var > built-in default, mirroring Go's equivalent test."""
     monkeypatch.delenv(IDENTITY_FORMAT_PREFERENCE_ENV, raising=False)
-    assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [FORMAT_AWS_ARN]
-
-    monkeypatch.setenv(IDENTITY_FORMAT_PREFERENCE_ENV, " aws-iam-role-arn , aws-arn ")
     assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [FORMAT_AWS_IAM_ROLE_ARN, FORMAT_AWS_ARN]
+
+    monkeypatch.setenv(IDENTITY_FORMAT_PREFERENCE_ENV, " aws-arn ")
+    assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [FORMAT_AWS_ARN]
     # An explicit option overrides the env var.
-    assert _resolve_identity_format_preference([FORMAT_AWS_ARN]) == [FORMAT_AWS_ARN]
+    assert _resolve_identity_format_preference([FORMAT_AWS_IAM_ROLE_ARN]) == [FORMAT_AWS_IAM_ROLE_ARN]
     # An explicit empty option is honored (sends no header).
     assert _resolve_identity_format_preference([]) == []
 

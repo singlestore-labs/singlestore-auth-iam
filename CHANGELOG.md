@@ -4,21 +4,59 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.6.0]
+
+> **Step 3 of 3 of the identity-format rollout** begun in `v0.6.0-verifier`. The verifier
+> that honors `X-S2IAM-Identity-Format-Preference` is now deployed to the auth service, so
+> the clients flip their built-in AWS default to the session-stripped base IAM role ARN.
+> This release requires a server that honors the preference header; a server that ignores
+> it returns the raw caller ARN regardless, so an upgraded client keeps working but does
+> not get the new identity.
+
+### Changed
+- **The AWS identity requested by default is now the base IAM role ARN.** The Go, Python,
+  and Java clients and the `s2iam` CLI send the preference `[aws-iam-role-arn, aws-arn]`
+  instead of `[aws-arn]`, so a workload running under an AWS STS assumed-role session —
+  EC2 instance profile, EKS IRSA, or an explicit `AssumeRole` — authenticates as
+  `arn:aws:iam::ACCOUNT:role/ROLE` rather than
+  `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION`. The base role ARN is independent of
+  the caller-chosen session name, which is what makes it pre-configurable for an EC2
+  instance profile (whose session name is the instance id).
+  - **This changes the JWT `sub` your AWS workloads authenticate as.** Register
+    `arn:aws:iam::ACCOUNT:role/ROLE` as a cloud principal and create matching database
+    users before upgrading; both forms can be registered at once, so you can prepare ahead
+    of the upgrade and roll back without a gap. See
+    [Upgrading to the v0.6.0 AWS default](README.md#upgrading-to-the-v060-aws-default).
+  - To keep the previous identity, request `aws-arn` explicitly — via
+    `WithIdentityFormatPreference("aws-arn")` (Go), `identity_format_preference=["aws-arn"]`
+    (Python), `Options.withIdentityFormatPreference("aws-arn")` /
+    `.identityFormatPreference("aws-arn")` (Java), `--identity-format-preference=aws-arn`
+    (CLI), or `S2IAM_IDENTITY_FORMAT_PREFERENCE=aws-arn`.
+  - IAM-user credentials are unaffected: there is no assumed-role session, so
+    `aws-iam-role-arn` does not apply and the raw ARN is still issued. GCP and Azure are
+    unaffected: the clients send no tokens for those providers.
+  - `--assume-role-session-name` and its library equivalents are retained but now only
+    affect the identity when you request `aws-arn`.
+- **The wire protocol is unchanged.** A request that sends no
+  `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
+  default identity (`aws-arn` for AWS), so protocol-only clients are unaffected. Because
+  the client preference outranks `VerifierConfig.DefaultIdentityFormats`, an AWS override
+  there is now only honored for requests that send no preference header at all.
+
 ## [v0.6.0-verifier]
 
-> **Interim release — most users should wait for `v0.6.0`.** `v0.6.0-verifier` ships the
+> **Interim release — superseded by `v0.6.0`.** `v0.6.0-verifier` shipped the
 > content-negotiation capability (client-selectable identity formats plus the verifier that
 > honors them) while keeping every provider's default identity byte-identical to prior
-> releases, so it stays fully compatible with the auth server deployed today. It is one step
-> in a staged rollout:
-> 1. **`v0.6.0-verifier`** (this release) adds negotiation with the historical defaults.
-> 2. The auth-service verifier that honors the `X-S2IAM-Identity-Format-Preference` header is
->    deployed (takes a few days).
-> 3. **`v0.6.0`** then flips the built-in AWS default to the session-stripped base IAM role
+> releases, so it stayed fully compatible with the auth server deployed at the time. It was
+> step 1 of a staged rollout:
+> 1. **`v0.6.0-verifier`** added negotiation with the historical defaults.
+> 2. The auth-service verifier that honors the `X-S2IAM-Identity-Format-Preference` header
+>    was deployed.
+> 3. **`v0.6.0`** flipped the built-in AWS default to the session-stripped base IAM role
 >    ARN (`[aws-iam-role-arn, aws-arn]`).
 >
-> Unless you need to opt into a non-default identity format now, or you are deploying your own
-> verifier, wait for `v0.6.0`.
+> Unless you are pinned to it deliberately, upgrade to `v0.6.0`.
 
 ### Added
 - **Client-selectable identity-format preference lists (content negotiation).** Clients
@@ -68,6 +106,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ### Fixed
 - Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.
+
+## [v0.5.0] - 2026-06-16
+### Added
+- Optional AWS `RoleSessionName` when assuming a role (`WithAssumeRoleSessionName` in Go, `assume_role_session_name` in Python, `assumeRoleSessionName` / `Options.withAssumeRoleSessionName` in Java, `--assume-role-session-name` CLI flag).
+- Documentation on AWS AssumeRole identity ARN matching for pre-provisioned database users (root README, Go/Java README).
+
+### Changed
+- AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
+
+### Fixed
+- Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
 
 ## [v0.4.0] - 2026-06-12
 ### Added
@@ -134,7 +183,9 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 - Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
 - Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
-[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...HEAD
+[v0.6.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0-verifier...go/v0.6.0
+[v0.6.0-verifier]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...go/v0.6.0-verifier
+[v0.5.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...go/v0.5.0
 [v0.4.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.3.0...go/v0.4.0
 [v0.3.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.2.0...go/v0.3.0
 [v0.2.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.1.0...go/v0.2.0

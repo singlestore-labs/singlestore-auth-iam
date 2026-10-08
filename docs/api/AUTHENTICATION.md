@@ -66,7 +66,11 @@ for an IAM user.
 
 The issued `sub` can be negotiated to an alternate representation (for AWS, the
 session-stripped base IAM role ARN) via the `X-S2IAM-Identity-Format-Preference`
-request header; the chosen form is reported in the response `identityFormat` field. See
+request header; the chosen form is reported in the response `identityFormat` field. The
+SingleStore client libraries and CLI send `aws-iam-role-arn,aws-arn` by default as of
+v0.6.0, so they authenticate an assumed-role session as the base IAM role ARN; a
+protocol-only client that omits the header still gets the raw caller ARN described
+above. See
 [Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)
 in the main README for the vocabulary and semantics, and [openapi.yaml](openapi.yaml)
 for the schema.

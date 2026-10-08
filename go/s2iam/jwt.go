@@ -94,7 +94,9 @@ func WithAssumeRole(roleIdentifier string) JWTOption {
 // When unset, the library uses a stable default (DefaultRoleSessionName), so the
 // full ARN is deterministic and can be pre-configured as a cloud principal /
 // database user. Set a stable value here if you need a different one. It does not
-// affect the "aws-iam-role-arn" format (the session-stripped base role ARN).
+// affect the "aws-iam-role-arn" format (the session-stripped base role ARN), which
+// is the default as of v0.6.0, so this option only matters when you request
+// "aws-arn" via WithIdentityFormatPreference.
 func WithAssumeRoleSessionName(sessionName string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleSessionName = sessionName
@@ -109,8 +111,8 @@ func WithAssumeRoleSessionName(sessionName string) JWTOption {
 // heterogeneous fleet; unknown or inapplicable tokens are ignored.
 //
 // Precedence: this explicit option > the S2IAM_IDENTITY_FORMAT_PREFERENCE
-// environment variable > the built-in default ([aws-arn], byte-identical to the
-// historical behavior).
+// environment variable > the built-in default ([aws-iam-role-arn, aws-arn]).
+// Pass "aws-arn" to restore the pre-v0.6.0 session-bearing AWS identity.
 func WithIdentityFormatPreference(formats ...string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.IdentityFormatPreference = formats
@@ -132,10 +134,11 @@ func (o jwtOptions) identityFormatPreference() []string {
 		}
 		return out
 	}
-	// Built-in default: the raw AWS ARN, byte-identical to today. GCP/Azure tokens
-	// are absent, so those providers fall through to the verifier's default
-	// ordering (also unchanged).
-	return []string{string(models.FormatAWSARN)}
+	// Built-in default: the session-stripped base IAM role ARN, falling back to the
+	// raw ARN for callers that are not an assumed-role session (e.g. an IAM user).
+	// GCP/Azure tokens are absent, so those providers fall through to the verifier's
+	// default ordering (unchanged).
+	return []string{string(models.FormatAWSIAMRoleARN), string(models.FormatAWSARN)}
 }
 
 // processJWTOptions processes JWT options and extracts provider options
