@@ -56,9 +56,10 @@ public final class Options {
    *
    * <p>
    * Precedence: this explicit option &gt; the S2IAM_IDENTITY_FORMAT_PREFERENCE
-   * environment variable &gt; the built-in default ("aws-iam-role-arn" then
-   * "aws-arn"). Pass "aws-arn" to restore the pre-v0.6.0 session-bearing AWS
-   * identity.
+   * environment variable &gt; the built-in default, which names every provider so
+   * the identity cannot move if a verifier operator changes the server-side
+   * default ordering. Setting a preference that omits a provider gives that
+   * provider's identity back to the verifier's ordering.
    */
   public static JwtOption withIdentityFormatPreference(String... formats) {
     return o -> {

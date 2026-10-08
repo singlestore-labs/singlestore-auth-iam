@@ -91,9 +91,12 @@ the response `identityFormat` field. See the
 [main README](../README.md#identity-format-preferences-content-negotiation) for the full
 vocabulary, the default ordering, and semantics.
 
-The built-in default is `["aws-iam-role-arn", "aws-arn"]`: the session-stripped base IAM
-role ARN, falling back to the raw ARN for callers that are not an assumed-role session.
-Request `"aws-arn"` for the session-bearing raw STS ARN instead:
+The built-in default names every provider, so the identity is pinned by the client and
+cannot move if a verifier operator changes the server-side default ordering:
+`["aws-iam-role-arn", "aws-arn", "gcp-sa-email", "gcp-sa-unique-id", "azure-object-id"]`.
+For AWS that means the session-stripped base IAM role ARN, falling back to the raw ARN for
+callers that are not an assumed-role session. Request `"aws-arn"` for the session-bearing
+raw STS ARN instead:
 
 ```go
 jwt, err := s2iam.GetDatabaseJWT(

@@ -10,6 +10,9 @@ from .aws import ROLE_SESSION_NAME_PARAM
 from .identity_format import (
     FORMAT_AWS_ARN,
     FORMAT_AWS_IAM_ROLE_ARN,
+    FORMAT_AZURE_OBJECT_ID,
+    FORMAT_GCP_SA_EMAIL,
+    FORMAT_GCP_SA_UNIQUE_ID,
     IDENTITY_FORMAT_PREFERENCE_ENV,
     IDENTITY_FORMAT_PREFERENCE_HEADER,
     parse_identity_format_preference,
@@ -22,6 +25,24 @@ DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
 # from an explicit empty preference (send no header).
 _PREFERENCE_UNSET = object()
 
+# The built-in preference: every provider, so the issued identity is pinned by the
+# client instead of being left to the verifier's configured default ordering, which
+# an operator can change server-side. Each provider's run ends at its always-valid
+# floor, so selection never falls through to the server for an identity we can
+# authenticate.
+#
+# AWS leads with the session-stripped base IAM role ARN. GCP and Azure reproduce the
+# verifier's own ordering, so naming them pins the identity without changing it.
+# Formats that a preceding floor already makes unreachable (aws-role-id,
+# azure-resource-id) are omitted: they are opt-in only.
+_DEFAULT_IDENTITY_FORMAT_PREFERENCE = [
+    FORMAT_AWS_IAM_ROLE_ARN,
+    FORMAT_AWS_ARN,
+    FORMAT_GCP_SA_EMAIL,
+    FORMAT_GCP_SA_UNIQUE_ID,
+    FORMAT_AZURE_OBJECT_ID,
+]
+
 
 def _resolve_identity_format_preference(preference: Any) -> list[str]:
     """Resolve the effective preference using option > env var > built-in default.
@@ -30,10 +51,10 @@ def _resolve_identity_format_preference(preference: Any) -> list[str]:
     forms; list() would otherwise split it into individual characters. Any other
     iterable is taken as an already-split sequence of tokens.
 
-    The built-in default is [aws-iam-role-arn, aws-arn]: the session-stripped base
-    IAM role ARN, falling back to the raw ARN for callers that are not an
-    assumed-role session (e.g. an IAM user). GCP/Azure tokens are absent, so those
-    providers fall through to the verifier's default ordering (unchanged).
+    The built-in default is _DEFAULT_IDENTITY_FORMAT_PREFERENCE, which names every
+    provider so the identity cannot move if a verifier operator changes the
+    server-side default ordering. Setting a preference that omits a provider gives
+    that provider's identity back to the verifier's ordering.
     """
     if preference is not _PREFERENCE_UNSET and preference is not None:
         if isinstance(preference, str):
@@ -44,7 +65,7 @@ def _resolve_identity_format_preference(preference: Any) -> list[str]:
     env = os.environ.get(IDENTITY_FORMAT_PREFERENCE_ENV)
     if env:
         return parse_identity_format_preference(env)
-    return [FORMAT_AWS_IAM_ROLE_ARN, FORMAT_AWS_ARN]
+    return list(_DEFAULT_IDENTITY_FORMAT_PREFERENCE)
 
 
 async def get_jwt(

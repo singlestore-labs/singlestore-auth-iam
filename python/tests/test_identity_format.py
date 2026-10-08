@@ -26,7 +26,16 @@ def test_parse_identity_format_preference():
 def test_resolve_identity_format_preference_precedence(monkeypatch):
     """Option > env var > built-in default, mirroring Go's equivalent test."""
     monkeypatch.delenv(IDENTITY_FORMAT_PREFERENCE_ENV, raising=False)
-    assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [FORMAT_AWS_IAM_ROLE_ARN, FORMAT_AWS_ARN]
+    # The built-in default names every provider so a server-side change to the
+    # verifier's default ordering cannot move the issued identity. Each provider's
+    # run must end at its always-valid floor for that pinning to be total.
+    assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [
+        "aws-iam-role-arn",
+        "aws-arn",
+        "gcp-sa-email",
+        "gcp-sa-unique-id",
+        "azure-object-id",
+    ]
 
     monkeypatch.setenv(IDENTITY_FORMAT_PREFERENCE_ENV, " aws-arn ")
     assert _resolve_identity_format_preference(_PREFERENCE_UNSET) == [FORMAT_AWS_ARN]

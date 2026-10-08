@@ -251,14 +251,23 @@ representations the verifier has already derived for the same identity — it ne
 broadens a match or crosses identities, and it always falls back to the server default
 (and ultimately the always-valid floor) when a preference cannot be honored.
 
-The preference header is optional at the protocol level: a request that sends **no**
-preference gets the verifier's own default for the provider (`aws-arn` for AWS). The
-client libraries and CLI always send one, so this applies to protocol-only clients.
+The client libraries and CLI send a **complete** preference by default — every provider,
+each ending at a format that is always available. The identity you get is therefore
+pinned by the client and cannot move if a verifier operator changes the server-side
+default ordering. If you set your own preference, name every provider you run on for the
+same guarantee; a provider you omit falls back to the verifier's ordering.
+
+The header itself is optional at the protocol level: a request that sends **no**
+preference gets the verifier's own default for the provider (`aws-arn` for AWS). That
+applies to protocol-only clients, not to the libraries here.
 
 #### Format vocabulary
 
-`*` marks the format the client libraries request by default; `†` marks the protocol
-default — the `sub` the verifier picks when a request sends no preference header.
+`*` marks the identity you get from the client libraries by default; `†` marks the
+protocol default — the `sub` the verifier picks when a request sends no preference header
+at all. The default client preference is
+`aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id`: a `*` row is the
+first entry applicable to your identity, and the unmarked rows are opt-in only.
 
 | Format token | CSP | Meaning | Example `sub` |
 |--------------|-----|---------|---------------|
@@ -269,9 +278,6 @@ default — the `sub` the verifier picks when a request sends no preference head
 | `gcp-sa-unique-id` | GCP | Numeric service-account unique id; always available (floor) | `103547991597142817347` |
 | `azure-object-id` *† | Azure | `oid` principal (object id); always available (floor / default) | `11111111-2222-3333-4444-555555555555` |
 | `azure-resource-id` | Azure | `xms_mirid` resource id; user-assigned managed identity only | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
-
-The clients send AWS tokens only; GCP and Azure carry no token in the default preference,
-so those providers fall through to the verifier's ordering.
 
 #### `aws-arn` and session names
 
@@ -295,8 +301,10 @@ you take on:
 Set the preference (highest priority first) programmatically, via CLI, or via environment:
 
 ```bash
-# Request the session-bearing raw STS ARN for AWS instead of the base IAM role ARN
-export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-arn"
+# Request the session-bearing raw STS ARN for AWS instead of the base IAM role ARN.
+# The remaining tokens are the rest of the default preference; keep them so GCP and
+# Azure stay pinned to the client's choice. On an AWS-only fleet, "aws-arn" alone works.
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
 s2iam --workspace-group-id=my-workspace
 
 # Or per-invocation
@@ -318,7 +326,7 @@ user for the exact `sub` form you intend to use so the identity you authorize as
 what you configured.
 
 Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**
-(`aws-iam-role-arn,aws-arn`). Language options:
+(`aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id`). Language options:
 `WithIdentityFormatPreference(...)` (Go),
 `identity_format_preference=[...]` (Python),
 `Options.withIdentityFormatPreference(...)` / `.identityFormatPreference(...)` (Java).

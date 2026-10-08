@@ -19,8 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ### Breaking changes
 - **The AWS identity requested by default is now the base IAM role ARN.** The Go, Python,
-  and Java clients and the `s2iam` CLI send the preference `[aws-iam-role-arn, aws-arn]`
-  instead of `[aws-arn]`, so a workload running under an AWS STS assumed-role session —
+  and Java clients and the `s2iam` CLI lead their preference with `aws-iam-role-arn`
+  instead of `aws-arn`, so a workload running under an AWS STS assumed-role session —
   EC2 instance profile, EKS IRSA, or an explicit `AssumeRole` — authenticates as
   `arn:aws:iam::ACCOUNT:role/ROLE` rather than
   `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION`. The base role ARN is independent of
@@ -35,9 +35,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
   [Identity format preferences](README.md#identity-format-preferences-content-negotiation)
   for the full vocabulary and semantics.
 
-  Not affected: **IAM-user credentials** (no assumed-role session, so `aws-iam-role-arn`
-  does not apply and the raw ARN is still issued) and **GCP and Azure** (the clients send
-  no tokens for those providers).
+  Not affected: **IAM-user credentials** — there is no assumed-role session, so
+  `aws-iam-role-arn` does not apply and the raw ARN is still issued.
 - `--assume-role-session-name` and its library equivalents are retained, but now affect the
   identity only when you request `aws-arn`.
 
@@ -53,17 +52,31 @@ Request `aws-arn` explicitly and the issued identity is byte-identical to v0.5.0
 | Python | `identity_format_preference=["aws-arn"]` |
 | Java | `Options.withIdentityFormatPreference("aws-arn")` or `.identityFormatPreference("aws-arn")` |
 
+On a fleet that also runs on GCP or Azure, keep the rest of the default list so those
+providers stay pinned too:
+`aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id`.
+
 Under `aws-arn` the session name is part of the identity, so keep it stable: the
 library-driven `AssumeRole` already uses a stable default (`s2iam-session`), EKS IRSA needs
 `AWS_ROLE_SESSION_NAME` set, and an EC2 instance profile cannot be stabilized at all (its
 session name is the instance id) — those workloads should adopt `aws-iam-role-arn`.
 
 ### Changed
+- **The clients now send a complete identity-format preference, pinning every provider.**
+  The built-in default is
+  `[aws-iam-role-arn, aws-arn, gcp-sa-email, gcp-sa-unique-id, azure-object-id]`: every
+  provider, each run ending at a format that is always available for that provider. The
+  identity is therefore determined by the client and cannot move if a verifier operator
+  changes the server-side default ordering. **The GCP and Azure entries reproduce the
+  verifier's existing ordering, so no GCP or Azure identity changes** — they are named
+  only to pin them. If you set your own preference, name every provider you run on for the
+  same guarantee; a provider you omit falls back to the verifier's ordering.
 - **The wire protocol is unchanged.** A request that sends no
   `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
   default identity (`aws-arn` for AWS), so protocol-only clients are unaffected. Because
-  the client preference outranks `VerifierConfig.DefaultIdentityFormats`, an AWS override
-  there is now only honored for requests that send no preference header at all.
+  the client preference outranks `VerifierConfig.DefaultIdentityFormats` and the clients
+  now name every provider, that override only applies to requests which send no preference
+  header at all.
 
 ## [v0.6.0-verifier]
 
