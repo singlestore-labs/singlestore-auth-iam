@@ -19,6 +19,12 @@ const (
 	// defaultServer is the default authentication server endpoint
 	defaultServer = "https://authsvc.singlestore.com/auth/iam/:jwtType"
 
+	// ServerURLEnv overrides the authentication server URL when WithServerURL is not
+	// given. The Python and Java clients honor the same variable, so one setting
+	// configures a mixed-language fleet. The value may use the :cloudProvider and
+	// :jwtType placeholders and must be https:// unless WithAllowHTTP is set.
+	ServerURLEnv = "S2IAM_SERVER_URL"
+
 	// defaultHTTPClientTimeout is used for outbound auth server requests
 	defaultHTTPClientTimeout = 10 * time.Second
 )
@@ -50,11 +56,24 @@ type jwtOptions struct {
 	identityFormatPreferenceSet bool
 }
 
-// WithServerURL sets the authentication server URL
+// WithServerURL sets the authentication server URL. It takes precedence over the
+// ServerURLEnv environment variable and the built-in default.
 func WithServerURL(serverURL string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.ServerURL = serverURL
 	})
+}
+
+// serverURL resolves the effective authentication server URL using the precedence
+// option > env var > built-in default.
+func (o jwtOptions) serverURL() string {
+	if o.ServerURL != "" {
+		return o.ServerURL
+	}
+	if env := os.Getenv(ServerURLEnv); env != "" {
+		return env
+	}
+	return defaultServer
 }
 
 // WithAllowHTTP permits http:// authentication server URLs. Intended for local testing only.
@@ -182,11 +201,9 @@ func processJWTOptions(jwtOpts jwtOptions, opts ...JWTOption) jwtOptions {
 func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (string, error) {
 	jwtOpts := processJWTOptions(defaultOpts, opts...)
 
-	if jwtOpts.ServerURL == "" {
-		return "", errors.New("server URL is required")
-	}
+	serverURL := jwtOpts.serverURL()
 
-	probeURL := strings.ReplaceAll(strings.ReplaceAll(jwtOpts.ServerURL, ":cloudProvider", "aws"), ":jwtType", string(jwtOpts.JWTType))
+	probeURL := strings.ReplaceAll(strings.ReplaceAll(serverURL, ":cloudProvider", "aws"), ":jwtType", string(jwtOpts.JWTType))
 	if _, err := validateAuthServerURL(probeURL, jwtOpts.AllowHTTP); err != nil {
 		return "", err
 	}
@@ -216,7 +233,7 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	}
 
 	// Construct the URL
-	targetURL := jwtOpts.ServerURL
+	targetURL := serverURL
 	targetURL = strings.ReplaceAll(targetURL, ":cloudProvider", string(identity.Provider))
 	targetURL = strings.ReplaceAll(targetURL, ":jwtType", string(jwtOpts.JWTType))
 
@@ -293,14 +310,12 @@ func GetDatabaseJWT(ctx context.Context, workspaceGroupID string, opts ...JWTOpt
 	return getJWT(ctx, jwtOptions{
 		JWTType:          DatabaseAccessJWT,
 		WorkspaceGroupID: workspaceGroupID,
-		ServerURL:        defaultServer,
 	}, opts)
 }
 
 // GetAPIJWT retrieves an API JWT from the authentication server
 func GetAPIJWT(ctx context.Context, opts ...JWTOption) (string, error) {
 	return getJWT(ctx, jwtOptions{
-		JWTType:   APIGatewayAccessJWT,
-		ServerURL: defaultServer,
+		JWTType: APIGatewayAccessJWT,
 	}, opts)
 }

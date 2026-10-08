@@ -219,12 +219,25 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
 - `--assume-role-session-name`: AWS STS `RoleSessionName` for `--assume-role`. Part of the identity only under the `aws-arn` format; defaults to a stable value so the full ARN is pre-configurable. Does not affect the default `aws-iam-role-arn` form. See [`aws-arn` and session names](#aws-arn-and-session-names)
 - `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (`--help` prints the default). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
-- `--server-url`: Authentication server URL
+- `--server-url`: Authentication server URL. Also settable via `S2IAM_SERVER_URL`. See [Environment variables](#environment-variables)
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
 - `--print-sub`: Print the issued JWT's `sub` claim (the verified identity) to stderr; useful for confirming which identity format you'll be authorized as
 - `--verbose`: Enable verbose logging
 - `--timeout`: Timeout for operations (default: 10s)
+
+## Environment variables
+
+The Go, Python, and Java libraries and the CLI all read these, with the same
+meaning. An explicit option or argument always takes precedence.
+
+- `S2IAM_SERVER_URL`: authentication server URL, replacing the built-in production
+  endpoint. May contain the `:cloudProvider` and `:jwtType` placeholders, substituted
+  with the detected provider (`aws`, `gcp`, `azure`) and the requested JWT type
+  (`database`, `api`). Must be `https://` unless the caller explicitly allows HTTP.
+- `S2IAM_IDENTITY_FORMAT_PREFERENCE`: comma-separated, ordered list of preferred
+  identity formats. See [Identity format preferences](#identity-format-preferences-content-negotiation).
+- `S2IAM_DEBUGGING`: set to `true` for debug logging. Never logs tokens or credentials.
 
 ## Supported Cloud Providers
 
