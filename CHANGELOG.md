@@ -32,7 +32,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
   create matching database users. Both forms can be registered at once, so you can prepare
   ahead of the upgrade and roll back without a gap. `s2iam --print-sub` shows the `sub` you
   will be authorized as. See
-  [Upgrading to the v0.6.0 AWS default](README.md#upgrading-to-the-v060-aws-default).
+  [Identity format preferences](README.md#identity-format-preferences-content-negotiation)
+  for the full vocabulary and semantics.
 
   Not affected: **IAM-user credentials** (no assumed-role session, so `aws-iam-role-arn`
   does not apply and the raw ARN is still issued) and **GCP and Azure** (the clients send

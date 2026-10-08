@@ -91,10 +91,9 @@ the response `identityFormat` field. See the
 [main README](../README.md#identity-format-preferences-content-negotiation) for the full
 vocabulary, the default ordering, and semantics.
 
-As of v0.6.0 the built-in default is `["aws-iam-role-arn", "aws-arn"]`: the
-session-stripped base IAM role ARN, falling back to the raw ARN for callers that are not
-an assumed-role session. Request `"aws-arn"` to restore the pre-v0.6.0 session-bearing
-AWS identity:
+The built-in default is `["aws-iam-role-arn", "aws-arn"]`: the session-stripped base IAM
+role ARN, falling back to the raw ARN for callers that are not an assumed-role session.
+Request `"aws-arn"` for the session-bearing raw STS ARN instead:
 
 ```go
 jwt, err := s2iam.GetDatabaseJWT(
