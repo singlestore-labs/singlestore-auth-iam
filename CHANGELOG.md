@@ -6,14 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 
 ## [v0.6.0]
 
-> **Step 3 of 3 of the identity-format rollout** begun in `v0.6.0-verifier`. The verifier
-> that honors `X-S2IAM-Identity-Format-Preference` is now deployed to the auth service, so
-> the clients flip their built-in AWS default to the session-stripped base IAM role ARN.
+> **⚠️ BREAKING CHANGE — the AWS identity your workloads authenticate as changes.**
+> Step 3 of 3 of the identity-format rollout begun in `v0.6.0-verifier`. The verifier that
+> honors `X-S2IAM-Identity-Format-Preference` is now deployed to the auth service, so the
+> clients flip their built-in AWS default to the session-stripped base IAM role ARN.
+> **Read [Breaking changes](#breaking-changes) before upgrading an AWS workload**, or skip
+> to [Retaining the previous behavior](#retaining-the-previous-behavior).
+>
 > This release requires a server that honors the preference header; a server that ignores
 > it returns the raw caller ARN regardless, so an upgraded client keeps working but does
 > not get the new identity.
 
-### Changed
+### Breaking changes
 - **The AWS identity requested by default is now the base IAM role ARN.** The Go, Python,
   and Java clients and the `s2iam` CLI send the preference `[aws-iam-role-arn, aws-arn]`
   instead of `[aws-arn]`, so a workload running under an AWS STS assumed-role session —
@@ -22,21 +26,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
   `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION`. The base role ARN is independent of
   the caller-chosen session name, which is what makes it pre-configurable for an EC2
   instance profile (whose session name is the instance id).
-  - **This changes the JWT `sub` your AWS workloads authenticate as.** Register
-    `arn:aws:iam::ACCOUNT:role/ROLE` as a cloud principal and create matching database
-    users before upgrading; both forms can be registered at once, so you can prepare ahead
-    of the upgrade and roll back without a gap. See
-    [Upgrading to the v0.6.0 AWS default](README.md#upgrading-to-the-v060-aws-default).
-  - To keep the previous identity, request `aws-arn` explicitly — via
-    `WithIdentityFormatPreference("aws-arn")` (Go), `identity_format_preference=["aws-arn"]`
-    (Python), `Options.withIdentityFormatPreference("aws-arn")` /
-    `.identityFormatPreference("aws-arn")` (Java), `--identity-format-preference=aws-arn`
-    (CLI), or `S2IAM_IDENTITY_FORMAT_PREFERENCE=aws-arn`.
-  - IAM-user credentials are unaffected: there is no assumed-role session, so
-    `aws-iam-role-arn` does not apply and the raw ARN is still issued. GCP and Azure are
-    unaffected: the clients send no tokens for those providers.
-  - `--assume-role-session-name` and its library equivalents are retained but now only
-    affect the identity when you request `aws-arn`.
+
+  **The JWT `sub` changes, and authentication fails if the new `sub` is not registered.**
+  Before upgrading, register `arn:aws:iam::ACCOUNT:role/ROLE` as a cloud principal and
+  create matching database users. Both forms can be registered at once, so you can prepare
+  ahead of the upgrade and roll back without a gap. `s2iam --print-sub` shows the `sub` you
+  will be authorized as. See
+  [Upgrading to the v0.6.0 AWS default](README.md#upgrading-to-the-v060-aws-default).
+
+  Not affected: **IAM-user credentials** (no assumed-role session, so `aws-iam-role-arn`
+  does not apply and the raw ARN is still issued) and **GCP and Azure** (the clients send
+  no tokens for those providers).
+- `--assume-role-session-name` and its library equivalents are retained, but now affect the
+  identity only when you request `aws-arn`.
+
+#### Retaining the previous behavior
+Request `aws-arn` explicitly and the issued identity is byte-identical to v0.5.0 /
+`v0.6.0-verifier`. No other change is needed.
+
+| | |
+|---|---|
+| Environment (any language, no code change) | `S2IAM_IDENTITY_FORMAT_PREFERENCE=aws-arn` |
+| CLI | `s2iam --identity-format-preference=aws-arn` |
+| Go | `s2iam.WithIdentityFormatPreference("aws-arn")` |
+| Python | `identity_format_preference=["aws-arn"]` |
+| Java | `Options.withIdentityFormatPreference("aws-arn")` or `.identityFormatPreference("aws-arn")` |
+
+Under `aws-arn` the session name is part of the identity, so keep it stable: the
+library-driven `AssumeRole` already uses a stable default (`s2iam-session`), EKS IRSA needs
+`AWS_ROLE_SESSION_NAME` set, and an EC2 instance profile cannot be stabilized at all (its
+session name is the instance id) — those workloads should adopt `aws-iam-role-arn`.
+
+### Changed
 - **The wire protocol is unchanged.** A request that sends no
   `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
   default identity (`aws-arn` for AWS), so protocol-only clients are unaffected. Because
