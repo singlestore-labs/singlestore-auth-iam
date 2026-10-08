@@ -32,6 +32,7 @@ public class AWSClient extends AbstractBaseClient {
   // registration-preview, independent of the negotiated identity format). The
   // values match the Go and Python clients, and are distinct from
   // ROLE_SESSION_NAME_PARAM, which is an additionalParams request key.
+  public static final String CLAIM_USER_ID = "UserId";
   public static final String CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn";
   public static final String CLAIM_ROLE_SESSION_NAME = "RoleSessionName";
 
@@ -170,7 +171,7 @@ public class AWSClient extends AbstractBaseClient {
       extra.put("account", account);
       String userId = who.userId();
       if (userId != null && !userId.isEmpty())
-        extra.put("userId", userId);
+        extra.put(CLAIM_USER_ID, userId);
       // Build the valid identity-format candidates and default the identifier to the
       // always-valid floor (the raw caller ARN, format aws-arn), byte-identical to
       // the historical behavior. The negotiated format (chosen by the verifier from

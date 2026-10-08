@@ -54,6 +54,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
 ### Changed
 - **Python now requires 3.10 or newer** (was 3.9). Python 3.9 reached end of life in
   October 2025 and is no longer supported by the type checker the project pins.
+- **Java:** the AWS STS user id is now reported under the `UserId` identity-claim key
+  (was `userId`), matching the Go and Python clients, and is available as the
+  `AWSClient.CLAIM_USER_ID` constant. Java callers reading
+  `getAdditionalClaims().get("userId")` must use `"UserId"`.
+- **Python:** the identity-format vocabulary (`FORMAT_AWS_ARN`,
+  `FORMAT_AWS_IAM_ROLE_ARN`, `FORMAT_AWS_ROLE_ID`, `FORMAT_GCP_SA_EMAIL`,
+  `FORMAT_GCP_SA_UNIQUE_ID`, `FORMAT_AZURE_OBJECT_ID`, `FORMAT_AZURE_RESOURCE_ID`) is now
+  exported from the top-level `s2iam` package, so a preference can be named symbolically
+  rather than hardcoded (parity with Go's `models` package and Java's `IdentityFormat`).
 
 ### Fixed
 - Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.

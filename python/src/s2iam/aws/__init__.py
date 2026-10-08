@@ -103,7 +103,7 @@ def _role_id_from_user_id(user_id: str) -> str:
     return ""
 
 
-def aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCandidate]:
+def _aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCandidate]:
     """Return the identity formats valid for the attested GetCallerIdentity result.
 
     Natural order with the always-valid floor (the raw caller ARN) first:
@@ -137,7 +137,7 @@ def aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCa
     return candidates
 
 
-def aws_identity_claims(arn: str, user_id: str = "") -> dict[str, str]:
+def _aws_identity_claims(arn: str, user_id: str = "") -> dict[str, str]:
     """Build AdditionalClaims for an AWS identity.
 
     The raw STS assumed-role ARN, the role session name, and the STS UserId (whose
@@ -395,7 +395,7 @@ class AWSClient(CloudProviderClient):
             # client re-derive the chosen value.
             account = identity_resp["Account"]
             user_id = identity_resp.get("UserId", "")
-            candidates = aws_candidates(arn, account, user_id)
+            candidates = _aws_candidates(arn, account, user_id)
 
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
@@ -403,7 +403,7 @@ class AWSClient(CloudProviderClient):
                 account_id=account,
                 region=region_from_arn,
                 resource_type=_arn_resource_type(arn),
-                additional_claims=aws_identity_claims(arn, user_id),
+                additional_claims=_aws_identity_claims(arn, user_id),
                 identity_format=candidates[0].format,
                 candidates=[(c.format, c.value) for c in candidates],
             )

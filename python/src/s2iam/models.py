@@ -34,11 +34,14 @@ class CloudIdentity:
     resource_type: str = ""
     additional_claims: dict[str, str] = field(default_factory=dict)
     # identity_format is the format token that produced identifier (e.g.
-    # "aws-arn" or "aws-iam-role-arn"). The auth service echoes the negotiated
-    # token back as the response identityFormat field.
+    # "aws-arn" or "aws-iam-role-arn"). On a client-built identity this is the
+    # locally computed default (the floor), not the format the verifier
+    # negotiated: the negotiated token is reported by the auth service in the
+    # response identityFormat field.
     identity_format: str = ""
     # candidates is the ordered list of (format, value) pairs valid for this
-    # identity (floor first), used to re-derive the negotiated value.
+    # identity (floor first), so a caller can see which representations exist and
+    # re-derive the value the verifier would negotiate for a given preference.
     candidates: list[tuple[str, str]] = field(default_factory=list)
 
 

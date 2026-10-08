@@ -9,8 +9,8 @@ from s2iam.aws import (
     CLAIM_ASSUMED_ROLE_ARN,
     CLAIM_ROLE_SESSION_NAME,
     CLAIM_USER_ID,
-    aws_candidates,
-    aws_identity_claims,
+    _aws_candidates,
+    _aws_identity_claims,
 )
 from s2iam.identity_format import (
     FORMAT_AWS_ARN,
@@ -22,7 +22,7 @@ from s2iam.identity_format import (
 
 def test_assumed_role_candidates():
     arn = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
-    candidates = aws_candidates(arn, "111122223333", "AROAEXAMPLE1234567890:example-session")
+    candidates = _aws_candidates(arn, "111122223333", "AROAEXAMPLE1234567890:example-session")
     assert candidates == [
         IdentityCandidate(FORMAT_AWS_ARN, arn),
         IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, "arn:aws:iam::111122223333:role/ExampleCloudPrincipalRole"),
@@ -33,11 +33,11 @@ def test_assumed_role_candidates():
 
 
 def test_base_role_arn_is_session_independent():
-    a = aws_candidates(
+    a = _aws_candidates(
         "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
         "503396375767",
     )[1]
-    b = aws_candidates(
+    b = _aws_candidates(
         "arn:aws:sts::503396375767:assumed-role/NoPermissionsRole/some-other-session",
         "503396375767",
     )[1]
@@ -47,7 +47,7 @@ def test_base_role_arn_is_session_independent():
 def test_base_role_arn_preserves_partition():
     # GovCloud/China: the derived base role ARN must keep the source partition so
     # it stays byte-identical to the Go verifier's issued JWT sub.
-    gov = aws_candidates(
+    gov = _aws_candidates(
         "arn:aws-us-gov:sts::503396375767:assumed-role/NoPermissionsRole/s2iam-session",
         "503396375767",
     )[1]
@@ -56,17 +56,17 @@ def test_base_role_arn_preserves_partition():
 
 def test_iam_user_has_only_the_raw_arn_floor():
     arn = "arn:aws:iam::123456789012:user/Alice"
-    candidates = aws_candidates(arn, "123456789012", "AIDAEXAMPLE")
+    candidates = _aws_candidates(arn, "123456789012", "AIDAEXAMPLE")
     assert candidates == [IdentityCandidate(FORMAT_AWS_ARN, arn)]
 
 
 def test_identity_claims_preserve_alternates():
     arn = "arn:aws:sts::111122223333:assumed-role/ExampleCloudPrincipalRole/example-session"
-    claims = aws_identity_claims(arn, "AROAEXAMPLE1234567890:example-session")
+    claims = _aws_identity_claims(arn, "AROAEXAMPLE1234567890:example-session")
     assert claims[CLAIM_ASSUMED_ROLE_ARN] == arn
     assert claims[CLAIM_ROLE_SESSION_NAME] == "example-session"
     assert claims[CLAIM_USER_ID] == "AROAEXAMPLE1234567890:example-session"
 
-    user_claims = aws_identity_claims("arn:aws:iam::123456789012:user/Alice", "AIDAEXAMPLE")
+    user_claims = _aws_identity_claims("arn:aws:iam::123456789012:user/Alice", "AIDAEXAMPLE")
     assert user_claims[CLAIM_USER_ID] == "AIDAEXAMPLE"
     assert CLAIM_ASSUMED_ROLE_ARN not in user_claims

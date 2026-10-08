@@ -12,11 +12,13 @@ public class CloudIdentity {
   private final String resourceType;
   private final Map<String, String> additionalClaims;
   // The format token that produced identifier (e.g. "aws-arn" or
-  // "aws-iam-role-arn"); the auth service echoes the negotiated token back as the
-  // response identityFormat field.
+  // "aws-iam-role-arn"). On a client-built identity this is the locally computed
+  // default (the floor), not the format the verifier negotiated: the negotiated
+  // token is reported by the auth service in the response identityFormat field.
   private final String identityFormat;
   // The ordered list of (format, value) pairs valid for this identity (floor
-  // first), used to re-derive the negotiated value.
+  // first), so a caller can see which representations exist and re-derive the
+  // value the verifier would negotiate for a given preference.
   private final List<IdentityFormat.Candidate> candidates;
 
   public CloudIdentity(CloudProviderType provider, String identifier, String accountId,
