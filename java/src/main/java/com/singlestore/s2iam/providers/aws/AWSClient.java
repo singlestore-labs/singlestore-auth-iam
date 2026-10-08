@@ -29,10 +29,15 @@ public class AWSClient extends AbstractBaseClient {
   public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
 
   // AdditionalClaims keys populated for AWS identities (preserved for audit /
-  // registration-preview, independent of the negotiated identity format). The
-  // values match the Go and Python clients, and are distinct from
-  // ROLE_SESSION_NAME_PARAM, which is an additionalParams request key.
-  public static final String CLAIM_USER_ID = "UserId";
+  // registration-preview, independent of the negotiated identity format).
+  // CLAIM_ROLE_SESSION_NAME is distinct from ROLE_SESSION_NAME_PARAM, which is an
+  // additionalParams request key that happens to share the camelCase spelling.
+  //
+  // CLAIM_USER_ID deliberately keeps the lowercase "userId" spelling that shipped
+  // in v0.4.0, rather than the "UserId" used by the Go and Python clients:
+  // renaming it would break Java callers already reading that key. The two keys
+  // this release adds do match Go and Python.
+  public static final String CLAIM_USER_ID = "userId";
   public static final String CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn";
   public static final String CLAIM_ROLE_SESSION_NAME = "RoleSessionName";
 
