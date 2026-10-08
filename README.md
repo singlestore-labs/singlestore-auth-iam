@@ -340,11 +340,7 @@ regardless of the selected format, under these keys:
 | STS role session name | `RoleSessionName` | `aws.ClaimRoleSessionName` / `CLAIM_ROLE_SESSION_NAME` |
 | STS `UserId` | `UserId` | `aws.ClaimUserID` / `CLAIM_USER_ID` |
 
-The keys are identical across Go, Python, and Java, with one deprecated exception: the
-Java client spelled the user id `userId` through v0.5.0, so it now populates **both**
-`UserId` and the original `userId` with the same value. Read `UserId`
-(`AWSClient.CLAIM_USER_ID`); `userId` (`AWSClient.CLAIM_USER_ID_LEGACY`) is deprecated and
-will be removed in a future major release.
+The keys are the same in Go, Python, and Java. Prefer the constants over literals.
 
 ## Documentation
 
