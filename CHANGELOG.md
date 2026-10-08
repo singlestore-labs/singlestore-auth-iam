@@ -60,6 +60,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and 
   exported from the top-level `s2iam` package, so a preference can be named symbolically
   rather than hardcoded (parity with Go's `models` package and Java's `IdentityFormat`).
 
+### Deprecated
+- **Java:** the AWS `userId` identity-claim key (`AWSClient.CLAIM_USER_ID_LEGACY`). The STS
+  user id is now populated under **both** `UserId` (`AWSClient.CLAIM_USER_ID`, matching the
+  Go and Python clients) and the original `userId`, with the same value, so existing callers
+  keep working. Read `UserId`; `userId` will be removed in a future major release.
+
 ### Fixed
 - Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.
 

@@ -29,17 +29,25 @@ public class AWSClient extends AbstractBaseClient {
   public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
 
   // AdditionalClaims keys populated for AWS identities (preserved for audit /
-  // registration-preview, independent of the negotiated identity format).
-  // CLAIM_ROLE_SESSION_NAME is distinct from ROLE_SESSION_NAME_PARAM, which is an
-  // additionalParams request key that happens to share the camelCase spelling.
-  //
-  // CLAIM_USER_ID deliberately keeps the lowercase "userId" spelling that shipped
-  // in v0.4.0, rather than the "UserId" used by the Go and Python clients:
-  // renaming it would break Java callers already reading that key. The two keys
-  // this release adds do match Go and Python.
-  public static final String CLAIM_USER_ID = "userId";
+  // registration-preview, independent of the negotiated identity format). The
+  // values match the Go and Python clients. CLAIM_ROLE_SESSION_NAME is distinct
+  // from ROLE_SESSION_NAME_PARAM, which is an additionalParams request key that
+  // happens to share the camelCase spelling.
+  public static final String CLAIM_USER_ID = "UserId";
   public static final String CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn";
   public static final String CLAIM_ROLE_SESSION_NAME = "RoleSessionName";
+
+  /**
+   * The original lowercase spelling of the STS user-id claim key, populated
+   * alongside {@link #CLAIM_USER_ID} with the same value so callers written
+   * against v0.4.0 and v0.5.0 keep working.
+   *
+   * @deprecated read {@link #CLAIM_USER_ID} instead, which matches the Go and
+   *             Python clients. This key will be removed in a future major
+   *             release.
+   */
+  @Deprecated
+  public static final String CLAIM_USER_ID_LEGACY = "userId";
 
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
@@ -175,8 +183,11 @@ public class AWSClient extends AbstractBaseClient {
       Map<String, String> extra = new HashMap<>();
       extra.put("account", account);
       String userId = who.userId();
-      if (userId != null && !userId.isEmpty())
+      if (userId != null && !userId.isEmpty()) {
         extra.put(CLAIM_USER_ID, userId);
+        // Also under the deprecated pre-v0.6.0 key, so existing callers keep working.
+        extra.put(CLAIM_USER_ID_LEGACY, userId);
+      }
       // Build the valid identity-format candidates and default the identifier to the
       // always-valid floor (the raw caller ARN, format aws-arn), byte-identical to
       // the historical behavior. The negotiated format (chosen by the verifier from

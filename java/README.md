@@ -65,6 +65,10 @@ String jwt2 = S2IAM.getDatabaseJWT("workspace-group-id",
 
 Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) > built-in default.
 
+Whichever format is negotiated, the raw STS assumed-role ARN, the role session name, and the STS user id stay available in `getAdditionalClaims()` for auditing, under the `AWSClient.CLAIM_ASSUMED_ROLE_ARN`, `CLAIM_ROLE_SESSION_NAME`, and `CLAIM_USER_ID` keys.
+
+The user id is populated under **both** `UserId` (`CLAIM_USER_ID`, matching the Go and Python clients) and the original `userId` (`CLAIM_USER_ID_LEGACY`) with the same value, so code written against v0.4.0 or v0.5.0 keeps working. Read `CLAIM_USER_ID`; the legacy key is deprecated and will be removed in a future major release. See the [claim-key table in the main README](../README.md#aws-base-iam-role-arn-vs-raw-arn).
+
 Functional Options (Static API)
 -------------------------------
 ```java
