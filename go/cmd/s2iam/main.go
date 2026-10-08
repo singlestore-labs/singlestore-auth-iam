@@ -88,7 +88,7 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "AWS STS RoleSessionName for --assume-role (only part of the identity under the 'aws-arn' format; defaults to a stable value so the full ARN is pre-configurable)")
 	flagSet.StringVar(&config.IdentityFormatPref, "identity-format-preference", "", "Comma-separated identity-format preference (default '"+strings.Join(s2iam.DefaultIdentityFormatPreference(), ",")+"'); overrides S2IAM_IDENTITY_FORMAT_PREFERENCE")
 	flagSet.DurationVar(&config.Timeout, "timeout", 10*time.Second, "Timeout for operations")
-	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (uses default if not specified)")
+	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (defaults to $"+s2iam.ServerURLEnv+", else the production endpoint)")
 	flagSet.BoolVar(&config.AllowHTTP, "allow-http", false, "Allow http:// authentication server URLs (for testing only)")
 	flagSet.StringVar(&config.EnvName, "env-name", "", "Environment variable name for JWT output")
 	flagSet.StringVar(&config.EnvStatus, "env-status", "", "Environment variable name for status output")

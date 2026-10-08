@@ -75,6 +75,21 @@ session name is the instance id) — those workloads should adopt `aws-iam-role-
   `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
   default identity (`aws-arn` for AWS), so protocol-only clients are unaffected.
 
+### Added
+- **`S2IAM_SERVER_URL` overrides the authentication server URL in all three clients and
+  the CLI**, with the same precedence as `S2IAM_IDENTITY_FORMAT_PREFERENCE`: explicit
+  option > environment variable > built-in default. Previously only Python honored an
+  environment override, under the undocumented name `S2IAM_JWT_SERVER_URL`; that name is
+  still accepted but `S2IAM_SERVER_URL` wins when both are set.
+
+### Fixed
+- **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
+  hardcoded production URL rather than `None`, so the environment override was
+  unreachable through the public API. They now default to `None`.
+- **Python:** `server_url` now expands the `:cloudProvider` and `:jwtType` placeholders,
+  as the Go and Java clients already did, so one URL works for both JWT types and every
+  provider. URLs without placeholders are unaffected.
+
 ## [v0.6.0-verifier]
 
 > **Interim release — superseded by `v0.6.0`.** `v0.6.0-verifier` shipped the
