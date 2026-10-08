@@ -53,15 +53,20 @@ func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifie
 		config.AllowedAudiences = []string{"https://authsvc.singlestore.com"}
 	}
 
-	// Create verifiers for each cloud provider
-	awsVerifier := aws.NewVerifier(config.Logger)
+	// Pass the operator's configured override ordering (may be empty) to every
+	// verifier. SelectIdentityFormat concatenates client preference, this override,
+	// and the static built-in default, so a provider the operator didn't mention
+	// still keeps its historical default. The full flat list is used unfiltered —
+	// negotiation only ever returns a format valid for the identity at hand, so
+	// tokens for other providers are harmlessly ignored.
+	awsVerifier := aws.NewVerifier(config.Logger, config.DefaultIdentityFormats...)
 
-	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger)
+	gcpVerifier, err := gcp.NewVerifier(ctx, config.AllowedAudiences, config.Logger, config.DefaultIdentityFormats...)
 	if err != nil {
 		return nil, errors.Errorf("failed to create GCP verifier: %w", err)
 	}
 
-	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger)
+	azureVerifier := azure.NewVerifier(config.AllowedAudiences, config.AzureTenant, config.Logger, config.DefaultIdentityFormats...)
 
 	verifiers := map[models.CloudProviderType]models.CloudProviderVerifier{
 		models.ProviderAWS:   awsVerifier,

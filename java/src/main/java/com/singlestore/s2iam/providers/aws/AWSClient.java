@@ -7,8 +7,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import software.amazon.awssdk.arns.Arn;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -24,6 +27,27 @@ public class AWSClient extends AbstractBaseClient {
   public static final String ROLE_SESSION_NAME_PARAM = "roleSessionName";
   /** Stable default when AssumeRole is used without an explicit session name. */
   public static final String DEFAULT_ROLE_SESSION_NAME = "s2iam-session";
+
+  // AdditionalClaims keys populated for AWS identities (preserved for audit /
+  // registration-preview, independent of the negotiated identity format). The
+  // values match the Go and Python clients. CLAIM_ROLE_SESSION_NAME is distinct
+  // from ROLE_SESSION_NAME_PARAM, which is an additionalParams request key that
+  // happens to share the camelCase spelling.
+  public static final String CLAIM_USER_ID = "UserId";
+  public static final String CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn";
+  public static final String CLAIM_ROLE_SESSION_NAME = "RoleSessionName";
+
+  /**
+   * The original lowercase spelling of the STS user-id claim key, populated
+   * alongside {@link #CLAIM_USER_ID} with the same value so callers written
+   * against v0.4.0 and v0.5.0 keep working.
+   *
+   * @deprecated read {@link #CLAIM_USER_ID} instead, which matches the Go and
+   *             Python clients. This key will be removed in a future major
+   *             release.
+   */
+  @Deprecated
+  public static final String CLAIM_USER_ID_LEGACY = "userId";
 
   // Detect order: (1) environment hints (fast), (2) IMDSv2 token endpoint, (3)
   // legacy metadata path.
@@ -158,10 +182,27 @@ public class AWSClient extends AbstractBaseClient {
       }
       Map<String, String> extra = new HashMap<>();
       extra.put("account", account);
-      if (who.userId() != null && !who.userId().isEmpty())
-        extra.put("userId", who.userId());
-      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, arn, account, region,
-          resourceType, extra);
+      String userId = who.userId();
+      if (userId != null && !userId.isEmpty()) {
+        extra.put(CLAIM_USER_ID, userId);
+        // Also under the deprecated pre-v0.6.0 key, so existing callers keep working.
+        extra.put(CLAIM_USER_ID_LEGACY, userId);
+      }
+      // Build the valid identity-format candidates and default the identifier to the
+      // always-valid floor (the raw caller ARN, format aws-arn), byte-identical to
+      // the historical behavior. The negotiated format (chosen by the verifier from
+      // the preference header) may select an alternate such as the base IAM role
+      // ARN; the raw ARN and session name are preserved as claims for audit.
+      String[] assumed = parseAssumedRoleArn(arn);
+      if (assumed != null) {
+        extra.put(CLAIM_ASSUMED_ROLE_ARN, arn);
+        if (!assumed[2].isEmpty())
+          extra.put(CLAIM_ROLE_SESSION_NAME, assumed[2]);
+      }
+      List<IdentityFormat.Candidate> candidates = awsCandidates(arn, account, userId);
+      IdentityFormat.Candidate floor = candidates.get(0);
+      CloudIdentity identity = new CloudIdentity(CloudProviderType.aws, floor.value, account,
+          region, resourceType, extra, floor.format, candidates);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
@@ -175,6 +216,77 @@ public class AWSClient extends AbstractBaseClient {
         return name;
     }
     return DEFAULT_ROLE_SESSION_NAME;
+  }
+
+  /**
+   * Returns the identity formats valid for the attested GetCallerIdentity result,
+   * in natural order with the always-valid floor (the raw caller ARN) first:
+   *
+   * <ul>
+   * <li>aws-arn (floor, always): the raw caller ARN.
+   * <li>aws-iam-role-arn (assumed-role only): the base IAM role ARN.
+   * <li>aws-role-id (assumed-role only): the immutable RoleId (AROA...), the
+   * prefix of the STS UserId.
+   * </ul>
+   *
+   * This must stay identical to the Go verifier so the client-computed identity
+   * matches the issued JWT sub.
+   */
+  static List<IdentityFormat.Candidate> awsCandidates(String arn, String account, String userId) {
+    List<IdentityFormat.Candidate> candidates = new ArrayList<>();
+    candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ARN, arn));
+    String[] assumed = parseAssumedRoleArn(arn);
+    if (assumed != null) {
+      // Preserve the source partition (aws, aws-us-gov, aws-cn); the STS
+      // assumed-role ARN omits the IAM path, so this is the path-less canonical
+      // form arn:PARTITION:iam::ACCOUNT:role/ROLE.
+      candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_IAM_ROLE_ARN,
+          String.format("arn:%s:iam::%s:role/%s", assumed[0], account, assumed[1])));
+      String roleId = roleIdFromUserId(userId);
+      if (!roleId.isEmpty())
+        candidates.add(new IdentityFormat.Candidate(IdentityFormat.AWS_ROLE_ID, roleId));
+    }
+    return candidates;
+  }
+
+  /**
+   * Returns the immutable RoleId portion of an STS UserId (the segment before the
+   * ':'; UserId is "AROA...:session" for assumed roles), or "" if absent.
+   */
+  static String roleIdFromUserId(String userId) {
+    if (userId == null)
+      return "";
+    int i = userId.indexOf(':');
+    return i >= 0 ? userId.substring(0, i) : "";
+  }
+
+  /** Parse an ARN with the AWS SDK, or null if the string is not a valid ARN. */
+  private static Arn parseArn(String arn) {
+    if (arn == null)
+      return null;
+    try {
+      return Arn.fromString(arn);
+    } catch (RuntimeException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Returns {partition, roleName, sessionName} for an STS assumed-role ARN
+   * (arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION), or null for any other
+   * ARN shape. The resource sub-structure is not modeled by the SDK's Arn type,
+   * so it is split here; neither ROLE nor SESSION may contain '/'. ROLE must be
+   * non-empty; SESSION may be empty (returned as "").
+   */
+  static String[] parseAssumedRoleArn(String arn) {
+    Arn parsed = parseArn(arn);
+    if (parsed == null || !"sts".equals(parsed.service()))
+      return null;
+    String[] seg = parsed.resourceAsString().split("/", 3);
+    if (seg.length < 2 || !"assumed-role".equals(seg[0]) || seg[1].isEmpty())
+      return null;
+    String session = seg.length == 3 ? seg[2] : "";
+    return new String[]{parsed.partition(), seg[1], session};
   }
 
   private void ensureSTS() {
@@ -191,8 +303,8 @@ public class AWSClient extends AbstractBaseClient {
     }
   }
   private static String deriveRegion(String arn) {
-    String[] parts = arn.split(":");
-    return parts.length > 3 ? parts[3] : "";
+    Arn parsed = parseArn(arn);
+    return parsed != null ? parsed.region().orElse("") : "";
   }
   private static String deriveResourceTypeDetailed(String arn) {
     if (arn.contains(":instance/"))

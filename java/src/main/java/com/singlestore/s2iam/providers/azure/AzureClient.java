@@ -9,7 +9,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import com.singlestore.s2iam.exceptions.IdentityUnavailableException;
@@ -200,8 +202,16 @@ public class AzureClient extends AbstractBaseClient {
       if (!clientId.isEmpty())
         extra.put("clientId", clientId);
       extra.put("principalId", principalId);
+      // The object id is the always-valid floor and default format; the ARM
+      // resource id (xms_mirid) is added for user-assigned managed identities.
+      // Mirrors the Go client so the CloudIdentity contract holds across providers.
+      List<IdentityFormat.Candidate> candidates = new ArrayList<>();
+      candidates.add(new IdentityFormat.Candidate(IdentityFormat.AZURE_OBJECT_ID, principalId));
+      String mirid = extra.getOrDefault("xms_mirid", "");
+      if (!mirid.isEmpty())
+        candidates.add(new IdentityFormat.Candidate(IdentityFormat.AZURE_RESOURCE_ID, mirid));
       CloudIdentity identity = new CloudIdentity(CloudProviderType.azure, principalId, tenantId,
-          region, resourceType, extra);
+          region, resourceType, extra, IdentityFormat.AZURE_OBJECT_ID, candidates);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);

@@ -24,6 +24,7 @@ public final class S2IAMRequest {
   private String workspaceGroupId;
   private String assumeRoleId;
   private String assumeRoleSessionName;
+  private String[] identityFormatPreference;
   private Duration timeout;
   private String serverUrl;
   private boolean allowHttp;
@@ -60,9 +61,26 @@ public final class S2IAMRequest {
     return this;
   }
 
-  /** Optional AWS STS RoleSessionName when assuming a role. */
+  /**
+   * Optional AWS STS RoleSessionName for the library-driven AssumeRole (see
+   * {@link #assumeRole}). It is part of the identity under the "aws-arn" format
+   * (sub = {@code ...:assumed-role/ROLE/SESSION}) and defaults to a stable value
+   * so the full ARN is pre-configurable. It does not affect the
+   * "aws-iam-role-arn" (session-stripped) format or ambient credentials.
+   */
   public S2IAMRequest assumeRoleSessionName(String assumeRoleSessionName) {
     this.assumeRoleSessionName = assumeRoleSessionName;
+    return this;
+  }
+
+  /**
+   * Ordered identity-format preference (content negotiation). The verifier
+   * chooses the first supported-and-valid format for the attested identity (e.g.
+   * "aws-iam-role-arn", "aws-arn"). Overrides the
+   * S2IAM_IDENTITY_FORMAT_PREFERENCE environment variable.
+   */
+  public S2IAMRequest identityFormatPreference(String... formats) {
+    this.identityFormatPreference = formats;
     return this;
   }
 
@@ -123,6 +141,8 @@ public final class S2IAMRequest {
       jwtOpts.add(Options.withAssumeRole(assumeRoleId));
     if (assumeRoleSessionName != null)
       jwtOpts.add(Options.withAssumeRoleSessionName(assumeRoleSessionName));
+    if (identityFormatPreference != null)
+      jwtOpts.add(Options.withIdentityFormatPreference(identityFormatPreference));
     if (serverUrl != null)
       jwtOpts.add(Options.withServerUrl(serverUrl));
     if (allowHttp)

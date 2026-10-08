@@ -40,11 +40,34 @@ Use `.audience()` (builder) or `Options.withAudience()` (static API) ONLY when t
 
 Assume Role / Impersonation
 ---------------------------
-- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). Default session name: `s2iam-session` (override with `Options.withAssumeRoleSessionName`).
+- AWS: Provide an IAM role ARN (e.g., `arn:aws:iam::ACCOUNT:role/RoleName`). Session duration fixed to 3600s (parity with Go). By default the issued identity is the raw STS assumed-role ARN; opt into the session-stripped base IAM role ARN via identity-format negotiation (below).
 - GCP: Provide a service account email for impersonation.
 - Azure: Provide a managed identity client (object) ID (UUID format).
 
 Validation is strict; malformed identifiers raise `S2IAMException` before network calls.
+
+Identity Format Preferences
+---------------------------
+Clients may select the issued identity representation (the JWT `sub`) by supplying an ordered preference list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary, the default ordering, and semantics.
+
+```java
+// Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
+String jwt = S2IAMRequest.newRequest()
+    .databaseWorkspaceGroup("workspace-group-id")
+    .assumeRole("arn:aws:iam::123456789012:role/AppRole")
+    .identityFormatPreference("aws-iam-role-arn", "aws-arn")
+    .get();
+
+// Or with the static API:
+String jwt2 = S2IAM.getDatabaseJWT("workspace-group-id",
+    Options.withIdentityFormatPreference("aws-iam-role-arn", "aws-arn"));
+```
+
+Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) > built-in default.
+
+Whichever format is negotiated, the raw STS assumed-role ARN, the role session name, and the STS user id stay available in `getAdditionalClaims()` for auditing, under the `AWSClient.CLAIM_ASSUMED_ROLE_ARN`, `CLAIM_ROLE_SESSION_NAME`, and `CLAIM_USER_ID` keys.
+
+The user id is populated under **both** `UserId` (`CLAIM_USER_ID`, matching the Go and Python clients) and the original `userId` (`CLAIM_USER_ID_LEGACY`) with the same value, so code written against v0.4.0 or v0.5.0 keeps working. Read `CLAIM_USER_ID`; the legacy key is deprecated and will be removed in a future major release. See the [claim-key table in the main README](../README.md#aws-base-iam-role-arn-vs-raw-arn).
 
 Functional Options (Static API)
 -------------------------------
@@ -75,6 +98,7 @@ Selected Options helpers:
 - `Options.withTimeout(Duration)`
 - `Options.withAudience(String)` (GCP only)
 - `Options.withAssumeRole(String)`
+- `Options.withIdentityFormatPreference(String...)`
 - `Options.withServerUrl(String)`
 - `Options.withProvider(CloudProviderClient)` (explicit injection / test)
 

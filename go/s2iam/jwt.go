@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -36,14 +37,16 @@ func (o jwtOption) applyJWTOption(opts *jwtOptions) {
 // jwtOptions holds the options for the getJWT function
 type jwtOptions struct {
 	detectProviderOptions
-	JWTType               JWTType
-	WorkspaceGroupID      string
-	ServerURL             string
-	AllowHTTP             bool
-	Provider              models.CloudProviderClient
-	AdditionalParams      map[string]string
-	AssumeRoleIdentifier  string
-	AssumeRoleSessionName string
+	JWTType                     JWTType
+	WorkspaceGroupID            string
+	ServerURL                   string
+	AllowHTTP                   bool
+	Provider                    models.CloudProviderClient
+	AdditionalParams            map[string]string
+	AssumeRoleIdentifier        string
+	AssumeRoleSessionName       string
+	IdentityFormatPreference    []string
+	identityFormatPreferenceSet bool
 }
 
 // WithServerURL sets the authentication server URL
@@ -81,11 +84,58 @@ func WithAssumeRole(roleIdentifier string) JWTOption {
 	})
 }
 
-// WithAssumeRoleSessionName sets the AWS STS RoleSessionName when assuming a role.
+// WithAssumeRoleSessionName sets the AWS STS RoleSessionName used on the
+// AssumeRole call this library performs for WithAssumeRole. It applies only to
+// that library-driven AssumeRole path, not to ambient credentials (EC2 instance
+// profiles, EKS IRSA), whose session names are assigned by AWS/the infrastructure.
+//
+// The session name becomes part of the identity under the "aws-arn" format,
+// whose JWT sub is the full STS ARN arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION.
+// When unset, the library uses a stable default (DefaultRoleSessionName), so the
+// full ARN is deterministic and can be pre-configured as a cloud principal /
+// database user. Set a stable value here if you need a different one. It does not
+// affect the "aws-iam-role-arn" format (the session-stripped base role ARN).
 func WithAssumeRoleSessionName(sessionName string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleSessionName = sessionName
 	})
+}
+
+// WithIdentityFormatPreference sets the ordered identity-format preference list
+// sent to the auth service via the X-S2IAM-Identity-Format-Preference header. The
+// verifier chooses the first format that is both server-supported and valid for
+// the attested identity (for example prefer "aws-iam-role-arn" and fall back to
+// "aws-arn"). Tokens are provider-prefixed, so a single list can serve a
+// heterogeneous fleet; unknown or inapplicable tokens are ignored.
+//
+// Precedence: this explicit option > the S2IAM_IDENTITY_FORMAT_PREFERENCE
+// environment variable > the built-in default ([aws-arn], byte-identical to the
+// historical behavior).
+func WithIdentityFormatPreference(formats ...string) JWTOption {
+	return jwtOption(func(o *jwtOptions) {
+		o.IdentityFormatPreference = formats
+		o.identityFormatPreferenceSet = true
+	})
+}
+
+// identityFormatPreference resolves the effective preference list using the
+// precedence option > env var > built-in default.
+func (o jwtOptions) identityFormatPreference() []string {
+	if o.identityFormatPreferenceSet {
+		return o.IdentityFormatPreference
+	}
+	if env := os.Getenv(models.IdentityFormatPreferenceEnv); env != "" {
+		formats := models.ParseIdentityFormatPreference(env)
+		out := make([]string, len(formats))
+		for i, f := range formats {
+			out[i] = string(f)
+		}
+		return out
+	}
+	// Built-in default: the raw AWS ARN, byte-identical to today. GCP/Azure tokens
+	// are absent, so those providers fall through to the verifier's default
+	// ordering (also unchanged).
+	return []string{string(models.FormatAWSARN)}
 }
 
 // processJWTOptions processes JWT options and extracts provider options
@@ -171,6 +221,13 @@ func getJWT(ctx context.Context, defaultOpts jwtOptions, opts []JWTOption) (stri
 	// Add identity headers
 	for key, value := range identityHeaders {
 		req.Header.Set(key, value)
+	}
+
+	// Advertise the client's identity-format preference (content negotiation). The
+	// verifier chooses the first supported-and-valid format; older servers ignore
+	// this header and keep their default behavior.
+	if pref := jwtOpts.identityFormatPreference(); len(pref) > 0 {
+		req.Header.Set(models.IdentityFormatPreferenceHeader, strings.Join(pref, ","))
 	}
 
 	// Send request

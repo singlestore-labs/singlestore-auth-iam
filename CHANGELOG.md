@@ -4,17 +4,70 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v0.6.0-verifier]
+
+> **Interim release — most users should wait for `v0.6.0`.** `v0.6.0-verifier` ships the
+> content-negotiation capability (client-selectable identity formats plus the verifier that
+> honors them) while keeping every provider's default identity byte-identical to prior
+> releases, so it stays fully compatible with the auth server deployed today. It is one step
+> in a staged rollout:
+> 1. **`v0.6.0-verifier`** (this release) adds negotiation with the historical defaults.
+> 2. The auth-service verifier that honors the `X-S2IAM-Identity-Format-Preference` header is
+>    deployed (takes a few days).
+> 3. **`v0.6.0`** then flips the built-in AWS default to the session-stripped base IAM role
+>    ARN (`[aws-iam-role-arn, aws-arn]`).
+>
+> Unless you need to opt into a non-default identity format now, or you are deploying your own
+> verifier, wait for `v0.6.0`.
+
 ### Added
-- Optional AWS `RoleSessionName` when assuming a role (`WithAssumeRoleSessionName` in Go, `assume_role_session_name` in Python, `assumeRoleSessionName` / `Options.withAssumeRoleSessionName` in Java, `--assume-role-session-name` CLI flag).
-- Documentation on AWS AssumeRole identity ARN matching for pre-provisioned database users (root README, Go/Java README).
+- **Client-selectable identity-format preference lists (content negotiation).** Clients
+  may now request an ordered list of identity representations; the verifier picks the
+  first form it supports and can derive, and reports the chosen form back. This is
+  **fully additive and non-breaking**: the default identity for every provider is
+  byte-identical to prior releases unless a client opts in.
+  - New provider-prefixed format vocabulary: `aws-arn` (raw STS/IAM ARN, current default;
+    session-bearing for assumed roles),
+    `aws-iam-role-arn` (session-stripped base IAM role ARN), `aws-role-id`
+    (stable `RoleId`, `AROA…`), `gcp-sa-email`, `gcp-sa-unique-id`, `azure-object-id`,
+    and `azure-resource-id` (`xms_mirid`, user-assigned managed identity).
+  - Preference is set via the `WithIdentityFormatPreference(...)` option (Go),
+    `identity_format_preference=[...]` (Python), `Options.withIdentityFormatPreference(...)`
+    / `.identityFormatPreference(...)` (Java), the `--identity-format-preference` CLI flag,
+    or the `S2IAM_IDENTITY_FORMAT_PREFERENCE` environment variable (comma-separated).
+    Precedence is explicit option > environment variable > built-in default.
+  - The preference travels on the `X-S2IAM-Identity-Format-Preference` request header.
+    The verifier's response includes an `identityFormat` field naming the selected form.
+  - Negotiation only reorders among representations the verifier has already derived for
+    the authenticated identity; an unsupported or inapplicable preference falls back to
+    the server default and ultimately to the always-valid floor (`aws-arn`,
+    `gcp-sa-unique-id`, `azure-object-id`). It can never broaden a match or cross identities.
+  - To adopt the session-stripped base IAM role ARN for AWS, request
+    `["aws-iam-role-arn", "aws-arn"]`. The raw STS assumed-role ARN, role session name, and
+    STS `UserId` remain available in `AdditionalClaims` / `additional_claims` / identity
+    claims for audit regardless of the chosen format.
+  - Verifier operators can change the default ordering via
+    `VerifierConfig.DefaultIdentityFormats` (Go) — a single flat preference list spanning
+    providers (each token names its own provider); the built-in defaults preserve historical
+    behavior (`[aws-arn]`, `[gcp-sa-email, gcp-sa-unique-id]`, `[azure-object-id]`).
 
 ### Changed
-- AWS AssumeRole uses stable default session name `s2iam-session` when unset (replacing timestamp-based defaults in Go/Java). The resulting identity ARN is `arn:aws:sts::ACCOUNT:assumed-role/ROLE/s2iam-session`; pre-create database users and cloud principals to match that full ARN, or set an explicit session name.
+- **Python now requires 3.10 or newer** (was 3.9). Python 3.9 reached end of life in
+  October 2025 and is no longer supported by the type checker the project pins.
+- **Python:** the identity-format vocabulary (`FORMAT_AWS_ARN`,
+  `FORMAT_AWS_IAM_ROLE_ARN`, `FORMAT_AWS_ROLE_ID`, `FORMAT_GCP_SA_EMAIL`,
+  `FORMAT_GCP_SA_UNIQUE_ID`, `FORMAT_AZURE_OBJECT_ID`, `FORMAT_AZURE_RESOURCE_ID`) is now
+  exported from the top-level `s2iam` package, so a preference can be named symbolically
+  rather than hardcoded (parity with Go's `models` package and Java's `IdentityFormat`).
+
+### Deprecated
+- **Java:** the AWS `userId` identity-claim key (`AWSClient.CLAIM_USER_ID_LEGACY`). The STS
+  user id is now populated under **both** `UserId` (`AWSClient.CLAIM_USER_ID`, matching the
+  Go and Python clients) and the original `userId`, with the same value, so existing callers
+  keep working. Read `UserId`; `userId` will be removed in a future major release.
 
 ### Fixed
 - Authentication guide and OpenAPI examples use a UUID for `workspaceGroupID`. The auth server rejects non-UUID values such as `wg-...`.
-- Java AWS client returns the STS assumed-role ARN from `GetCallerIdentity` (not the input IAM role ARN) when AssumeRole is used.
 
 ## [v0.4.0] - 2026-06-12
 ### Added

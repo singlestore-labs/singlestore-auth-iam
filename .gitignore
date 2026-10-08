@@ -127,6 +127,8 @@ dmypy.json
 # Output of the go build program.
 go/debug_gcp_assume_role/debug-gcp-assume-role
 go/s2iam_example_server/s2iam-example-server
+# Test-server binary built by the s2iam test suite
+go/s2iam_test_server
 
 # Go module download cache
 go/pkg/
@@ -158,6 +160,9 @@ Thumbs.db
 
 # local evelopment-specific copilot instructions 
 .github/copilot-dev-guide.md
+
+# Local, uncommitted developer helper scripts
+doodles/
 
 # Python-specific excludes
 python/LICENSE

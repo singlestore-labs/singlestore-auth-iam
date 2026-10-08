@@ -280,16 +280,41 @@ class TestAssumeRole:
         role_name = role.rsplit("/", 1)[-1] if "/" in role else role
         assert role_name in assumed_identifier, "assumed identity should contain role name"
         if role.startswith("arn:aws:iam:"):
+            # With the default preference the identity is the raw STS assumed-role
+            # ARN (session-bearing), byte-identical to historical behavior. The
+            # supplied session name (or the stable default) must appear in the ARN;
+            # the negotiated base-role-ARN form (session-stripped) is exercised below.
             from s2iam.aws import DEFAULT_ROLE_SESSION_NAME
 
-            expected_session = session_name or DEFAULT_ROLE_SESSION_NAME
-            expected_segment = f":assumed-role/{role_name}/{expected_session}"
-            assert (
-                expected_segment in assumed_identifier
-            ), f"assumed identity ARN should contain {expected_segment!r}, got {assumed_identifier!r}"
-            assert assumed_identifier.endswith(f"/{expected_session}"), (
-                f"assumed identity ARN should end with session name /{expected_session!r}, "
-                f"got {assumed_identifier!r}"
+            expected_session_name = session_name or DEFAULT_ROLE_SESSION_NAME
+            assert assumed_identifier.startswith(
+                "arn:aws:sts::"
+            ), f"default AWS identity should be the raw STS assumed-role ARN, got {assumed_identifier!r}"
+            assert f":assumed-role/{role_name}/{expected_session_name}" in assumed_identifier, (
+                f"default AWS identity should carry the role and session name "
+                f"(expected .../assumed-role/{role_name}/{expected_session_name}), got {assumed_identifier!r}"
+            )
+            assert assumed_identifier.endswith(f"/{expected_session_name}"), (
+                f"default AWS identity ARN should end with session name "
+                f"/{expected_session_name}, got {assumed_identifier!r}"
+            )
+
+            # Content negotiation: opt into the new AWS ordering and confirm the
+            # issued identity collapses to the base IAM role ARN (session stripped).
+            negotiated_jwt = await s2iam.get_jwt_database(
+                **kwargs,
+                identity_format_preference=["aws-iam-role-arn", "aws-arn"],
+            )
+            negotiated_claims = _decode_jwt_payload(negotiated_jwt)
+            negotiated_identifier = negotiated_claims.get("sub", "")
+            # The base IAM role ARN is path-less: the STS assumed-role ARN omits any
+            # IAM path, so derive the expected value from the role prefix and the
+            # path-less role name rather than the (possibly path-bearing) input ARN.
+            # For a root-path role this equals `role` exactly.
+            expected_base_role_arn = role[: role.index(":role/") + len(":role/")] + role_name
+            assert negotiated_identifier == expected_base_role_arn, (
+                f"negotiated AWS identity should be the path-less base IAM role ARN "
+                f"{expected_base_role_arn!r} (session name must not affect it), got {negotiated_identifier!r}"
             )
 
 

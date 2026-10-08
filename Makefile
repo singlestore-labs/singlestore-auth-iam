@@ -98,9 +98,6 @@ help:
 	@echo "   AZURE_POSITIVE_*, AZURE_NEGATIVE_*)"
 	@echo ""
 	@echo "Coverage files are automatically timestamped (e.g., go-coverage-20250807-143022.out)"
-	@echo ""
-	@echo "Helper Scripts (doodles/):"
-	@echo "  doodles/install-all                      Run dev-setup across all remote test hosts"
 
 # Test targets
 test: test-local
@@ -108,7 +105,9 @@ test: test-local
 
 .PHONY: test-local-patterns
 test-local-patterns:
-	! git grep -i 'jwt[ _]token'
+	# Reject the redundant phrasing (the "T" in JWT already means token). AGENTS.md
+	# is excluded because it documents the rule and would otherwise self-trip here.
+	! git grep -i 'jwt[ _]token' -- ':!AGENTS.md'
 	@violations=$$(git grep -n 'S2IAM_TEST_' -- 'go/s2iam' 'go/internal' 'python/src' 'java/src/main' 2>/dev/null | grep -v '_test.go' | grep -v '/testhelp/' || true); \
 	 if [ -n "$$violations" ]; then \
 	   echo 'ERROR: S2IAM_TEST_ variables found in library (non-test) source:'; \
@@ -116,7 +115,14 @@ test-local-patterns:
 	   exit 1; \
 	 fi
 
-test-local: test-local-patterns test-local-go test-local-python test-local-java
+# Sequenced inside the recipe rather than as sibling prerequisites so the ordering
+# still holds under make -j: run the tests first, then lint, so a missing or broken
+# linter cannot stop the tests from running.
+test-local: test-local-patterns
+	$(MAKE) test-local-go
+	$(MAKE) test-local-python
+	$(MAKE) test-local-java
+	$(MAKE) lint
 	@echo "✓ All local tests passed"
 
 test-local-go:
@@ -195,7 +201,7 @@ dev-setup-ubuntu-go: dev-setup-common
 	go install mvdan.cc/gofumpt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	mkdir -p $$HOME/bin
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.0.2
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $$HOME/bin v2.14.0
 	@echo "✓ Ubuntu Go development environment ready"
 
 dev-setup-macos-go:

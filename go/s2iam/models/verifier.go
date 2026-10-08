@@ -16,6 +16,27 @@ type VerifierConfig struct {
 	AzureTenant string
 	// Logger provides a logging interface (if nil, no logging occurs)
 	Logger Logger
+	// DefaultIdentityFormats overrides the identity-format ordering used when a
+	// request carries no (valid) X-S2IAM-Identity-Format-Preference. It is a single
+	// flat, ordered list that may span providers, mirroring the client preference
+	// wire format: each token names its own provider, so only the relative order
+	// within a provider is meaningful and tokens for other providers are ignored
+	// by each verifier (they never match that identity's valid set). A provider
+	// with no token here keeps the built-in default (byte-identical to the
+	// historical behavior), which SelectIdentityFormat always appends as the final
+	// fallback. This is how an auth-service
+	// instance opts into (for example) the new AWS default
+	// [aws-iam-role-arn, aws-arn] without a client change, and how versioned
+	// endpoints can differ only in their default ordering.
+	//
+	// Note: for AWS this only takes effect as of v0.6.0. The v0.6.0-verifier
+	// clients pin [aws-arn] in the preference header, and the client preference
+	// outranks this override, so until the clients drop that pin (step 3 of the
+	// staged rollout) an AWS override here is only honored for requests that send
+	// no preference header at all — protocol-only clients, or a client that
+	// explicitly requests an empty preference. GCP and Azure are unaffected: the
+	// clients send no tokens for those providers.
+	DefaultIdentityFormats []IdentityFormat
 }
 
 // CloudProviderVerifier is implemented for each cloud provider.

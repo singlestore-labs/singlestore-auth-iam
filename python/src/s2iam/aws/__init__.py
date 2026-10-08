@@ -9,6 +9,19 @@ import asyncio
 import os
 from typing import Any, Optional
 
+from botocore.utils import ArnParser
+
+try:  # botocore moved this between versions
+    from botocore.exceptions import InvalidArnException
+except ImportError:  # pragma: no cover
+    from botocore.utils import InvalidArnException
+
+from ..identity_format import (
+    FORMAT_AWS_ARN,
+    FORMAT_AWS_IAM_ROLE_ARN,
+    FORMAT_AWS_ROLE_ID,
+    IdentityCandidate,
+)
 from ..models import (
     CloudIdentity,
     CloudProviderClient,
@@ -22,6 +35,11 @@ ROLE_SESSION_NAME_PARAM = "roleSessionName"
 # Stable default when AssumeRole is used without an explicit session name.
 DEFAULT_ROLE_SESSION_NAME = "s2iam-session"
 
+# Claim keys populated in CloudIdentity.additional_claims for AWS identities.
+CLAIM_USER_ID = "UserId"
+CLAIM_ASSUMED_ROLE_ARN = "AssumedRoleArn"
+CLAIM_ROLE_SESSION_NAME = "RoleSessionName"
+
 
 def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) -> str:
     if additional_params:
@@ -29,6 +47,113 @@ def _role_session_name_from_params(additional_params: Optional[dict[str, str]]) 
         if name:
             return name
     return DEFAULT_ROLE_SESSION_NAME
+
+
+_ARN_PARSER = ArnParser()
+
+
+def _parse_arn(arn: str) -> Optional[dict[str, str]]:
+    """Parse an ARN into its components with botocore, or None if malformed.
+
+    Returns a dict with keys partition, service, region, account, resource.
+    Uses botocore (already a dependency via boto3) rather than hand-rolled
+    ':'-splitting; the resource keeps any internal delimiters verbatim.
+    """
+    try:
+        parsed: dict[str, str] = _ARN_PARSER.parse_arn(arn)
+    except InvalidArnException:
+        return None
+    return parsed
+
+
+def _parse_assumed_role_arn(arn: str) -> Optional[tuple[str, str, str]]:
+    """Return (partition, role_name, session_name) for an STS assumed-role ARN, else None.
+
+    Format: arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION. The resource
+    sub-structure is not modeled by the parser, so it is split here; neither ROLE
+    nor SESSION may contain '/'.
+    """
+    parsed = _parse_arn(arn)
+    if parsed is None or parsed["service"] != "sts":
+        return None
+    segments = parsed["resource"].split("/", 2)
+    if len(segments) < 2 or segments[0] != "assumed-role" or not segments[1]:
+        return None
+    session_name = segments[2] if len(segments) == 3 else ""
+    return parsed["partition"], segments[1], session_name
+
+
+def _arn_resource_type(arn: str) -> str:
+    parsed = _parse_arn(arn)
+    if parsed is None:
+        return ""
+    resource = parsed["resource"]
+    resource_type = resource.split("/", 1)[0] if "/" in resource else ""
+    return resource_type
+
+
+def _role_id_from_user_id(user_id: str) -> str:
+    """Return the immutable RoleId portion of an STS UserId.
+
+    UserId is "AROA...:session" for assumed roles; the RoleId is the segment
+    before the ':'.
+    """
+    if ":" in user_id:
+        return user_id.split(":", 1)[0]
+    return ""
+
+
+def _aws_candidates(arn: str, account: str, user_id: str = "") -> list[IdentityCandidate]:
+    """Return the identity formats valid for the attested GetCallerIdentity result.
+
+    Natural order with the always-valid floor (the raw caller ARN) first:
+
+      - aws-arn (floor, always): the raw caller ARN.
+      - aws-iam-role-arn (assumed-role only): the base IAM role ARN
+        (arn:aws:iam::ACCOUNT:role/ROLE). The STS session name is caller-chosen and
+        is not a trustworthy authorization boundary; the IAM role is gated by its
+        trust policy, and role names are unique within an account.
+      - aws-role-id (assumed-role only): the immutable RoleId (AROA...), the prefix
+        of the STS UserId.
+
+    Note: the STS assumed-role ARN omits the IAM path, so the derived base role ARN
+    is the path-less canonical form. This must stay identical between the client and
+    the Go verifier so the client-computed identity matches the issued JWT sub.
+    """
+    candidates = [IdentityCandidate(FORMAT_AWS_ARN, arn)]
+
+    parsed = _parse_assumed_role_arn(arn)
+    if parsed is not None:
+        partition, role_name, _ = parsed
+        # Preserve the source partition (aws, aws-us-gov, aws-cn); the STS
+        # assumed-role ARN omits the IAM path, so this is the path-less canonical
+        # form arn:PARTITION:iam::ACCOUNT:role/ROLE.
+        base_role_arn = f"arn:{partition}:iam::{account}:role/{role_name}"
+        candidates.append(IdentityCandidate(FORMAT_AWS_IAM_ROLE_ARN, base_role_arn))
+        role_id = _role_id_from_user_id(user_id)
+        if role_id:
+            candidates.append(IdentityCandidate(FORMAT_AWS_ROLE_ID, role_id))
+
+    return candidates
+
+
+def _aws_identity_claims(arn: str, user_id: str = "") -> dict[str, str]:
+    """Build AdditionalClaims for an AWS identity.
+
+    The raw STS assumed-role ARN, the role session name, and the STS UserId (whose
+    prefix is the role's immutable RoleId) are preserved for registration-preview
+    and audit, independent of the negotiated identity format.
+    """
+    claims: dict[str, str] = {}
+    if user_id:
+        claims[CLAIM_USER_ID] = user_id
+    parsed = _parse_assumed_role_arn(arn)
+    if parsed is not None:
+        _, _, session_name = parsed
+        claims[CLAIM_ASSUMED_ROLE_ARN] = arn
+        if session_name:
+            claims[CLAIM_ROLE_SESSION_NAME] = session_name
+    return claims
 
 
 class AWSClient(CloudProviderClient):
@@ -253,25 +378,34 @@ class AWSClient(CloudProviderClient):
                     }
 
             arn = identity_resp["Arn"]
-            parts = arn.split(":")
-            region_from_arn = parts[3] if len(parts) > 3 else ""
-            resource_type = ""
-            if len(parts) > 5:
-                res_parts = parts[5].split("/")
-                if res_parts and res_parts[0]:
-                    resource_type = res_parts[0]
+            # Region comes from the raw ARN (empty for assumed-role STS ARNs).
+            parsed_arn = _parse_arn(arn)
+            region_from_arn = parsed_arn["region"] if parsed_arn else ""
 
             # If region unset locally (IRSA path without env/metadata), adopt ARN region
             if not self._region and region_from_arn:
                 self._region = region_from_arn
                 self._log(f"Derived region from ARN: {self._region}")
 
+            # Build the valid identity-format candidates and default the identifier
+            # to the always-valid floor (the raw caller ARN, format aws-arn), which
+            # is byte-identical to the historical behavior. The negotiated format
+            # (chosen by the verifier from the preference header) may select an
+            # alternate such as the base IAM role ARN; the candidate set lets the
+            # client re-derive the chosen value.
+            account = identity_resp["Account"]
+            user_id = identity_resp.get("UserId", "")
+            candidates = _aws_candidates(arn, account, user_id)
+
             identity = CloudIdentity(
                 provider=CloudProviderType.AWS,
-                identifier=arn,
-                account_id=identity_resp["Account"],
+                identifier=candidates[0].value,
+                account_id=account,
                 region=region_from_arn,
-                resource_type=resource_type,
+                resource_type=_arn_resource_type(arn),
+                additional_claims=_aws_identity_claims(arn, user_id),
+                identity_format=candidates[0].format,
+                candidates=[(c.format, c.value) for c in candidates],
             )
             self._log(f"Generated headers for identity: {identity.identifier}")
             return headers, identity

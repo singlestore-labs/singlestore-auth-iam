@@ -22,7 +22,15 @@ const (
 type CloudIdentity struct {
 	Provider CloudProviderType
 	// The identifier will be:
-	// - AWS: ARN of the IAM role/user
+	// - AWS: by default (no identity-format preference) the attested STS ARN as
+	//   returned by GetCallerIdentity — for an assumed role this is the raw
+	//   assumed-role ARN including the caller-chosen session name
+	//   (arn:PARTITION:sts::ACCOUNT:assumed-role/ROLE/SESSION), byte-identical to
+	//   historical behavior. A client that opts into the "aws-iam-role-arn"
+	//   format instead collapses assumed-role sessions (including instance-profile,
+	//   IRSA, and explicit AssumeRole) to the session-independent base IAM role ARN
+	//   (arn:PARTITION:iam::ACCOUNT:role/ROLE). The raw assumed-role ARN and session
+	//   name are always available in AdditionalClaims.
 	// - GCP: Project number + instance ID + service account email
 	// - Azure: Principal ID (object ID of the managed identity)
 	Identifier string
@@ -31,6 +39,19 @@ type CloudIdentity struct {
 	Region           string            // Cloud provider region (when available)
 	ResourceType     string            // Type of resource (VM, function, etc.)
 	AdditionalClaims map[string]string // Any additional relevant claims from tokens
+
+	// IdentityFormat is the negotiated format token that produced Identifier
+	// (for example "aws-arn" or "aws-iam-role-arn"). The verifier sets this to the
+	// chosen token; the auth service echoes it back to the client as the
+	// identityFormat response field. On the client side it reflects the format of
+	// the computed Identifier.
+	IdentityFormat IdentityFormat
+
+	// Candidates is the verifier-derived, ordered list of identity formats that
+	// are valid for this identity (floor first). It is used to negotiate the
+	// chosen format and is also preserved so later matching concerns (e.g. legacy
+	// registrations) can consider alternates without re-negotiating.
+	Candidates []IdentityCandidate
 }
 
 // Logger is a simple logging interface

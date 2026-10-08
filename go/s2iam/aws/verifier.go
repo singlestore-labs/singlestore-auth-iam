@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 	"regexp"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
@@ -14,7 +14,11 @@ import (
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/models"
 )
 
-var awsPrincipalRE = regexp.MustCompile(`^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:\d{12}:.+$`)
+// awsPrincipalRE accepts any AWS partition (aws, aws-us-gov, aws-cn, and the
+// aws-iso* secret partitions), matching the partition preservation now done when
+// deriving the base IAM role ARN. Restricting to the commercial "aws" partition
+// would reject otherwise-valid GovCloud/China assumed-role identities.
+var awsPrincipalRE = regexp.MustCompile(`^arn:aws(-[a-z]+)*:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:\d{12}:.+$`)
 
 func validatePrincipal(principal string) error {
 	if !gates.S2IAMValidatePrincipal.Enabled() {
@@ -31,13 +35,20 @@ func validatePrincipal(principal string) error {
 
 // AWSVerifier implements the CloudProviderVerifier interface for AWS
 type AWSVerifier struct {
-	logger models.Logger
+	logger       models.Logger
+	defaultOrder []models.IdentityFormat
 }
 
-// NewVerifier and configures the AWS verifier
-func NewVerifier(logger models.Logger) models.CloudProviderVerifier {
+// NewVerifier configures the AWS verifier. The optional defaultOrder sets the
+// identity-format ordering used when a request carries no (valid) preference. It
+// may be empty and may span providers; non-AWS tokens are harmlessly ignored,
+// and SelectIdentityFormat always falls back to the built-in default (which for
+// AWS resolves to aws-arn, byte-identical to historical behavior), so AWS keeps
+// its default even when defaultOrder names only other providers.
+func NewVerifier(logger models.Logger, defaultOrder ...models.IdentityFormat) models.CloudProviderVerifier {
 	return &AWSVerifier{
-		logger: logger,
+		logger:       logger,
+		defaultOrder: defaultOrder,
 	}
 }
 
@@ -120,21 +131,11 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, errors.Errorf("AWS returned empty ARN or Account")
 	}
 
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*getCallerIdentityOutput.Arn, ":")
-	var region, resourceType string
-
-	// Extract region from ARN if possible
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
-	}
-
-	// Extract resource type from ARN
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
+	// Extract region from the raw ARN if possible (assumed-role STS ARNs carry no
+	// region, which matches historical behavior of an empty region here).
+	var region string
+	if parsed, err := arn.Parse(*getCallerIdentityOutput.Arn); err == nil {
+		region = parsed.Region
 	}
 
 	if err := validatePrincipal(*getCallerIdentityOutput.Arn); err != nil {
@@ -144,18 +145,31 @@ func (v *AWSVerifier) VerifyRequest(ctx context.Context, r *http.Request) (*mode
 		return nil, err
 	}
 
+	callerARN := *getCallerIdentityOutput.Arn
+	account := *getCallerIdentityOutput.Account
+	userID := aws.ToString(getCallerIdentityOutput.UserId)
+
+	// Compute every identity format valid for this attested identity, then
+	// negotiate the single chosen format against the client's preference (if any)
+	// and this verifier's configured default ordering. The always-valid floor is
+	// aws-arn (the raw caller ARN), so selection never fails.
+	candidates := awsCandidates(callerARN, account, userID)
+	clientPref := models.ParseIdentityFormatPreference(r.Header.Get(models.IdentityFormatPreferenceHeader))
+	format, identifier := models.SelectIdentityFormat(candidates, clientPref, v.defaultOrder)
+
 	if logger != nil {
-		logger.Logf("Successfully verified AWS identity: %s", *getCallerIdentityOutput.Arn)
+		logger.Logf("Successfully verified AWS identity: %s (format: %s, attested: %s)",
+			identifier, format, callerARN)
 	}
 
 	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *getCallerIdentityOutput.Arn,
-		AccountID:    *getCallerIdentityOutput.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *getCallerIdentityOutput.UserId,
-		},
+		Provider:         models.ProviderAWS,
+		Identifier:       identifier,
+		IdentityFormat:   format,
+		AccountID:        account,
+		Region:           region,
+		ResourceType:     arnResourceType(callerARN),
+		AdditionalClaims: awsIdentityClaims(callerARN, userID),
+		Candidates:       candidates,
 	}, nil
 }

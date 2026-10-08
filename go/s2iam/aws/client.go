@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/memsql/errors"
@@ -374,9 +375,8 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 
 	// If region still empty (e.g., IRSA with no env vars and metadata blocked) attempt to derive from ARN
 	if c.region == "" && callerIdentity.Arn != nil {
-		arnParts := strings.Split(*callerIdentity.Arn, ":")
-		if len(arnParts) >= 4 && arnParts[3] != "" {
-			c.region = arnParts[3]
+		if parsed, err := arn.Parse(*callerIdentity.Arn); err == nil && parsed.Region != "" {
+			c.region = parsed.Region
 			if c.logger != nil {
 				c.logger.Logf("AWS GetIdentityHeaders - Derived region from ARN: %s", c.region)
 			}
@@ -418,12 +418,7 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 		}
 
 		// Create identity from the caller identity we already obtained
-		identity, err := c.parseIdentityFromCallerIdentity(callerIdentity)
-		if err != nil {
-			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
-		}
-
-		return headers, identity, nil
+		return headers, identityFromCallerIdentity(callerIdentity), nil
 	}
 
 	// We're using permanent credentials, so we can call GetSessionToken
@@ -450,33 +445,37 @@ func (c *AWSClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 	return headers, identity, nil
 }
 
-// parseIdentityFromCallerIdentity converts a GetCallerIdentityOutput to a CloudIdentity
-func (c *AWSClient) parseIdentityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) (*models.CloudIdentity, error) {
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*callerIdentity.Arn, ":")
-	var region, resourceType string
-
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
+// identityFromCallerIdentity converts a GetCallerIdentityOutput to a
+// CloudIdentity. It populates the full set of valid identity-format candidates
+// (shared with the verifier) and defaults Identifier to the always-valid floor
+// (the raw caller ARN, format aws-arn), which is byte-identical to the historical
+// behavior. The negotiated format may select an alternate (e.g. the base IAM
+// role ARN) when a preference is supplied; the candidate set lets the client
+// re-derive the chosen value and confirm it matches the issued JWT sub.
+func identityFromCallerIdentity(callerIdentity *sts.GetCallerIdentityOutput) *models.CloudIdentity {
+	// Region is taken from the raw ARN (empty for assumed-role STS ARNs), matching
+	// historical behavior.
+	var region string
+	if parsed, err := arn.Parse(*callerIdentity.Arn); err == nil {
+		region = parsed.Region
 	}
 
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
-	}
+	callerARN := *callerIdentity.Arn
+	account := *callerIdentity.Account
+	userID := aws.ToString(callerIdentity.UserId)
+
+	candidates := awsCandidates(callerARN, account, userID)
 
 	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *callerIdentity.Arn,
-		AccountID:    *callerIdentity.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *callerIdentity.UserId,
-		},
-	}, nil
+		Provider:         models.ProviderAWS,
+		Identifier:       candidates[0].Value,
+		IdentityFormat:   candidates[0].Format,
+		AccountID:        account,
+		Region:           region,
+		ResourceType:     arnResourceType(callerARN),
+		AdditionalClaims: awsIdentityClaims(callerARN, userID),
+		Candidates:       candidates,
+	}
 }
 
 // getIdentityFromSTS calls GetCallerIdentity and populates a CloudIdentity object
@@ -486,31 +485,7 @@ func (c *AWSClient) getIdentityFromSTS(ctx context.Context, stsClient *sts.Clien
 		return nil, errors.Errorf("failed to get caller identity: %w", err)
 	}
 
-	// Parse the ARN to extract region and resource type
-	arnParts := strings.Split(*callerIdentity.Arn, ":")
-	var region, resourceType string
-
-	if len(arnParts) >= 4 {
-		region = arnParts[3]
-	}
-
-	if len(arnParts) >= 6 {
-		resourceParts := strings.Split(arnParts[5], "/")
-		if len(resourceParts) >= 2 {
-			resourceType = resourceParts[0]
-		}
-	}
-
-	return &models.CloudIdentity{
-		Provider:     models.ProviderAWS,
-		Identifier:   *callerIdentity.Arn,
-		AccountID:    *callerIdentity.Account,
-		Region:       region,
-		ResourceType: resourceType,
-		AdditionalClaims: map[string]string{
-			"UserId": *callerIdentity.UserId,
-		},
-	}, nil
+	return identityFromCallerIdentity(callerIdentity), nil
 }
 
 // AssumeRole configures the provider to use an alternate identity

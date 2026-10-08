@@ -7,8 +7,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -124,10 +126,16 @@ public class GCPClient extends AbstractBaseClient {
       String sub = optText(root, "sub");
       String email = optText(root, "email");
       String identifier = sub == null ? "" : sub;
+      // The verified email, when present, is the default format; otherwise the
+      // always-valid numeric subject is the floor. This mirrors the Go client.
+      String identityFormat = IdentityFormat.GCP_SA_UNIQUE_ID;
+      boolean emailValid = false;
       if (email != null && !email.isEmpty()) {
         String emailVerified = optText(root, "email_verified");
         if ("true".equalsIgnoreCase(emailVerified)) {
           identifier = email;
+          identityFormat = IdentityFormat.GCP_SA_EMAIL;
+          emailValid = true;
         }
       }
       String resourceType = "instance";
@@ -175,8 +183,13 @@ public class GCPClient extends AbstractBaseClient {
         copyIfText(extra, ceNode, "project_id");
         copyIfText(extra, ceNode, "zone");
       }
+      List<IdentityFormat.Candidate> candidates = new ArrayList<>();
+      candidates.add(new IdentityFormat.Candidate(IdentityFormat.GCP_SA_UNIQUE_ID,
+          sub == null ? identifier : sub));
+      if (emailValid)
+        candidates.add(new IdentityFormat.Candidate(IdentityFormat.GCP_SA_EMAIL, email));
       return new CloudIdentity(CloudProviderType.gcp, identifier, sub == null ? identifier : sub,
-          region, resourceType, extra);
+          region, resourceType, extra, identityFormat, candidates);
     } catch (Exception e) {
       return new CloudIdentity(CloudProviderType.gcp, "", "", "", "", Map.of());
     }

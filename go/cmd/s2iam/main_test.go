@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -227,6 +228,44 @@ func TestRun_EnvironmentOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, output, "STATUS=0")
 	assert.Contains(t, output, "TOKEN=test-jwt")
+}
+
+func TestSubFromJWT(t *testing.T) {
+	// Build a JWT-shaped string with a known payload (signature is irrelevant here).
+	makeJWT := func(payload string) string {
+		seg := base64.RawURLEncoding.EncodeToString([]byte(payload))
+		return "header." + seg + ".signature"
+	}
+
+	t.Run("extracts sub", func(t *testing.T) {
+		arn := "arn:aws:sts::123456789012:assumed-role/MyRole/i-0abc123def456"
+		jwt := makeJWT(`{"sub":"` + arn + `","exp":1}`)
+		sub, err := subFromJWT(jwt)
+		require.NoError(t, err)
+		assert.Equal(t, arn, sub)
+	})
+
+	t.Run("base role arn sub", func(t *testing.T) {
+		arn := "arn:aws:iam::123456789012:role/MyRole"
+		sub, err := subFromJWT(makeJWT(`{"sub":"` + arn + `"}`))
+		require.NoError(t, err)
+		assert.Equal(t, arn, sub)
+	})
+
+	t.Run("not a jwt", func(t *testing.T) {
+		_, err := subFromJWT("not-a-jwt")
+		assert.Error(t, err)
+	})
+
+	t.Run("missing sub", func(t *testing.T) {
+		_, err := subFromJWT(makeJWT(`{"exp":1}`))
+		assert.Error(t, err)
+	})
+
+	t.Run("bad payload base64", func(t *testing.T) {
+		_, err := subFromJWT("header.!!!notbase64!!!.sig")
+		assert.Error(t, err)
+	})
 }
 
 func TestGetLogger(t *testing.T) {

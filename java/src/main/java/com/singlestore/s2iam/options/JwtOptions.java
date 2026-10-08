@@ -17,4 +17,9 @@ public class JwtOptions extends ProviderOptions {
   public Map<String, String> additionalParams = new HashMap<>();
   public String assumeRoleIdentifier;
   public String assumeRoleSessionName;
+  // Ordered identity-format preference sent via the preference header. When
+  // identityFormatPreferenceSet is false the client falls back to the
+  // S2IAM_IDENTITY_FORMAT_PREFERENCE env var, then the built-in default.
+  public java.util.List<String> identityFormatPreference;
+  public boolean identityFormatPreferenceSet;
 }

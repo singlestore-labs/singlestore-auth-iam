@@ -7,9 +7,42 @@ from typing import Any, Optional
 import aiohttp
 
 from .aws import ROLE_SESSION_NAME_PARAM
+from .identity_format import (
+    FORMAT_AWS_ARN,
+    IDENTITY_FORMAT_PREFERENCE_ENV,
+    IDENTITY_FORMAT_PREFERENCE_HEADER,
+    parse_identity_format_preference,
+)
 from .models import CloudProviderClient, JWTType, Logger
 
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
+
+# Sentinel distinguishing "preference not supplied" (fall back to env/default)
+# from an explicit empty preference (send no header).
+_PREFERENCE_UNSET = object()
+
+
+def _resolve_identity_format_preference(preference: Any) -> list[str]:
+    """Resolve the effective preference using option > env var > built-in default.
+
+    A bare string is parsed as a comma-separated list, matching the env var and CLI
+    forms; list() would otherwise split it into individual characters. Any other
+    iterable is taken as an already-split sequence of tokens.
+
+    The built-in default is [aws-arn], byte-identical to the historical behavior:
+    GCP/Azure tokens are absent, so those providers fall through to the verifier's
+    default ordering (also unchanged).
+    """
+    if preference is not _PREFERENCE_UNSET and preference is not None:
+        if isinstance(preference, str):
+            return parse_identity_format_preference(preference)
+        return list(preference)
+    import os
+
+    env = os.environ.get(IDENTITY_FORMAT_PREFERENCE_ENV)
+    if env:
+        return parse_identity_format_preference(env)
+    return [FORMAT_AWS_ARN]
 
 
 async def get_jwt(
@@ -21,6 +54,7 @@ async def get_jwt(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     assume_role_session_name: Optional[str] = None,
+    identity_format_preference: Any = _PREFERENCE_UNSET,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -72,11 +106,22 @@ async def get_jwt(
         provider = provider.assume_role(assume_role_identifier)
 
     if assume_role_session_name:
+        # The session name is part of the identity under the "aws-arn" format
+        # (sub = arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION). It applies to the
+        # library-driven AssumeRole path only, and does not affect the
+        # "aws-iam-role-arn" (session-stripped) format.
         additional_params = dict(additional_params or {})
         additional_params[ROLE_SESSION_NAME_PARAM] = assume_role_session_name
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
+
+    # Advertise the client's identity-format preference (content negotiation). The
+    # verifier chooses the first supported-and-valid format; older servers ignore
+    # this header and keep their default behavior.
+    preference = _resolve_identity_format_preference(identity_format_preference)
+    if preference:
+        headers = {**headers, IDENTITY_FORMAT_PREFERENCE_HEADER: ",".join(preference)}
 
     # Prepare request body
     request_data = {
@@ -134,6 +179,7 @@ async def get_jwt_database(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     assume_role_session_name: Optional[str] = None,
+    identity_format_preference: Any = _PREFERENCE_UNSET,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -148,7 +194,11 @@ async def get_jwt_database(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
-        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
+        assume_role_session_name: AWS STS RoleSessionName for the library-driven
+            AssumeRole (assume_role_identifier). Part of the identity under the
+            "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
+            stable value so the full ARN is pre-configurable. Does not affect the
+            "aws-iam-role-arn" (session-stripped) format or ambient credentials.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -165,6 +215,7 @@ async def get_jwt_database(
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
         assume_role_session_name=assume_role_session_name,
+        identity_format_preference=identity_format_preference,
         timeout=timeout,
         logger=logger,
         **kwargs,
@@ -179,6 +230,7 @@ async def get_jwt_api(
     additional_params: Optional[dict[str, str]] = None,
     assume_role_identifier: Optional[str] = None,
     assume_role_session_name: Optional[str] = None,
+    identity_format_preference: Any = _PREFERENCE_UNSET,
     timeout: float = 10.0,
     logger: Optional[Logger] = None,
     **kwargs: Any,
@@ -192,7 +244,11 @@ async def get_jwt_api(
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
         assume_role_identifier: Role to assume before getting JWT
-        assume_role_session_name: AWS STS RoleSessionName when assuming a role (optional)
+        assume_role_session_name: AWS STS RoleSessionName for the library-driven
+            AssumeRole (assume_role_identifier). Part of the identity under the
+            "aws-arn" format (sub = ...:assumed-role/ROLE/SESSION); defaults to a
+            stable value so the full ARN is pre-configurable. Does not affect the
+            "aws-iam-role-arn" (session-stripped) format or ambient credentials.
         timeout: Request timeout in seconds
         logger: Optional logger instance
         **kwargs: Additional options
@@ -209,6 +265,7 @@ async def get_jwt_api(
         additional_params=additional_params,
         assume_role_identifier=assume_role_identifier,
         assume_role_session_name=assume_role_session_name,
+        identity_format_preference=identity_format_preference,
         timeout=timeout,
         logger=logger,
         **kwargs,

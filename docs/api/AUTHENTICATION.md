@@ -56,6 +56,21 @@ and [STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_Ass
 
 Long-lived IAM user access keys without a session token are not sufficient.
 
+### Resulting identity
+
+The service verifies the credentials with STS `GetCallerIdentity`. **By default the
+verified identity (JWT `sub`) is the raw caller ARN** returned by STS, e.g.
+`arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME` for an assumed-role session
+(instance profile, IRSA, or explicit `AssumeRole`) or `arn:aws:iam::ACCOUNT:user/NAME`
+for an IAM user.
+
+The issued `sub` can be negotiated to an alternate representation (for AWS, the
+session-stripped base IAM role ARN) via the `X-S2IAM-Identity-Format-Preference`
+request header; the chosen form is reported in the response `identityFormat` field. See
+[Identity format preferences](../../README.md#identity-format-preferences-content-negotiation)
+in the main README for the vocabulary and semantics, and [openapi.yaml](openapi.yaml)
+for the schema.
+
 ### Database JWT: required `workspaceGroupID` query parameter
 
 Database JWT requests (`POST /auth/iam/database`) require a `workspaceGroupID`

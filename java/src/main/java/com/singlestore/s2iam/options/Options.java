@@ -27,8 +27,41 @@ public final class Options {
     return o -> o.assumeRoleIdentifier = role;
   }
 
+  /**
+   * Sets the AWS STS RoleSessionName used on the library-driven AssumeRole call
+   * (see {@link #withAssumeRole}). It applies only to that path, not to ambient
+   * credentials (EC2 instance profiles, EKS IRSA).
+   *
+   * <p>
+   * The session name is part of the identity under the "aws-arn" format, whose
+   * JWT {@code sub} is the full STS ARN
+   * {@code arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION}. When unset the
+   * library uses a stable default so the full ARN is deterministic and can be
+   * pre-configured as a cloud principal / database user. It does not affect the
+   * "aws-iam-role-arn" (session-stripped base role ARN) format.
+   */
   public static JwtOption withAssumeRoleSessionName(String sessionName) {
     return o -> o.assumeRoleSessionName = sessionName;
+  }
+
+  /**
+   * Sets the ordered identity-format preference sent to the auth service via the
+   * X-S2IAM-Identity-Format-Preference header. The verifier chooses the first
+   * format that is both server-supported and valid for the attested identity (for
+   * example prefer "aws-iam-role-arn" and fall back to "aws-arn"). Tokens are
+   * provider-prefixed, so a single list can serve a heterogeneous fleet; unknown
+   * or inapplicable tokens are ignored.
+   *
+   * <p>
+   * Precedence: this explicit option &gt; the S2IAM_IDENTITY_FORMAT_PREFERENCE
+   * environment variable &gt; the built-in default ("aws-arn", byte-identical to
+   * the historical behavior).
+   */
+  public static JwtOption withIdentityFormatPreference(String... formats) {
+    return o -> {
+      o.identityFormatPreference = java.util.Arrays.asList(formats);
+      o.identityFormatPreferenceSet = true;
+    };
   }
 
   // Re-export provider options for convenience

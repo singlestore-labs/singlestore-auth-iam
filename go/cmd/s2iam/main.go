@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam"
@@ -27,6 +30,7 @@ type Config struct {
 	Provider              string
 	AssumeRole            string
 	AssumeRoleSessionName string
+	IdentityFormatPref    string
 	Timeout               time.Duration
 	ServerURL             string
 	AllowHTTP             bool
@@ -35,6 +39,7 @@ type Config struct {
 	EnvName   string
 	EnvStatus string
 	Verbose   bool
+	PrintSub  bool
 
 	// Control options
 	ForceDetect bool
@@ -80,13 +85,15 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 	flagSet.StringVar(&config.GCPAudience, "gcp-audience", "", "GCP audience for identity token")
 	flagSet.StringVar(&config.Provider, "provider", "", "Cloud provider: 'aws', 'gcp', or 'azure' (auto-detect if not specified)")
 	flagSet.StringVar(&config.AssumeRole, "assume-role", "", "Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)")
-	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "AWS STS RoleSessionName when assuming a role")
+	flagSet.StringVar(&config.AssumeRoleSessionName, "assume-role-session-name", "", "AWS STS RoleSessionName for --assume-role (part of the identity under the 'aws-arn' format; defaults to a stable value so the full ARN is pre-configurable)")
+	flagSet.StringVar(&config.IdentityFormatPref, "identity-format-preference", "", "Comma-separated identity-format preference (e.g. 'aws-iam-role-arn,aws-arn'); overrides S2IAM_IDENTITY_FORMAT_PREFERENCE")
 	flagSet.DurationVar(&config.Timeout, "timeout", 10*time.Second, "Timeout for operations")
 	flagSet.StringVar(&config.ServerURL, "server-url", "", "Authentication server URL (uses default if not specified)")
 	flagSet.BoolVar(&config.AllowHTTP, "allow-http", false, "Allow http:// authentication server URLs (for testing only)")
 	flagSet.StringVar(&config.EnvName, "env-name", "", "Environment variable name for JWT output")
 	flagSet.StringVar(&config.EnvStatus, "env-status", "", "Environment variable name for status output")
 	flagSet.BoolVar(&config.Verbose, "verbose", false, "Enable verbose logging")
+	flagSet.BoolVar(&config.PrintSub, "print-sub", false, "Print the issued JWT's 'sub' claim (the verified identity) to stderr")
 	flagSet.BoolVar(&config.ForceDetect, "force-detect", false, "Force provider detection even if provider is specified")
 	flagSet.BoolVar(&help, "help", false, "Show command options")
 
@@ -104,7 +111,9 @@ func parseFlags(flagSet *flag.FlagSet, args []string) (Config, error) {
 		fmt.Fprintf(os.Stderr, "  # Output for shell evaluation\n")
 		fmt.Fprintf(os.Stderr, "  eval $(%s --env-status=STATUS --env-name=TOKEN)\n\n", args[0])
 		fmt.Fprintf(os.Stderr, "  # Use with specific provider and role\n")
-		fmt.Fprintf(os.Stderr, "  %s --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole\n", args[0])
+		fmt.Fprintf(os.Stderr, "  %s --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole\n\n", args[0])
+		fmt.Fprintf(os.Stderr, "  # Show the verified identity (JWT 'sub') on stderr\n")
+		fmt.Fprintf(os.Stderr, "  %s --workspace-group-id=my-workspace --print-sub >/dev/null\n", args[0])
 	}
 
 	// Parse flags, skipping program name
@@ -184,11 +193,16 @@ func run(config Config) error {
 		opts = append(opts, s2iam.WithAssumeRole(config.AssumeRole))
 	}
 	if config.AssumeRoleSessionName != "" {
+		// The session name is part of the identity under the "aws-arn" format.
 		opts = append(opts, s2iam.WithAssumeRoleSessionName(config.AssumeRoleSessionName))
 	}
 
 	if config.GCPAudience != "" {
 		opts = append(opts, s2iam.WithGCPAudience(config.GCPAudience))
+	}
+
+	if config.IdentityFormatPref != "" {
+		opts = append(opts, s2iam.WithIdentityFormatPreference(strings.Split(config.IdentityFormatPref, ",")...))
 	}
 
 	if config.ServerURL != "" {
@@ -218,6 +232,16 @@ func run(config Config) error {
 		return err
 	}
 
+	// Optionally report the verified identity (JWT "sub") on stderr so it does not
+	// interfere with the JWT emitted on stdout.
+	if config.PrintSub {
+		sub, subErr := subFromJWT(jwt)
+		if subErr != nil {
+			return fmt.Errorf("could not read sub from issued JWT: %w", subErr)
+		}
+		fmt.Fprintln(os.Stderr, sub)
+	}
+
 	// Output the JWT
 	if config.EnvName != "" {
 		// Environment variable format
@@ -231,6 +255,30 @@ func run(config Config) error {
 	}
 
 	return nil
+}
+
+// subFromJWT extracts the "sub" claim from a JWT without verifying its signature.
+// The CLI only needs to display the identity it just received, so an unverified
+// decode of the payload segment is sufficient.
+func subFromJWT(jwt string) (string, error) {
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("not a JWT (expected 3 dot-separated segments, got %d)", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decoding payload: %w", err)
+	}
+	var claims struct {
+		Sub string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("parsing payload: %w", err)
+	}
+	if claims.Sub == "" {
+		return "", errors.New("JWT has no 'sub' claim")
+	}
+	return claims.Sub, nil
 }
 
 // getLogger returns a logger if verbose mode is enabled

@@ -7,6 +7,11 @@ from typing import Any, Optional
 import aiohttp
 import jwt
 
+from ..identity_format import (
+    FORMAT_GCP_SA_EMAIL,
+    FORMAT_GCP_SA_UNIQUE_ID,
+    IdentityCandidate,
+)
 from ..models import (
     CloudIdentity,
     CloudProviderClient,
@@ -386,10 +391,17 @@ class GCPClient(CloudProviderClient):
             if not account_id:
                 raise ValueError("No sub claim found in GCP token")
 
-            # Determine identifier - prefer verified email, fallback to sub
+            # Build the valid identity-format candidates (floor first: the numeric
+            # subject is always valid; the verified email is added when present) and
+            # default the identifier to the verified-email-else-numeric form, which
+            # is byte-identical to the historical behavior and mirrors the Go client.
+            candidates = [IdentityCandidate(FORMAT_GCP_SA_UNIQUE_ID, account_id)]
             identifier = account_id  # Default to numeric ID
+            identity_format = FORMAT_GCP_SA_UNIQUE_ID
             if claims.get("email") and claims.get("email_verified", False):
+                candidates.append(IdentityCandidate(FORMAT_GCP_SA_EMAIL, claims["email"]))
                 identifier = claims["email"]
+                identity_format = FORMAT_GCP_SA_EMAIL
                 self._log(f"Using verified email as identifier: {identifier}")
             else:
                 self._log(f"Using sub claim as identifier: {identifier}")
@@ -409,6 +421,8 @@ class GCPClient(CloudProviderClient):
                 account_id=account_id,  # This is the numeric sub from JWT
                 region=region,
                 resource_type="gcp-compute-instance",
+                identity_format=identity_format,
+                candidates=[(c.format, c.value) for c in candidates],
             )
 
         except Exception as e:

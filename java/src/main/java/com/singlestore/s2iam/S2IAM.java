@@ -329,6 +329,22 @@ public final class S2IAM {
     throw new NoCloudProviderDetectedException(msg, attemptStatuses);
   }
 
+  /**
+   * Resolves the effective identity-format preference using the precedence
+   * explicit option &gt; S2IAM_IDENTITY_FORMAT_PREFERENCE env var &gt; built-in
+   * default ("aws-arn", byte-identical to the historical behavior; GCP/Azure fall
+   * through to the verifier's default ordering).
+   */
+  private static List<String> resolveIdentityFormatPreference(JwtOptions o) {
+    if (o.identityFormatPreferenceSet) {
+      return o.identityFormatPreference == null ? List.of() : o.identityFormatPreference;
+    }
+    String env = System.getenv(IdentityFormat.PREFERENCE_ENV);
+    if (env != null && !env.isEmpty())
+      return IdentityFormat.parsePreference(env);
+    return List.of(IdentityFormat.AWS_ARN);
+  }
+
   private static String safeTrunc(String s) {
     if (s == null)
       return "<null>";
@@ -462,6 +478,13 @@ public final class S2IAM {
         .POST(HttpRequest.BodyPublishers.noBody()).header("User-Agent", USER_AGENT);
     for (Map.Entry<String, String> e : res.headers.entrySet())
       rb.header(e.getKey(), e.getValue());
+
+    // Advertise the client's identity-format preference (content negotiation). The
+    // verifier chooses the first supported-and-valid format; older servers ignore
+    // this header and keep their default behavior.
+    List<String> preference = resolveIdentityFormatPreference(o);
+    if (!preference.isEmpty())
+      rb.header(IdentityFormat.PREFERENCE_HEADER, String.join(",", preference));
 
     if (debug && identity.getProvider() != null) {
       Logger log = Logger.STDOUT; // simple fallback

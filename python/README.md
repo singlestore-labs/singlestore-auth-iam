@@ -50,6 +50,21 @@ That's it! The library automatically detects your cloud environment and gets the
 
 - `S2IAM_SERVER_URL`: Custom authentication server URL (default: https://auth.singlestore.com)
 - `S2IAM_DEBUGGING`: Set to "true" to enable debug logging
+- `S2IAM_IDENTITY_FORMAT_PREFERENCE`: Comma-separated, ordered list of preferred identity formats (e.g. `aws-iam-role-arn,aws-arn`). See [Identity format preferences](#identity-format-preferences)
+
+## Identity format preferences
+
+Clients may select the issued identity representation (the JWT `sub`) by passing an ordered `identity_format_preference` list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary, the default ordering, and semantics.
+
+```python
+# Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
+jwt = await get_jwt_database(
+    "workspace-id",
+    identity_format_preference=["aws-iam-role-arn", "aws-arn"],
+)
+```
+
+Precedence is explicit argument > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default.
 
 ## Supported Environments
 
