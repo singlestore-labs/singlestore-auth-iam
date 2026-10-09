@@ -77,13 +77,32 @@ public class S2IAMJwtHappyPathTest {
     JsonNode lastReq = fetchLastRequest();
     assertNotNull(lastReq, "server request log empty");
     JsonNode identity = lastReq.path("identity");
-    assertEquals(cid.getIdentifier(), identity.path("identifier").asText(),
+    String expectedIdentifier = negotiatedIdentifier(cid.getIdentifier(), identity);
+    assertEquals(expectedIdentifier, identity.path("identifier").asText(),
         "client/server identifier mismatch");
     assertEquals(cid.getProvider().name(), identity.path("provider").asText());
 
     // Decode JWT payload (no signature verification – parity check for 'sub')
     String sub = decodeSub(jwt);
-    assertEquals(cid.getIdentifier(), sub, "JWT sub mismatch");
+    assertEquals(expectedIdentifier, sub, "JWT sub mismatch");
+  }
+
+  /**
+   * The identity the verifier issues for a client-detected identity under the
+   * negotiated format. The two are the same for every format except
+   * aws-iam-role-arn, which strips the STS session — a transformation only the
+   * verifier performs, so the test reproduces it here.
+   */
+  private static String negotiatedIdentifier(String clientIdentifier, JsonNode serverIdentity) {
+    if (!IdentityFormat.AWS_IAM_ROLE_ARN.equals(serverIdentity.path("identityFormat").asText()))
+      return clientIdentifier;
+    // arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION ->
+    // arn:aws:iam::ACCOUNT:role/ROLE
+    String[] arn = clientIdentifier.split(":");
+    assertEquals(6, arn.length, "expected an STS assumed-role ARN, got " + clientIdentifier);
+    String[] resource = arn[5].split("/");
+    assertEquals(3, resource.length, "expected assumed-role/ROLE/SESSION, got " + arn[5]);
+    return "arn:aws:iam::" + arn[4] + ":role/" + resource[1];
   }
 
   @Test
@@ -114,9 +133,11 @@ public class S2IAMJwtHappyPathTest {
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
     JsonNode lastReq = fetchLastRequest();
-    assertEquals(cid.getIdentifier(), lastReq.path("identity").path("identifier").asText());
-    assertEquals(cid.getProvider().name(), lastReq.path("identity").path("provider").asText());
-    assertEquals(cid.getIdentifier(), decodeSub(jwt));
+    JsonNode identity = lastReq.path("identity");
+    String expectedIdentifier = negotiatedIdentifier(cid.getIdentifier(), identity);
+    assertEquals(expectedIdentifier, identity.path("identifier").asText());
+    assertEquals(cid.getProvider().name(), identity.path("provider").asText());
+    assertEquals(expectedIdentifier, decodeSub(jwt));
   }
 
   @Test

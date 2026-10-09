@@ -200,6 +200,22 @@ func TestGetDatabaseJWT_HappyPath(t *testing.T) {
 	testHappyPath(t, client)
 }
 
+// negotiatedIdentifier is the identity the verifier issues for a client-detected
+// identity under the negotiated format. The two are the same for every format except
+// aws-iam-role-arn, which strips the STS session — a transformation only the verifier
+// performs, so the test reproduces it here.
+func negotiatedIdentifier(t *testing.T, clientIdentifier, identityFormat string) string {
+	if identityFormat != string(models.FormatAWSIAMRoleARN) {
+		return clientIdentifier
+	}
+	// arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION -> arn:aws:iam::ACCOUNT:role/ROLE
+	arn := strings.Split(clientIdentifier, ":")
+	require.Len(t, arn, 6, "expected an STS assumed-role ARN, got %q", clientIdentifier)
+	resource := strings.Split(arn[5], "/")
+	require.Len(t, resource, 3, "expected assumed-role/ROLE/SESSION, got %q", arn[5])
+	return "arn:aws:iam::" + arn[4] + ":role/" + resource[1]
+}
+
 func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 	flags := &fakeServerFlags{requireWorkspaceID: true}
 	fakeServer := startFakeServer(t, flags)
@@ -233,15 +249,16 @@ func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 
 	// Verify that client-side and server-side identities match
 	require.NotNil(t, clientIdentity, "Client identity should not be nil")
-	assert.Equal(t, clientIdentity.Identifier, flags.lastIdentifier,
+	expectedIdentifier := negotiatedIdentifier(t, clientIdentity.Identifier, flags.lastIdentityFormat)
+	assert.Equal(t, expectedIdentifier, flags.lastIdentifier,
 		"CRITICAL: Client-side identity (%s) differs from server-side identity (%s). This is a security issue!",
-		clientIdentity.Identifier, flags.lastIdentifier)
+		expectedIdentifier, flags.lastIdentifier)
 
 	// Verify the JWT - the sub claim should contain the Identifier (human-readable identity)
 	claims := validateJWT(t, token)
-	assert.Equal(t, clientIdentity.Identifier, claims["sub"],
+	assert.Equal(t, expectedIdentifier, claims["sub"],
 		"CRITICAL: Client Identifier (%s) differs from JWT sub claim (%s). The JWT sub claim should match the client identifier!",
-		clientIdentity.Identifier, claims["sub"])
+		expectedIdentifier, claims["sub"])
 
 	// The Subject is stored in the 'sub' claim of the JWT
 	subject, ok := claims["sub"].(string)
