@@ -298,19 +298,34 @@ you take on:
 
 #### Selecting a preference
 
-Set the preference (highest priority first) programmatically, via CLI, or via environment:
+Set the preference (highest priority first) programmatically, via CLI, or via environment.
+Setting the environment variable fleet-wide fixes the identity across every language and
+every workload at once; the two settings worth knowing are the current default stated
+explicitly, and the pre-v0.6.0 identity:
 
 ```bash
-# Request the session-bearing raw STS ARN for AWS instead of the base IAM role ARN.
-# The remaining tokens are the rest of the default preference; keep them so GCP and
-# Azure stay pinned to the client's choice. On an AWS-only fleet, "aws-arn" alone works.
-export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
-s2iam --workspace-group-id=my-workspace
+# Lock in the current default. AWS authenticates as the base IAM role ARN
+# (arn:aws:iam::123456789012:role/MyRole). Naming it explicitly means a future change
+# to the built-in default cannot move the identity out from under you.
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
 
-# Or per-invocation
+# Keep the pre-v0.6.0 identity. AWS authenticates as the session-bearing raw STS ARN
+# (arn:aws:sts::123456789012:assumed-role/MyRole/SESSION) — read "`aws-arn` and session
+# names" above first, since this only works with a stable session name.
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
+```
+
+The two differ only in the AWS lead; the GCP and Azure tokens are identical, and are
+present in both so those providers stay pinned to the client's choice too. On an AWS-only
+fleet, the AWS tokens alone are enough.
+
+A single invocation can override the environment, and `--print-sub` reports the identity
+you will actually be authorized as:
+
+```bash
 s2iam --identity-format-preference="aws-arn" --workspace-group-id=my-workspace
 
-# Confirm which identity you'll be authorized as (prints the JWT `sub` to stderr)
+# Prints the JWT `sub` to stderr
 s2iam --workspace-group-id=my-workspace --print-sub >/dev/null
 ```
 
