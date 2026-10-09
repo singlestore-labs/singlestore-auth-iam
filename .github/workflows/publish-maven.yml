@@ -65,11 +65,11 @@ jobs:
           MAVEN_SHA512: "bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978"
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/maven.tar.gz \
+          curl -fsSL -o "${RUNNER_TEMP}/maven.tar.gz" \
             "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
-          echo "${MAVEN_SHA512}  /tmp/maven.tar.gz" | sha512sum -c -
-          tar xzf /tmp/maven.tar.gz -C /opt
-          echo "/opt/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
+          echo "${MAVEN_SHA512}  ${RUNNER_TEMP}/maven.tar.gz" | sha512sum -c -
+          tar xzf "${RUNNER_TEMP}/maven.tar.gz" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
 
       - name: Build and publish to Maven Central
         env:
