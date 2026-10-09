@@ -4,9 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.6.1]
+
+> **Release-plumbing only — no library behavior changes.** `v0.6.0` published to PyPI and
+> was tagged for Go, but the Maven Central upload was rejected during validation, so
+> **`com.singlestore:s2iam:0.6.0` does not exist and never will**. Java users upgrading
+> from `0.5.0` should go straight to `0.6.1`, which is `v0.6.0` plus the fix below; read
+> the [v0.6.0](#v060) notes for the breaking change it carries.
+
+### Fixed
+- **Java release publishing.** Central rejected the `v0.6.0` bundle with "Bundle has
+  content that does NOT have a .pom file: com/singlestore/s2iam", meaning the uploaded
+  bundle carried a file at the group/artifact level instead of only the version
+  directory — a stray `maven-metadata*.xml` is the known cause. Upgraded
+  `central-publishing-maven-plugin` from 0.9.0 to 0.11.0. The same bundle built from the
+  `v0.6.0` tag locally was clean under Maven 3.6.3, 3.9.9 and 3.9.11, with and without
+  signing, so the failure could not be reproduced outside CI.
+
 ## [v0.6.0]
 
 > **⚠️ BREAKING CHANGE — the AWS identity your workloads authenticate as changes.**
+>
+> **Not available for Java** — see [v0.6.1](#v061). The Python and Go releases are fine.
 > Step 3 of 3 of the identity-format rollout begun in `v0.6.0-verifier`. The verifier that
 > honors `X-S2IAM-Identity-Format-Preference` is now deployed to the auth service, so the
 > clients flip their built-in AWS default to the session-stripped base IAM role ARN.
@@ -215,6 +234,7 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 - Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
 - Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
+[v0.6.1]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0...go/v0.6.1
 [v0.6.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0-verifier...go/v0.6.0
 [v0.6.0-verifier]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...go/v0.6.0-verifier
 [v0.5.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...go/v0.5.0
