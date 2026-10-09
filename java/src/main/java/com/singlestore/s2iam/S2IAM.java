@@ -60,10 +60,10 @@ public final class S2IAM {
     }
   }
   private static boolean debugEnabled() {
-    return "true".equals(System.getenv("S2IAM_DEBUGGING"));
+    return "true".equalsIgnoreCase(System.getenv("S2IAM_DEBUGGING"));
   }
   private static boolean timingEnabled() {
-    return "true".equals(System.getenv("S2IAM_DEBUG_TIMING"));
+    return "true".equalsIgnoreCase(System.getenv("S2IAM_DEBUG_TIMING"));
   }
 
   // Convenience API (database)
