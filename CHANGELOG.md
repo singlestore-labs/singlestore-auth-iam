@@ -4,28 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [v0.6.1]
+## [v0.6.2]
 
-> **Release-plumbing only — no library behavior changes.** `v0.6.0` published to PyPI and
-> was tagged for Go, but the Maven Central upload was rejected during validation, so
-> **`com.singlestore:s2iam:0.6.0` does not exist and never will**. Java users upgrading
-> from `0.5.0` should go straight to `0.6.1`, which is `v0.6.0` plus the fix below; read
-> the [v0.6.0](#v060) notes for the breaking change it carries.
+> **Release-plumbing only — no library behavior changes.** Java's Maven Central upload was
+> rejected for both `v0.6.0` and `v0.6.1`, so **neither `com.singlestore:s2iam:0.6.0` nor
+> `0.6.1` exists**. Java users upgrading from `0.5.0` should go straight to `0.6.2`, which
+> is the same library as `v0.6.0`; read the [v0.6.0](#v060) notes for the breaking change
+> it carries. Python and Go were unaffected throughout.
 
 ### Fixed
-- **Java release publishing.** Central rejected the `v0.6.0` bundle with "Bundle has
-  content that does NOT have a .pom file: com/singlestore/s2iam", meaning the uploaded
-  bundle carried a file at the group/artifact level instead of only the version
-  directory — a stray `maven-metadata*.xml` is the known cause. Upgraded
-  `central-publishing-maven-plugin` from 0.9.0 to 0.11.0. The same bundle built from the
-  `v0.6.0` tag locally was clean under Maven 3.6.3, 3.9.9 and 3.9.11, with and without
-  signing, so the failure could not be reproduced outside CI.
+- **Java release publishing.** Central rejected the bundle with "Bundle has content that
+  does NOT have a .pom file: com/singlestore/s2iam": it held
+  `maven-metadata-local.xml` at the group/artifact level, and Central only accepts files
+  under a version directory with a `.pom`. The GitHub runner image moved to Maven 4 in
+  the four months since `v0.5.0` published cleanly, and Maven 4 writes that file where
+  Maven 3 wrote `maven-metadata-central-staging.xml` — the one name
+  `central-publishing-maven-plugin` knows to delete before bundling. The release build is
+  now pinned to Maven 3.9.11, with a guard that fails the job if the pin stops taking
+  effect, since a Maven 4 build produces a rejected bundle rather than an obvious error.
+
+## [v0.6.1]
+
+> **Superseded by [v0.6.2](#v062), and not available for Java.** This release upgraded
+> `central-publishing-maven-plugin` from 0.9.0 to 0.11.0 as a first attempt at the
+> `v0.6.0` Maven Central rejection. It was not sufficient — the upload was rejected the
+> same way, for the reason identified in `v0.6.2` — so `com.singlestore:s2iam:0.6.1` does
+> not exist. Python and Go published `0.6.1` normally; it is identical to their `0.6.0`.
 
 ## [v0.6.0]
 
 > **⚠️ BREAKING CHANGE — the AWS identity your workloads authenticate as changes.**
 >
-> **Not available for Java** — see [v0.6.1](#v061). The Python and Go releases are fine.
+> **Not available for Java** — see [v0.6.2](#v062). The Python and Go releases are fine.
 > Step 3 of 3 of the identity-format rollout begun in `v0.6.0-verifier`. The verifier that
 > honors `X-S2IAM-Identity-Format-Preference` is now deployed to the auth service, so the
 > clients flip their built-in AWS default to the session-stripped base IAM role ARN.
@@ -234,6 +244,7 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 - Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
 - Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
+[v0.6.2]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.1...go/v0.6.2
 [v0.6.1]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0...go/v0.6.1
 [v0.6.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0-verifier...go/v0.6.0
 [v0.6.0-verifier]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...go/v0.6.0-verifier
