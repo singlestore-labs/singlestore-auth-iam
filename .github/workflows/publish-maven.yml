@@ -51,6 +51,26 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
+      # The runner image moved to Maven 4 since v0.5.0 published cleanly in June. Maven 4
+      # leaves maven-metadata-local.xml at the group/artifact level of the staging tree,
+      # and Central rejects a bundle holding anything that is not under a version
+      # directory with a .pom. The publishing plugin does try to remove that file, but
+      # only under the Maven 3 name, maven-metadata-central-staging.xml, so under Maven 4
+      # it survives into the bundle — which is what sank both v0.6.0 and v0.6.1. Pin the
+      # release build to the Maven 3 line that produced every bundle Central has
+      # accepted; drop this once the plugin cleans up after Maven 4.
+      - name: Pin Maven 3 for the release build
+        env:
+          MAVEN_VERSION: "3.9.11"
+          MAVEN_SHA512: "bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/maven.tar.gz \
+            "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz"
+          echo "${MAVEN_SHA512}  /tmp/maven.tar.gz" | sha512sum -c -
+          tar xzf /tmp/maven.tar.gz -C /opt
+          echo "/opt/apache-maven-${MAVEN_VERSION}/bin" >> "$GITHUB_PATH"
+
       - name: Build and publish to Maven Central
         env:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USER }}
@@ -59,6 +79,13 @@ jobs:
         working-directory: java
         run: |
           set -euo pipefail
+          # A Maven 4 build silently produces a bundle Central rejects, so stop here
+          # rather than discover it from a failed deployment.
+          mvn -B -v
+          case "$(mvn -B -v | head -1)" in
+            "Apache Maven 3."*) ;;
+            *) echo "Release build requires Maven 3; the pin step did not take effect." >&2; exit 1 ;;
+          esac
           RELEASE_VERSION="${GITHUB_REF_NAME#v}"
           if [ -z "${RELEASE_VERSION}" ] || ! echo "${RELEASE_VERSION}" | grep -Eq '^[0-9]+(\.[0-9]+)*(-[A-Za-z0-9.-]+)?$'; then
             echo "Invalid release tag ${GITHUB_REF_NAME}; expected vMAJOR[.MINOR[.PATCH]][-qualifier]" >&2
@@ -67,11 +94,8 @@ jobs:
           mvn -B versions:set -DnewVersion="${RELEASE_VERSION}" -DgenerateBackupPoms=false
           mvn -B clean deploy -DskipTests -Prelease
 
-      # Central rejects a bundle containing anything that is not under a version
-      # directory with a .pom — a stray maven-metadata*.xml is the usual culprit, and
-      # the plugin only removes the one name it knows. The v0.6.0 attempt failed that
-      # validation and the bundle it built could not be recovered afterwards, so keep
-      # it when the publish fails.
+      # The bundle Central rejected for v0.6.0 was not recoverable afterwards, which cost
+      # a release to diagnose. Keep it whenever the publish fails.
       - name: Capture deployment bundle on failure
         if: failure()
         working-directory: java
