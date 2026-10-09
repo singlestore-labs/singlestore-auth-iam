@@ -76,10 +76,11 @@ jobs:
         if: failure()
         working-directory: java
         run: |
-          echo "=== central-staging tree ==="
-          find target/central-staging -type f | sort || true
+          set -euo pipefail
+          echo "=== staging tree ==="
+          find target/central-staging target/central-publishing -type f | sort
           echo "=== central-bundle.zip ==="
-          unzip -l target/central-publishing/central-bundle.zip || true
+          unzip -l target/central-publishing/central-bundle.zip
 
       - name: Upload deployment bundle on failure
         if: failure()
@@ -87,4 +88,4 @@ jobs:
         with:
           name: central-bundle
           path: java/target/central-publishing/central-bundle.zip
-          if-no-files-found: warn
+          if-no-files-found: error
