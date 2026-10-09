@@ -24,18 +24,9 @@ type VerifierConfig struct {
 	// by each verifier (they never match that identity's valid set). A provider
 	// with no token here keeps the built-in default (byte-identical to the
 	// historical behavior), which SelectIdentityFormat always appends as the final
-	// fallback. This is how an auth-service
-	// instance opts into (for example) the new AWS default
-	// [aws-iam-role-arn, aws-arn] without a client change, and how versioned
-	// endpoints can differ only in their default ordering.
-	//
-	// Note: for AWS this only takes effect as of v0.6.0. The v0.6.0-verifier
-	// clients pin [aws-arn] in the preference header, and the client preference
-	// outranks this override, so until the clients drop that pin (step 3 of the
-	// staged rollout) an AWS override here is only honored for requests that send
-	// no preference header at all — protocol-only clients, or a client that
-	// explicitly requests an empty preference. GCP and Azure are unaffected: the
-	// clients send no tokens for those providers.
+	// fallback. It lets an instance pick a different default identity for callers
+	// that express no preference, and lets versioned endpoints differ only in their
+	// default ordering.
 	DefaultIdentityFormats []IdentityFormat
 }
 

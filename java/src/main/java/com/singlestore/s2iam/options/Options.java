@@ -38,7 +38,9 @@ public final class Options {
    * {@code arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION}. When unset the
    * library uses a stable default so the full ARN is deterministic and can be
    * pre-configured as a cloud principal / database user. It does not affect the
-   * "aws-iam-role-arn" (session-stripped base role ARN) format.
+   * "aws-iam-role-arn" (session-stripped base role ARN) format, which is the
+   * default as of v0.6.0, so this option only matters when you request "aws-arn"
+   * via {@link #withIdentityFormatPreference}.
    */
   public static JwtOption withAssumeRoleSessionName(String sessionName) {
     return o -> o.assumeRoleSessionName = sessionName;
@@ -54,8 +56,10 @@ public final class Options {
    *
    * <p>
    * Precedence: this explicit option &gt; the S2IAM_IDENTITY_FORMAT_PREFERENCE
-   * environment variable &gt; the built-in default ("aws-arn", byte-identical to
-   * the historical behavior).
+   * environment variable &gt; the built-in default, which names every provider so
+   * the identity cannot move if a verifier operator changes the server-side
+   * default ordering. Setting a preference that omits a provider gives that
+   * provider's identity back to the verifier's ordering.
    */
   public static JwtOption withIdentityFormatPreference(String... formats) {
     return o -> {

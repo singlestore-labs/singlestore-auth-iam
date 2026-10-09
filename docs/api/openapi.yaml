@@ -329,9 +329,18 @@ components:
         (`aws-arn`), the service-account email (else numeric id) for GCP, and the
         `oid` principal for Azure.
 
+        Note that the SingleStore client libraries and CLI do send this header. As of
+        v0.6.0 they default to
+        `aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id` — every
+        provider, each ending at an always-valid format — so their identity is pinned by
+        the client and is not affected by the verifier's configured default ordering. An
+        AWS assumed-role session therefore authenticates as the base IAM role ARN.
+        Protocol-only clients that omit the header are unaffected and still receive each
+        provider's default form.
+
         Format vocabulary:
-        - `aws-arn` — raw STS/IAM caller ARN (always valid; AWS default/floor). Session-bearing for assumed-role sessions, so pre-configurable only when the session name is stable; otherwise prefer `aws-iam-role-arn`
-        - `aws-iam-role-arn` — session-stripped base IAM role ARN (assumed-role sessions only)
+        - `aws-arn` — raw STS/IAM caller ARN (always valid; AWS floor, and the form issued when no preference is sent). Session-bearing for assumed-role sessions, so pre-configurable only when the session name is stable; otherwise prefer `aws-iam-role-arn`
+        - `aws-iam-role-arn` — session-stripped base IAM role ARN (assumed-role sessions only; the client-library default since v0.6.0)
         - `aws-role-id` — stable `RoleId` (`AROA…`; assumed-role sessions only)
         - `gcp-sa-email` — the service account's own email (`…@PROJECT.iam.gserviceaccount.com`; only when the token carries that `email` claim with `email_verified`; GCP default)
         - `gcp-sa-unique-id` — numeric service account unique id (always valid; GCP floor)

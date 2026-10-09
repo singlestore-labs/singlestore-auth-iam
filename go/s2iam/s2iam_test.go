@@ -200,6 +200,22 @@ func TestGetDatabaseJWT_HappyPath(t *testing.T) {
 	testHappyPath(t, client)
 }
 
+// negotiatedIdentifier is the identity the verifier issues for a client-detected
+// identity under the negotiated format. The two are the same for every format except
+// aws-iam-role-arn, which strips the STS session — a transformation only the verifier
+// performs, so the test reproduces it here.
+func negotiatedIdentifier(t *testing.T, clientIdentifier, identityFormat string) string {
+	if identityFormat != string(models.FormatAWSIAMRoleARN) {
+		return clientIdentifier
+	}
+	// arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION -> arn:aws:iam::ACCOUNT:role/ROLE
+	arn := strings.Split(clientIdentifier, ":")
+	require.Len(t, arn, 6, "expected an STS assumed-role ARN, got %q", clientIdentifier)
+	resource := strings.Split(arn[5], "/")
+	require.Len(t, resource, 3, "expected assumed-role/ROLE/SESSION, got %q", arn[5])
+	return "arn:aws:iam::" + arn[4] + ":role/" + resource[1]
+}
+
 func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 	flags := &fakeServerFlags{requireWorkspaceID: true}
 	fakeServer := startFakeServer(t, flags)
@@ -233,15 +249,16 @@ func testHappyPath(t *testing.T, client s2iam.CloudProviderClient) {
 
 	// Verify that client-side and server-side identities match
 	require.NotNil(t, clientIdentity, "Client identity should not be nil")
-	assert.Equal(t, clientIdentity.Identifier, flags.lastIdentifier,
+	expectedIdentifier := negotiatedIdentifier(t, clientIdentity.Identifier, flags.lastIdentityFormat)
+	assert.Equal(t, expectedIdentifier, flags.lastIdentifier,
 		"CRITICAL: Client-side identity (%s) differs from server-side identity (%s). This is a security issue!",
-		clientIdentity.Identifier, flags.lastIdentifier)
+		expectedIdentifier, flags.lastIdentifier)
 
 	// Verify the JWT - the sub claim should contain the Identifier (human-readable identity)
 	claims := validateJWT(t, token)
-	assert.Equal(t, clientIdentity.Identifier, claims["sub"],
+	assert.Equal(t, expectedIdentifier, claims["sub"],
 		"CRITICAL: Client Identifier (%s) differs from JWT sub claim (%s). The JWT sub claim should match the client identifier!",
-		clientIdentity.Identifier, claims["sub"])
+		expectedIdentifier, claims["sub"])
 
 	// The Subject is stored in the 'sub' claim of the JWT
 	subject, ok := claims["sub"].(string)
@@ -525,24 +542,20 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 		"Assumed identity should contain the role name (expected: %s, got: %s)",
 		expectedRoleName, assumedIdentifier)
 	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
-		// With the default preference the identity is the raw STS assumed-role
-		// ARN (session-bearing), byte-identical to historical behavior. The
-		// supplied session name (or the stable default) must appear in the ARN;
-		// the negotiated base-role-ARN form (session-stripped) is exercised below.
-		expectedSessionName := sessionName
-		if expectedSessionName == "" {
-			expectedSessionName = aws.DefaultRoleSessionName
+		// With the default preference the identity is the session-stripped base
+		// IAM role ARN, so the session name must not appear in it. The base role
+		// ARN is path-less: the STS assumed-role ARN omits any IAM path, so derive
+		// the expected value from the role prefix and the path-less role name
+		// rather than the (possibly path-bearing) input ARN. For a root-path role
+		// this equals roleIdentifier exactly.
+		expectedBaseRoleARN := roleIdentifier
+		if i := strings.Index(roleIdentifier, ":role/"); i >= 0 {
+			expectedBaseRoleARN = roleIdentifier[:i+len(":role/")] + expectedRoleName
 		}
-		assert.True(t, strings.HasPrefix(assumedIdentifier, "arn:aws:sts::"),
-			"default AWS identity should be the raw STS assumed-role ARN, got: %s", assumedIdentifier)
-		assert.Contains(t, assumedIdentifier, ":assumed-role/"+expectedRoleName+"/"+expectedSessionName,
-			"default AWS identity should carry the role and session name (expected .../assumed-role/%s/%s), got: %s",
-			expectedRoleName, expectedSessionName, assumedIdentifier)
-		assert.True(t, strings.HasSuffix(assumedIdentifier, "/"+expectedSessionName),
-			"default AWS identity ARN should end with the session name (expected suffix /%s), got: %s",
-			expectedSessionName, assumedIdentifier)
-		assert.Equal(t, "aws-arn", flags.lastIdentityFormat,
-			"default AWS identity format should be aws-arn")
+		assert.Equal(t, expectedBaseRoleARN, assumedIdentifier,
+			"default AWS identity should be the path-less base IAM role ARN (session must not affect it)")
+		assert.Equal(t, "aws-iam-role-arn", flags.lastIdentityFormat,
+			"default AWS identity format should be aws-iam-role-arn")
 	}
 	assert.Equal(t, flags.lastIdentifier, assumedIdentifier,
 		"Fake server identity should match JWT sub claim")
@@ -551,37 +564,39 @@ func testGetDatabaseJWTAssumeRoleValid(t *testing.T, roleIdentifier, sessionName
 
 	t.Logf("Successfully assumed role: %s -> %s", originalIdentifier, assumedIdentifier)
 
-	// Content negotiation: opt into the new AWS ordering and confirm the issued
-	// identity collapses to the base IAM role ARN, with identityFormat reported as
-	// aws-iam-role-arn. This is the opt-in format from MCDB-102857.
+	// Content negotiation: request the raw ARN explicitly and confirm the issued
+	// identity is the session-bearing STS assumed-role ARN — the pre-v0.6.0
+	// default, still reachable as an opt-in.
 	if strings.HasPrefix(roleIdentifier, "arn:aws:iam:") {
 		flags.requestCount = 0
 		flags.lastIdentifier = ""
 		flags.lastIdentityFormat = ""
 
 		negotiatedOpts := append([]s2iam.JWTOption{}, opts...)
-		negotiatedOpts = append(negotiatedOpts,
-			s2iam.WithIdentityFormatPreference("aws-iam-role-arn", "aws-arn"))
+		negotiatedOpts = append(negotiatedOpts, s2iam.WithIdentityFormatPreference("aws-arn"))
 		negotiatedJWT, err := s2iam.GetDatabaseJWT(ctx, "test-workspace", negotiatedOpts...)
 		require.NoError(t, err)
 		negotiatedClaims := validateJWT(t, negotiatedJWT)
 		negotiatedIdentifier := negotiatedClaims["sub"].(string)
 
-		// The base IAM role ARN is path-less: the STS assumed-role ARN omits any
-		// IAM path, so derive the expected value from the role prefix and the
-		// path-less role name rather than the (possibly path-bearing) input ARN.
-		// For a root-path role this equals roleIdentifier exactly.
-		expectedBaseRoleARN := roleIdentifier
-		if i := strings.Index(roleIdentifier, ":role/"); i >= 0 {
-			expectedBaseRoleARN = roleIdentifier[:i+len(":role/")] + expectedRoleName
+		// The supplied session name (or the stable default) must appear in the ARN.
+		expectedSessionName := sessionName
+		if expectedSessionName == "" {
+			expectedSessionName = aws.DefaultRoleSessionName
 		}
-		assert.Equal(t, expectedBaseRoleARN, negotiatedIdentifier,
-			"negotiated AWS identity should be the path-less base IAM role ARN (session must not affect it)")
-		assert.Equal(t, "aws-iam-role-arn", flags.lastIdentityFormat,
-			"negotiated AWS identity format should be aws-iam-role-arn")
+		assert.True(t, strings.HasPrefix(negotiatedIdentifier, "arn:aws:sts::"),
+			"negotiated aws-arn identity should be the raw STS assumed-role ARN, got: %s", negotiatedIdentifier)
+		assert.Contains(t, negotiatedIdentifier, ":assumed-role/"+expectedRoleName+"/"+expectedSessionName,
+			"negotiated aws-arn identity should carry the role and session name (expected .../assumed-role/%s/%s), got: %s",
+			expectedRoleName, expectedSessionName, negotiatedIdentifier)
+		assert.True(t, strings.HasSuffix(negotiatedIdentifier, "/"+expectedSessionName),
+			"negotiated aws-arn identity ARN should end with the session name (expected suffix /%s), got: %s",
+			expectedSessionName, negotiatedIdentifier)
+		assert.Equal(t, "aws-arn", flags.lastIdentityFormat,
+			"negotiated AWS identity format should be aws-arn")
 		assert.Equal(t, flags.lastIdentifier, negotiatedIdentifier,
 			"fake server identity should match negotiated JWT sub claim")
-		t.Logf("Negotiated base role ARN: %s (format %s)", negotiatedIdentifier, flags.lastIdentityFormat)
+		t.Logf("Negotiated raw STS ARN: %s (format %s)", negotiatedIdentifier, flags.lastIdentityFormat)
 	}
 }
 

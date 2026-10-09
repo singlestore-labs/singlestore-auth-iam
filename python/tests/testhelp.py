@@ -83,6 +83,24 @@ def maybe_parallel() -> None:
         pass
 
 
+def _negotiated_identifier(client_identifier: str) -> str:
+    """The identity the verifier issues for a client-detected identity.
+
+    The two are the same for every format except aws-iam-role-arn, which strips the STS
+    session — a transformation only the verifier performs, so reproduce it here. The Go
+    and Java equivalents key off the format the server reports; it is not a JWT claim,
+    so key off the ARN shape instead. Callers below use the built-in default preference,
+    which leads with aws-iam-role-arn, so an assumed-role session always collapses.
+    """
+    arn = client_identifier.split(":")
+    if len(arn) != 6 or arn[2] != "sts":
+        return client_identifier
+    resource = arn[5].split("/")
+    if len(resource) != 3 or resource[0] != "assumed-role":
+        return client_identifier
+    return f"arn:aws:iam::{arn[4]}:role/{resource[1]}"
+
+
 async def validate_identity_and_jwt(
     provider: CloudProviderClient,
     workspace_group_id: str,
@@ -125,10 +143,11 @@ async def validate_identity_and_jwt(
         "resource_type": claims.get("resourceType", ""),
     }
 
-    # Core identifier must match.
-    if claim_identity["identifier"] != identity.identifier:
+    # Core identifier must match the identity for the negotiated format.
+    expected_identifier = _negotiated_identifier(identity.identifier)
+    if claim_identity["identifier"] != expected_identifier:
         raise AssertionError(
-            f"JWT sub mismatch: claim={claim_identity['identifier']!r} identity={identity.identifier!r}"
+            f"JWT sub mismatch: claim={claim_identity['identifier']!r} expected={expected_identifier!r}"
         )
 
     # Provider must match (case-insensitive).

@@ -18,15 +18,16 @@ type IdentityFormat string
 // verified identity.
 const (
 	// FormatAWSARN is the raw caller ARN as returned by GetCallerIdentity (IAM
-	// user, assumed-role session, root, or federated-user). Always valid and the
-	// current AWS default. For an assumed-role session it is session-bearing
+	// user, assumed-role session, root, or federated-user). Always valid: it is the
+	// AWS floor and the form issued when a request carries no preference. For an
+	// assumed-role session it is session-bearing
 	// (arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION) and is only pre-configurable
 	// when the session name is stable (e.g. the library-driven AssumeRole, which
 	// uses a stable default session name); otherwise prefer aws-iam-role-arn.
 	FormatAWSARN IdentityFormat = "aws-arn"
 	// FormatAWSIAMRoleARN is the base IAM role ARN (arn:aws:iam::ACCOUNT:role/ROLE)
 	// to which an assumed-role session collapses. Valid only when the caller is an
-	// assumed-role session.
+	// assumed-role session. The client libraries request it first as of v0.6.0.
 	FormatAWSIAMRoleARN IdentityFormat = "aws-iam-role-arn"
 	// FormatAWSRoleID is the immutable RoleId (AROA...), the prefix of the STS
 	// UserId. Valid only when the caller is an assumed-role session.

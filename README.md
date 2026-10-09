@@ -189,12 +189,14 @@ echo $TOKEN
 #### Advanced Usage
 
 ```bash
-# AWS with assumed role (identity is the raw STS assumed-role ARN by default)
+# AWS with assumed role (identity is the base IAM role ARN
+# arn:aws:iam::123456789012:role/MyRole by default)
 s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole
 
-# Opt into the session-stripped base IAM role ARN (arn:aws:iam::123456789012:role/MyRole)
+# Request the session-bearing raw STS ARN instead
+# (arn:aws:sts::123456789012:assumed-role/MyRole/SESSION)
 s2iam --provider=aws --assume-role=arn:aws:iam::123456789012:role/MyRole \
-      --identity-format-preference=aws-iam-role-arn,aws-arn
+      --identity-format-preference=aws-arn
 
 # GCP with service account impersonation
 s2iam --provider=gcp --assume-role=service-account@project-id.iam.gserviceaccount.com
@@ -215,8 +217,8 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--workspace-group-id`: Workspace group ID (required for database JWT)
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
-- `--assume-role-session-name`: AWS STS `RoleSessionName` for `--assume-role`. Part of the identity under the `aws-arn` format; defaults to a stable value so the full ARN is pre-configurable. Does not affect the `aws-iam-role-arn` form. See [`aws-arn` and session names](#aws-arn-and-session-names)
-- `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (e.g. `aws-iam-role-arn,aws-arn`). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
+- `--assume-role-session-name`: AWS STS `RoleSessionName` for `--assume-role`. Part of the identity only under the `aws-arn` format; defaults to a stable value so the full ARN is pre-configurable. Does not affect the default `aws-iam-role-arn` form. See [`aws-arn` and session names](#aws-arn-and-session-names)
+- `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (`--help` prints the default). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
@@ -234,40 +236,55 @@ The libraries automatically detect the cloud provider and obtain appropriate cre
 
 ### Identity format preferences (content negotiation)
 
-The default authenticated identity (JWT `sub`) for each provider is:
+The authenticated identity (JWT `sub`) the client libraries and CLI request by default is:
 
 | Provider | Default identity (JWT `sub`) |
 |----------|------------------------------|
-| AWS | Raw caller ARN from STS, e.g. `arn:aws:sts::ACCOUNT:assumed-role/ROLE/SESSION` (or `arn:aws:iam::ACCOUNT:user/NAME` for IAM users) |
+| AWS | Base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE` for an assumed-role session, falling back to the raw caller ARN (e.g. `arn:aws:iam::ACCOUNT:user/NAME`) for anything else |
 | GCP | Service account email, or the numeric unique id when the email is unverified |
 | Azure | The `oid` principal (object id) |
 
-Clients can **opt into** alternate representations by sending an ordered preference
-list. The verifier picks the first format it supports and can derive for the
-authenticated identity, and reports the choice back in the response `identityFormat`
-field. Negotiation only reorders among representations the verifier has already derived
-for the same identity — it never broadens a match or crosses identities, and it always
-falls back to the default (and ultimately the always-valid floor) when a preference
-cannot be honored.
+Clients choose a representation by sending an ordered preference list. The verifier picks
+the first format it supports and can derive for the authenticated identity, and reports
+the choice back in the response `identityFormat` field. Negotiation only reorders among
+representations the verifier has already derived for the same identity — it never
+broadens a match or crosses identities, and it always falls back to the server default
+(and ultimately the always-valid floor) when a preference cannot be honored.
+
+The client libraries and CLI send a **complete** preference by default — every provider,
+each ending at a format that is always available. The identity you get is therefore
+pinned by the client and cannot move if a verifier operator changes the server-side
+default ordering. If you set your own preference, name every provider you run on for the
+same guarantee; a provider you omit falls back to the verifier's ordering.
+
+The header itself is optional at the protocol level: a request that sends **no**
+preference gets the verifier's own default for the provider (`aws-arn` for AWS). That
+applies to protocol-only clients, not to the libraries here.
 
 #### Format vocabulary
 
-`*` marks the default format for each CSP — the `sub` you get when you send no preference.
+`*` marks the identity you get from the client libraries by default; `†` marks the
+protocol default — the `sub` the verifier picks when a request sends no preference header
+at all. The default client preference is
+`aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id`: a `*` row is the
+first entry applicable to your identity, and the unmarked rows are opt-in only.
 
 | Format token | CSP | Meaning | Example `sub` |
 |--------------|-----|---------|---------------|
-| `aws-arn` * | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below). Always available (floor / default) | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
-| `aws-iam-role-arn` | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE`; assumed-role sessions only | `arn:aws:iam::123456789012:role/MyRole` |
+| `aws-arn` † | AWS | Raw STS/IAM caller ARN; session-bearing for assumed roles (pre-configurable only when the session name is stable — see below). Always available (floor) | assumed role: `arn:aws:sts::123456789012:assumed-role/MyRole/MySession`; IAM user: `arn:aws:iam::123456789012:user/MyUser` |
+| `aws-iam-role-arn` * | AWS | Session-stripped base IAM role ARN `arn:aws:iam::ACCOUNT:role/ROLE`; assumed-role sessions only | `arn:aws:iam::123456789012:role/MyRole` |
 | `aws-role-id` | AWS | Stable `RoleId` (`AROA…`, prefix of the STS `UserId`); assumed-role sessions only | `AROAEXAMPLEID1234567` |
-| `gcp-sa-email` * | GCP | The service account's own email (the `…@PROJECT.iam.gserviceaccount.com` identity); only when the token carries that `email` claim with `email_verified` | `my-sa@my-project.iam.gserviceaccount.com` |
+| `gcp-sa-email` *† | GCP | The service account's own email (the `…@PROJECT.iam.gserviceaccount.com` identity); only when the token carries that `email` claim with `email_verified` | `my-sa@my-project.iam.gserviceaccount.com` |
 | `gcp-sa-unique-id` | GCP | Numeric service-account unique id; always available (floor) | `103547991597142817347` |
-| `azure-object-id` * | Azure | `oid` principal (object id); always available (floor / default) | `11111111-2222-3333-4444-555555555555` |
+| `azure-object-id` *† | Azure | `oid` principal (object id); always available (floor / default) | `11111111-2222-3333-4444-555555555555` |
 | `azure-resource-id` | Azure | `xms_mirid` resource id; user-assigned managed identity only | `/subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/my-mi` |
 
 #### `aws-arn` and session names
 
 Because the `sub` must be pre-configured as a cloud principal / database user, the
-session-bearing `aws-arn` form is only usable when the session name is **stable**:
+session-bearing `aws-arn` form is only usable when the session name is **stable**. This is
+why `aws-iam-role-arn` is the default; if you request `aws-arn`, these are the constraints
+you take on:
 
 - **IAM user** — the ARN has no session; always stable.
 - **Library-driven `AssumeRole`** (`WithAssumeRole`) — the library uses a stable default
@@ -281,18 +298,35 @@ session-bearing `aws-arn` form is only usable when the session name is **stable*
 
 #### Selecting a preference
 
-Set the preference (highest priority first) programmatically, via CLI, or via environment:
+Set the preference (highest priority first) programmatically, via CLI, or via environment.
+Setting the environment variable fleet-wide fixes the identity across every language and
+every workload at once; the two settings worth knowing are the current default stated
+explicitly, and the pre-v0.6.0 identity:
 
 ```bash
-# Adopt the session-stripped base IAM role ARN for AWS, fall back to the raw ARN
-export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-iam-role-arn,aws-arn"
-s2iam --workspace-group-id=my-workspace
+# Lock in the current default. AWS authenticates as the base IAM role ARN
+# (arn:aws:iam::123456789012:role/MyRole). Naming it explicitly means a future change
+# to the built-in default cannot move the identity out from under you.
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
 
-# Or per-invocation
-s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace
+# Keep the pre-v0.6.0 identity. AWS authenticates as the session-bearing raw STS ARN
+# (arn:aws:sts::123456789012:assumed-role/MyRole/SESSION) — read "`aws-arn` and session
+# names" above first, since this only works with a stable session name.
+export S2IAM_IDENTITY_FORMAT_PREFERENCE="aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id"
+```
 
-# Confirm which identity you'll be authorized as (prints the JWT `sub` to stderr)
-s2iam --identity-format-preference="aws-iam-role-arn,aws-arn" --workspace-group-id=my-workspace --print-sub >/dev/null
+The two differ only in the AWS lead; the GCP and Azure tokens are identical, and are
+present in both so those providers stay pinned to the client's choice too. On an AWS-only
+fleet, the AWS tokens alone are enough.
+
+A single invocation can override the environment, and `--print-sub` reports the identity
+you will actually be authorized as:
+
+```bash
+s2iam --identity-format-preference="aws-arn" --workspace-group-id=my-workspace
+
+# Prints the JWT `sub` to stderr
+s2iam --workspace-group-id=my-workspace --print-sub >/dev/null
 ```
 
 If you only have the raw JWT (e.g. a protocol-only client without the CLI), decode the
@@ -306,16 +340,16 @@ Decode the issued JWT, inspect its `sub`, and register the cloud principal / dat
 user for the exact `sub` form you intend to use so the identity you authorize as matches
 what you configured.
 
-Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**.
-Language options: `WithIdentityFormatPreference(...)` (Go),
+Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default**
+(`aws-iam-role-arn,aws-arn,gcp-sa-email,gcp-sa-unique-id,azure-object-id`). Language options:
+`WithIdentityFormatPreference(...)` (Go),
 `identity_format_preference=[...]` (Python),
 `Options.withIdentityFormatPreference(...)` / `.identityFormatPreference(...)` (Java).
 
 #### AWS: base IAM role ARN vs. raw ARN
 
-With the preference `["aws-iam-role-arn", "aws-arn"]`, every AWS STS assumed-role
-session — EC2 instance profile, EKS IRSA, or explicit `AssumeRole` — collapses to the
-**base IAM role ARN**:
+Under the default preference, every AWS STS assumed-role session — EC2 instance profile,
+EKS IRSA, or explicit `AssumeRole` — collapses to the **base IAM role ARN**:
 
 | Credentials | `sub` with `aws-iam-role-arn` preference |
 |-------------|------------------------------------------|
@@ -341,6 +375,11 @@ regardless of the selected format, under these keys:
 | STS `UserId` | `UserId` | `aws.ClaimUserID` / `CLAIM_USER_ID` |
 
 The keys are the same in Go, Python, and Java. Prefer the constants over literals.
+
+Identity formats require an auth server that honors
+`X-S2IAM-Identity-Format-Preference`; a server that ignores the header returns the raw ARN
+regardless of the preference. Changes to the default identity between releases are
+recorded in the [changelog](CHANGELOG.md).
 
 ## Documentation
 

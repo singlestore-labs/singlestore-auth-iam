@@ -56,11 +56,12 @@ That's it! The library automatically detects your cloud environment and gets the
 
 Clients may select the issued identity representation (the JWT `sub`) by passing an ordered `identity_format_preference` list; the verifier picks the first form it supports and reports the choice in the response `identityFormat` field. See the [main README](../README.md#identity-format-preferences-content-negotiation) for the full vocabulary, the default ordering, and semantics.
 
+The built-in default names every provider, so the identity is pinned by the client and cannot move if a verifier operator changes the server-side default ordering: `["aws-iam-role-arn", "aws-arn", "gcp-sa-email", "gcp-sa-unique-id", "azure-object-id"]`. For AWS that means the session-stripped base IAM role ARN, falling back to the raw ARN for callers that are not an assumed-role session. Request `"aws-arn"` for the session-bearing raw STS ARN instead:
+
 ```python
-# Adopt the session-stripped base IAM role ARN for AWS, falling back to the raw ARN.
 jwt = await get_jwt_database(
     "workspace-id",
-    identity_format_preference=["aws-iam-role-arn", "aws-arn"],
+    identity_format_preference=["aws-arn"],
 )
 ```
 

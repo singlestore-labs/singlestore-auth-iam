@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,7 +95,9 @@ func WithAssumeRole(roleIdentifier string) JWTOption {
 // When unset, the library uses a stable default (DefaultRoleSessionName), so the
 // full ARN is deterministic and can be pre-configured as a cloud principal /
 // database user. Set a stable value here if you need a different one. It does not
-// affect the "aws-iam-role-arn" format (the session-stripped base role ARN).
+// affect the "aws-iam-role-arn" format (the session-stripped base role ARN), which
+// is the default as of v0.6.0, so this option only matters when you request
+// "aws-arn" via WithIdentityFormatPreference.
 func WithAssumeRoleSessionName(sessionName string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.AssumeRoleSessionName = sessionName
@@ -109,13 +112,33 @@ func WithAssumeRoleSessionName(sessionName string) JWTOption {
 // heterogeneous fleet; unknown or inapplicable tokens are ignored.
 //
 // Precedence: this explicit option > the S2IAM_IDENTITY_FORMAT_PREFERENCE
-// environment variable > the built-in default ([aws-arn], byte-identical to the
-// historical behavior).
+// environment variable > DefaultIdentityFormatPreference. A preference that omits a
+// provider gives that provider's identity back to the verifier's ordering.
 func WithIdentityFormatPreference(formats ...string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
 		o.IdentityFormatPreference = formats
 		o.identityFormatPreferenceSet = true
 	})
+}
+
+// defaultIdentityFormatPreference names every provider, each run ending at that
+// provider's always-valid floor, so the issued identity is pinned by the client
+// rather than left to the verifier's configured default ordering.
+//
+// AWS leads with the session-stripped base IAM role ARN. GCP and Azure reproduce the
+// verifier's own ordering, so naming them pins the identity without changing it.
+// Formats a preceding floor already makes unreachable (aws-role-id,
+// azure-resource-id) are omitted: they are opt-in only.
+var defaultIdentityFormatPreference = []string{
+	string(models.FormatAWSIAMRoleARN), string(models.FormatAWSARN),
+	string(models.FormatGCPSAEmail), string(models.FormatGCPSAUniqueID),
+	string(models.FormatAzureObjectID),
+}
+
+// DefaultIdentityFormatPreference returns a copy of the built-in preference, for
+// callers that report it (the CLI's help text) or extend it.
+func DefaultIdentityFormatPreference() []string {
+	return slices.Clone(defaultIdentityFormatPreference)
 }
 
 // identityFormatPreference resolves the effective preference list using the
@@ -132,10 +155,7 @@ func (o jwtOptions) identityFormatPreference() []string {
 		}
 		return out
 	}
-	// Built-in default: the raw AWS ARN, byte-identical to today. GCP/Azure tokens
-	// are absent, so those providers fall through to the verifier's default
-	// ordering (also unchanged).
-	return []string{string(models.FormatAWSARN)}
+	return defaultIdentityFormatPreference
 }
 
 // processJWTOptions processes JWT options and extracts provider options

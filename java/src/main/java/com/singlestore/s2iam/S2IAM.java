@@ -330,10 +330,28 @@ public final class S2IAM {
   }
 
   /**
+   * The built-in preference: every provider, so the issued identity is pinned by
+   * the client instead of being left to the verifier's configured default
+   * ordering, which an operator can change server-side. Each provider's run ends
+   * at its always-valid floor, so selection never falls through to the server for
+   * an identity we can authenticate.
+   *
+   * <p>
+   * AWS leads with the session-stripped base IAM role ARN. GCP and Azure
+   * reproduce the verifier's own ordering, so naming them pins the identity
+   * without changing it. Formats that a preceding floor already makes unreachable
+   * (aws-role-id, azure-resource-id) are omitted: they are opt-in only.
+   */
+  private static final List<String> DEFAULT_IDENTITY_FORMAT_PREFERENCE = List.of(
+      IdentityFormat.AWS_IAM_ROLE_ARN, IdentityFormat.AWS_ARN, IdentityFormat.GCP_SA_EMAIL,
+      IdentityFormat.GCP_SA_UNIQUE_ID, IdentityFormat.AZURE_OBJECT_ID);
+
+  /**
    * Resolves the effective identity-format preference using the precedence
    * explicit option &gt; S2IAM_IDENTITY_FORMAT_PREFERENCE env var &gt; built-in
-   * default ("aws-arn", byte-identical to the historical behavior; GCP/Azure fall
-   * through to the verifier's default ordering).
+   * default ({@link #DEFAULT_IDENTITY_FORMAT_PREFERENCE}). Setting a preference
+   * that omits a provider gives that provider's identity back to the verifier's
+   * ordering.
    */
   private static List<String> resolveIdentityFormatPreference(JwtOptions o) {
     if (o.identityFormatPreferenceSet) {
@@ -342,7 +360,7 @@ public final class S2IAM {
     String env = System.getenv(IdentityFormat.PREFERENCE_ENV);
     if (env != null && !env.isEmpty())
       return IdentityFormat.parsePreference(env);
-    return List.of(IdentityFormat.AWS_ARN);
+    return DEFAULT_IDENTITY_FORMAT_PREFERENCE;
   }
 
   private static String safeTrunc(String s) {

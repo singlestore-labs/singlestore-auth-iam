@@ -19,11 +19,13 @@ from typing import NamedTuple, Optional
 # builders). v1 verifiers emit every token that is valid for the verified
 # identity.
 
-# AWS: raw caller ARN (always valid; current AWS default). Session-bearing for
-# assumed-role sessions, so only pre-configurable when the session name is stable
-# (e.g. the library-driven AssumeRole); otherwise prefer aws-iam-role-arn.
+# AWS: raw caller ARN (always valid; the AWS floor and the form issued when a request
+# carries no preference). Session-bearing for assumed-role sessions, so only
+# pre-configurable when the session name is stable (e.g. the library-driven
+# AssumeRole); otherwise prefer aws-iam-role-arn.
 FORMAT_AWS_ARN = "aws-arn"
-# AWS: base IAM role ARN (assumed-role sessions only).
+# AWS: base IAM role ARN (assumed-role sessions only); requested first by the client
+# as of v0.6.0.
 FORMAT_AWS_IAM_ROLE_ARN = "aws-iam-role-arn"
 # AWS: immutable RoleId (AROA...), the prefix of the STS UserId (assumed-role only).
 FORMAT_AWS_ROLE_ID = "aws-role-id"
