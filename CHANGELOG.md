@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+The Go, Python, and Java clients read the same environment variables with the same
+meaning, so one setting configures a mixed-language fleet. See
+[Environment variables](README.md#environment-variables).
+
+### Added
+- **`S2IAM_SERVER_URL` overrides the authentication server URL in all three clients and
+  the CLI**, with the same precedence as `S2IAM_IDENTITY_FORMAT_PREFERENCE`: explicit
+  option > environment variable > built-in default. Previously only Python honored an
+  environment override, under the undocumented name `S2IAM_JWT_SERVER_URL`; that name is
+  still accepted but `S2IAM_SERVER_URL` wins when both are set.
+
+### Changed
+- **`S2IAM_DEBUGGING` (and `S2IAM_DEBUG_TIMING`) are matched case-insensitively in Go and
+  Java**, as Python already did, so `true`, `True`, and `TRUE` all enable debug logging
+  everywhere. Previously only the exact lowercase `true` worked outside Python.
+
+### Fixed
+- **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
+  hardcoded production URL rather than `None`, so the environment override was
+  unreachable through the public API. They now default to `None`.
+- **Python:** `server_url` now expands the `:cloudProvider` and `:jwtType` placeholders,
+  as the Go and Java clients already did, so one URL works for both JWT types and every
+  provider. URLs without placeholders are unaffected.
+- **Java:** the server URL validated before provider detection substituted a hardcoded
+  `database` for `:jwtType` rather than the requested JWT type.
+
 ## [v0.6.0]
 
 > **⚠️ BREAKING CHANGE — the AWS identity your workloads authenticate as changes.**
@@ -74,21 +102,6 @@ session name is the instance id) — those workloads should adopt `aws-iam-role-
 - **The wire protocol is unchanged.** A request that sends no
   `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
   default identity (`aws-arn` for AWS), so protocol-only clients are unaffected.
-
-### Added
-- **`S2IAM_SERVER_URL` overrides the authentication server URL in all three clients and
-  the CLI**, with the same precedence as `S2IAM_IDENTITY_FORMAT_PREFERENCE`: explicit
-  option > environment variable > built-in default. Previously only Python honored an
-  environment override, under the undocumented name `S2IAM_JWT_SERVER_URL`; that name is
-  still accepted but `S2IAM_SERVER_URL` wins when both are set.
-
-### Fixed
-- **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
-  hardcoded production URL rather than `None`, so the environment override was
-  unreachable through the public API. They now default to `None`.
-- **Python:** `server_url` now expands the `:cloudProvider` and `:jwtType` placeholders,
-  as the Go and Java clients already did, so one URL works for both JWT types and every
-  provider. URLs without placeholders are unaffected.
 
 ## [v0.6.0-verifier]
 
@@ -230,6 +243,7 @@ Versions are kept in sync across languages (Go, Python, Java). A version tag ind
 - Python: push `vX.Y.Z` tag to run Trusted Publishing workflow to PyPI.
 - Java: push `vX.Y.Z` tag to run Maven Central release workflow (OSSRH).
 
+[Unreleased]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0...HEAD
 [v0.6.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.6.0-verifier...go/v0.6.0
 [v0.6.0-verifier]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.5.0...go/v0.6.0-verifier
 [v0.5.0]: https://github.com/singlestore-labs/singlestore-auth-iam/compare/go/v0.4.0...go/v0.5.0

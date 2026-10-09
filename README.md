@@ -237,7 +237,8 @@ meaning. An explicit option or argument always takes precedence.
   (`database`, `api`). Must be `https://` unless the caller explicitly allows HTTP.
 - `S2IAM_IDENTITY_FORMAT_PREFERENCE`: comma-separated, ordered list of preferred
   identity formats. See [Identity format preferences](#identity-format-preferences-content-negotiation).
-- `S2IAM_DEBUGGING`: set to `true` for debug logging. Never logs tokens or credentials.
+- `S2IAM_DEBUGGING`: set to `true` (case-insensitive) for debug logging. Never logs
+  tokens or credentials.
 
 ## Supported Cloud Providers
 
