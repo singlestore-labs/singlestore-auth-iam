@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -111,9 +112,7 @@ func WithAssumeRoleSessionName(sessionName string) JWTOption {
 // heterogeneous fleet; unknown or inapplicable tokens are ignored.
 //
 // Precedence: this explicit option > the S2IAM_IDENTITY_FORMAT_PREFERENCE
-// environment variable > the built-in default (defaultIdentityFormatPreference,
-// which names every provider so the identity cannot move if a verifier operator
-// changes the server-side default ordering). Setting a preference that omits a
+// environment variable > DefaultIdentityFormatPreference. A preference that omits a
 // provider gives that provider's identity back to the verifier's ordering.
 func WithIdentityFormatPreference(formats ...string) JWTOption {
 	return jwtOption(func(o *jwtOptions) {
@@ -122,20 +121,24 @@ func WithIdentityFormatPreference(formats ...string) JWTOption {
 	})
 }
 
-// defaultIdentityFormatPreference is the built-in preference: every provider, so
-// the issued identity is pinned by the client instead of being left to the
-// verifier's configured default ordering, which an operator can change
-// server-side. Each provider's run ends at its always-valid floor, so selection
-// never falls through to the server for an identity we can authenticate.
+// defaultIdentityFormatPreference names every provider, each run ending at that
+// provider's always-valid floor, so the issued identity is pinned by the client
+// rather than left to the verifier's configured default ordering.
 //
-// AWS leads with the session-stripped base IAM role ARN. GCP and Azure reproduce
-// the verifier's own ordering, so naming them pins the identity without changing
-// it. Formats that a preceding floor already makes unreachable (aws-role-id,
+// AWS leads with the session-stripped base IAM role ARN. GCP and Azure reproduce the
+// verifier's own ordering, so naming them pins the identity without changing it.
+// Formats a preceding floor already makes unreachable (aws-role-id,
 // azure-resource-id) are omitted: they are opt-in only.
 var defaultIdentityFormatPreference = []string{
 	string(models.FormatAWSIAMRoleARN), string(models.FormatAWSARN),
 	string(models.FormatGCPSAEmail), string(models.FormatGCPSAUniqueID),
 	string(models.FormatAzureObjectID),
+}
+
+// DefaultIdentityFormatPreference returns a copy of the built-in preference, for
+// callers that report it (the CLI's help text) or extend it.
+func DefaultIdentityFormatPreference() []string {
+	return slices.Clone(defaultIdentityFormatPreference)
 }
 
 // identityFormatPreference resolves the effective preference list using the

@@ -218,7 +218,7 @@ s2iam --verbose --workspace-group-id=my-workspace
 - `--provider`: Cloud provider ('aws', 'gcp', or 'azure', auto-detect if not specified)
 - `--assume-role`: Role to assume (ARN for AWS, service account for GCP, managed identity for Azure)
 - `--assume-role-session-name`: AWS STS `RoleSessionName` for `--assume-role`. Part of the identity only under the `aws-arn` format; defaults to a stable value so the full ARN is pre-configurable. Does not affect the default `aws-iam-role-arn` form. See [`aws-arn` and session names](#aws-arn-and-session-names)
-- `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (default `aws-iam-role-arn,aws-arn`). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
+- `--identity-format-preference`: Comma-separated, ordered list of preferred identity formats (`--help` prints the default). Also settable via `S2IAM_IDENTITY_FORMAT_PREFERENCE`. See [Identity format preferences](#identity-format-preferences-content-negotiation)
 - `--server-url`: Authentication server URL
 - `--env-name`: Environment variable name for JWT output
 - `--env-status`: Environment variable name for status output
@@ -348,9 +348,8 @@ Precedence is **explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in 
 
 #### AWS: base IAM role ARN vs. raw ARN
 
-With the default preference `["aws-iam-role-arn", "aws-arn"]`, every AWS STS assumed-role
-session — EC2 instance profile, EKS IRSA, or explicit `AssumeRole` — collapses to the
-**base IAM role ARN**:
+Under the default preference, every AWS STS assumed-role session — EC2 instance profile,
+EKS IRSA, or explicit `AssumeRole` — collapses to the **base IAM role ARN**:
 
 | Credentials | `sub` with `aws-iam-role-arn` preference |
 |-------------|------------------------------------------|

@@ -27,12 +27,6 @@ type VerifierConfig struct {
 	// fallback. It lets an instance pick a different default identity for callers
 	// that express no preference, and lets versioned endpoints differ only in their
 	// default ordering.
-	//
-	// Note its reach is narrow: the client preference outranks it, and the client
-	// libraries deliberately send a preference naming every provider so that their
-	// identity cannot be moved from the server side. This override therefore only
-	// applies to requests that send no preference header at all — protocol-only
-	// clients, or a client that explicitly requests an empty preference.
 	DefaultIdentityFormats []IdentityFormat
 }
 

@@ -73,10 +73,7 @@ session name is the instance id) — those workloads should adopt `aws-iam-role-
   same guarantee; a provider you omit falls back to the verifier's ordering.
 - **The wire protocol is unchanged.** A request that sends no
   `X-S2IAM-Identity-Format-Preference` header still receives each provider's original
-  default identity (`aws-arn` for AWS), so protocol-only clients are unaffected. Because
-  the client preference outranks `VerifierConfig.DefaultIdentityFormats` and the clients
-  now name every provider, that override only applies to requests which send no preference
-  header at all.
+  default identity (`aws-arn` for AWS), so protocol-only clients are unaffected.
 
 ## [v0.6.0-verifier]
 
