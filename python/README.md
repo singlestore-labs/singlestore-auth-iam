@@ -48,7 +48,7 @@ That's it! The library automatically detects your cloud environment and gets the
 
 ### Environment Variables
 
-- `S2IAM_SERVER_URL`: Custom authentication server URL (default: https://auth.singlestore.com)
+- `S2IAM_SERVER_URL`: Custom authentication server URL, replacing the built-in production endpoint. May contain the `:cloudProvider` and `:jwtType` placeholders. See [Environment variables](../README.md#environment-variables)
 - `S2IAM_DEBUGGING`: Set to "true" to enable debug logging
 - `S2IAM_IDENTITY_FORMAT_PREFERENCE`: Comma-separated, ordered list of preferred identity formats (e.g. `aws-iam-role-arn,aws-arn`). See [Identity format preferences](#identity-format-preferences)
 
@@ -66,6 +66,7 @@ jwt = await get_jwt_database(
 ```
 
 Precedence is explicit argument > `S2IAM_IDENTITY_FORMAT_PREFERENCE` > built-in default.
+`server_url` resolves the same way, against `S2IAM_SERVER_URL`.
 
 ## Supported Environments
 
@@ -95,7 +96,7 @@ The `workspace_group_id` parameter is optional for `get_jwt_database()`. When pr
 ### Environment Variables
 
 - `S2IAM_DEBUGGING`: Set to "true" to enable debug logging
-- `S2IAM_SERVER_URL`: Custom authentication server URL (default: https://auth.singlestore.com)
+- `S2IAM_SERVER_URL`: Custom authentication server URL, replacing the built-in production endpoint. May contain the `:cloudProvider` and `:jwtType` placeholders. See [Environment variables](../README.md#environment-variables)
 
 ### Provider-Specific Configuration
 

@@ -65,6 +65,7 @@ String jwt2 = S2IAM.getDatabaseJWT("workspace-group-id",
 ```
 
 Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) > built-in default.
+`Options.withServerUrl` resolves the same way, against `S2IAM_SERVER_URL`.
 
 Whichever format is negotiated, the raw STS assumed-role ARN, the role session name, and the STS user id stay available in `getAdditionalClaims()` for auditing, under the `AWSClient.CLAIM_ASSUMED_ROLE_ARN`, `CLAIM_ROLE_SESSION_NAME`, and `CLAIM_USER_ID` keys.
 

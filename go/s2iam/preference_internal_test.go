@@ -43,6 +43,28 @@ func TestIdentityFormatPreferencePrecedence(t *testing.T) {
 	})
 }
 
+// TestServerURLPrecedence verifies option > env var > built-in default for the
+// authentication server URL, matching the Python and Java clients.
+func TestServerURLPrecedence(t *testing.T) {
+	t.Run("built-in default", func(t *testing.T) {
+		t.Setenv(ServerURLEnv, "")
+		var o jwtOptions
+		assert.Equal(t, defaultServer, o.serverURL())
+	})
+
+	t.Run("env var overrides the built-in default", func(t *testing.T) {
+		t.Setenv(ServerURLEnv, "https://auth.example.com/auth/iam/:jwtType")
+		var o jwtOptions
+		assert.Equal(t, "https://auth.example.com/auth/iam/:jwtType", o.serverURL())
+	})
+
+	t.Run("explicit option overrides the env var", func(t *testing.T) {
+		t.Setenv(ServerURLEnv, "https://auth.example.com/auth/iam/:jwtType")
+		o := processJWTOptions(jwtOptions{}, WithServerURL("https://explicit.example.com/auth"))
+		assert.Equal(t, "https://explicit.example.com/auth", o.serverURL())
+	})
+}
+
 // TestDefaultPreferencePinsIdentityAgainstServerOverride is the point of sending a
 // full, every-provider preference: run the real negotiation for every identity
 // shape the verifiers can produce, against a server override that tries to move

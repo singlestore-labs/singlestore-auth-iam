@@ -2,6 +2,7 @@
 JWT functionality for SingleStore authentication.
 """
 
+import os
 from typing import Any, Optional
 
 import aiohttp
@@ -20,6 +21,36 @@ from .identity_format import (
 from .models import CloudProviderClient, JWTType, Logger
 
 DEFAULT_SERVER_URL = "https://authsvc.singlestore.com/auth/iam/{jwt_type}"
+
+# Overrides the authentication server URL when no explicit server_url is given. The
+# Go and Java clients and the CLI honor the same variable, so one setting configures
+# a mixed-language fleet.
+SERVER_URL_ENV = "S2IAM_SERVER_URL"
+
+# The original, undocumented name for SERVER_URL_ENV. Still honored so existing
+# deployments keep working; SERVER_URL_ENV wins when both are set.
+_LEGACY_SERVER_URL_ENV = "S2IAM_JWT_SERVER_URL"
+
+
+def _resolve_server_url(jwt_type: JWTType, server_url: Optional[str]) -> str:
+    """Resolve the server URL using explicit argument > env var > built-in default."""
+    if server_url:
+        return server_url
+    env = os.environ.get(SERVER_URL_ENV) or os.environ.get(_LEGACY_SERVER_URL_ENV)
+    if env:
+        return env
+    return DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
+
+
+def _expand_server_url(server_url: str, jwt_type: JWTType, cloud_provider: str) -> str:
+    """Substitute the :cloudProvider and :jwtType placeholders, as Go and Java do.
+
+    A URL carrying neither placeholder is returned unchanged, so a concrete URL keeps
+    working. Supporting them here is what lets one SERVER_URL_ENV value serve both JWT
+    types and every provider, identically across the three clients.
+    """
+    return server_url.replace(":cloudProvider", cloud_provider).replace(":jwtType", jwt_type.value)
+
 
 # Sentinel distinguishing "preference not supplied" (fall back to env/default)
 # from an explicit empty preference (send no header).
@@ -60,8 +91,6 @@ def _resolve_identity_format_preference(preference: Any) -> list[str]:
         if isinstance(preference, str):
             return parse_identity_format_preference(preference)
         return list(preference)
-    import os
-
     env = os.environ.get(IDENTITY_FORMAT_PREFERENCE_ENV)
     if env:
         return parse_identity_format_preference(env)
@@ -104,18 +133,14 @@ async def get_jwt(
         NoCloudProviderDetectedError: If no cloud provider is detected
         Exception: If JWT acquisition fails
     """
-    import os
-
-    env_server_url = os.environ.get("S2IAM_JWT_SERVER_URL")
-    if server_url is None:
-        if env_server_url:
-            server_url = env_server_url
-        else:
-            server_url = DEFAULT_SERVER_URL.format(jwt_type=jwt_type.value)
+    server_url = _resolve_server_url(jwt_type, server_url)
 
     from .https import validate_auth_server_url
 
-    validate_auth_server_url(server_url, allow_http=allow_http)
+    # Validate the scheme before detecting the provider, so a bad URL fails fast. The
+    # provider is not known yet, so probe with a placeholder; the scheme cannot depend
+    # on it. The resolved URL is validated again below.
+    validate_auth_server_url(_expand_server_url(server_url, jwt_type, "aws"), allow_http=allow_http)
 
     # Detect provider if not provided
     if provider is None:
@@ -138,6 +163,9 @@ async def get_jwt(
 
     # Get identity headers
     headers, identity = await provider.get_identity_headers(additional_params)
+
+    target_url = _expand_server_url(server_url, jwt_type, identity.provider.value)
+    validate_auth_server_url(target_url, allow_http=allow_http)
 
     # Advertise the client's identity-format preference (content negotiation). The
     # verifier chooses the first supported-and-valid format; older servers ignore
@@ -163,12 +191,12 @@ async def get_jwt(
 
     # Log request if logger available
     if logger:
-        logger.log(f"Requesting JWT from {server_url} for provider {identity.provider.value}")
+        logger.log(f"Requesting JWT from {target_url} for provider {identity.provider.value}")
 
     # Make JWT request
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
         async with session.post(
-            server_url,
+            target_url,
             headers={
                 **headers,
                 "Content-Type": "application/json",
@@ -196,7 +224,7 @@ async def get_jwt(
 # Convenience functions for specific JWT types
 async def get_jwt_database(
     workspace_group_id: Optional[str] = None,
-    server_url: str = "https://authsvc.singlestore.com/auth/iam/database",
+    server_url: Optional[str] = None,
     allow_http: bool = False,
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
@@ -212,7 +240,9 @@ async def get_jwt_database(
 
     Args:
         workspace_group_id: Workspace group ID (optional - can be None or empty string)
-        server_url: Authentication server URL (defaults to production)
+        server_url: Authentication server URL. Defaults to the S2IAM_SERVER_URL
+            environment variable when set, else the production endpoint. May use the
+            :cloudProvider and :jwtType placeholders.
         allow_http: Permit http:// server URLs (for local testing only; default False)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
@@ -249,7 +279,7 @@ async def get_jwt_database(
 
 async def get_jwt_api(
     workspace_group_id: Optional[str] = None,
-    server_url: str = "https://authsvc.singlestore.com/auth/iam/api",
+    server_url: Optional[str] = None,
     allow_http: bool = False,
     provider: Optional[CloudProviderClient] = None,
     additional_params: Optional[dict[str, str]] = None,
@@ -264,7 +294,9 @@ async def get_jwt_api(
     Get a JWT for API gateway access.
 
     Args:
-        server_url: Authentication server URL (defaults to production)
+        server_url: Authentication server URL. Defaults to the S2IAM_SERVER_URL
+            environment variable when set, else the production endpoint. May use the
+            :cloudProvider and :jwtType placeholders.
         allow_http: Permit http:// server URLs (for local testing only; default False)
         provider: Optional provider client (will auto-detect if not provided)
         additional_params: Additional provider-specific parameters
