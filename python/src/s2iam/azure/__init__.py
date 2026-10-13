@@ -33,7 +33,6 @@ class AzureClient(CloudProviderClient):
         self._detected = False
         self._managed_identity_id: Optional[str] = None
         self._identity: Optional[CloudIdentity] = None
-        self._assume_role_requested = False
 
     def _log(self, message: str) -> None:
         """Log a message if logger is available."""
@@ -261,7 +260,6 @@ class AzureClient(CloudProviderClient):
         new_client = AzureClient(self._logger)
         new_client._detected = self._detected
         new_client._managed_identity_id = role_identifier
-        new_client._assume_role_requested = True
         return new_client
 
     async def get_identity_headers(
@@ -272,15 +270,19 @@ class AzureClient(CloudProviderClient):
             raise ProviderNotDetected("Azure provider not detected, call detect() first")
 
         try:
-            # Get access token for Azure management API
+            # Get access token for Azure management API. azure_resource overrides the
+            # audience, matching the Go and Java clients.
+            resource = "https://management.azure.com/"
+            if additional_params:
+                custom = additional_params.get("azure_resource")
+                if custom:
+                    resource = custom
             if self._managed_identity_id:
                 # Use specific managed identity
-                token_data = await self._get_managed_identity_token(
-                    "https://management.azure.com/", self._managed_identity_id
-                )
+                token_data = await self._get_managed_identity_token(resource, self._managed_identity_id)
             else:
                 # Use default identity
-                token_data = await self._get_managed_identity_token("https://management.azure.com/")
+                token_data = await self._get_managed_identity_token(resource)
 
             # Get instance metadata (unsigned) - we only use subscription/resource group names for
             # informational additional claims; REGION MUST COME FROM SIGNED TOKEN CLAIMS ONLY.

@@ -93,26 +93,108 @@ public class GCPClient extends AbstractBaseClient {
       audience = audience.substring(0, audience.length() - 1);
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
-      String url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
-          + audience + "&format=full";
-      HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
-          .timeout(Timeouts.IDENTITY).GET().build();
-      HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-      if (resp.statusCode() != 200 || resp.body().isEmpty()) {
-        if (resp.statusCode() == 404) {
-          return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
-              "GCP identity token unavailable (no attached service account) status=404"));
-        }
-        return new IdentityHeadersResult(null, null, new IllegalStateException(
-            "failed to get GCP identity token status=" + resp.statusCode()));
+      String token;
+      if (assumedRole != null && !assumedRole.isEmpty()) {
+        token = impersonatedIdentityToken(client, audience, assumedRole);
+      } else {
+        token = fetchMetadataIdentityToken(client, audience);
+      }
+      if (token == null || token.isEmpty()) {
+        return new IdentityHeadersResult(null, null, new IdentityUnavailableException(
+            "GCP identity token unavailable (no attached service account) status=404"));
       }
       Map<String, String> headers = new HashMap<>();
-      String token = resp.body();
       headers.put("Authorization", "Bearer " + token);
       CloudIdentity identity = parseGCPIdentity(token);
       return new IdentityHeadersResult(headers, identity, null);
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
+    }
+  }
+
+  private String impersonatedIdentityToken(HttpClient client, String audience,
+      String serviceAccount) throws Exception {
+    String selfToken = fetchMetadataIdentityToken(client, "https://iamcredentials.googleapis.com/");
+    if (selfToken == null || selfToken.isEmpty()) {
+      return null;
+    }
+    String body = OM.writeValueAsString(Map.of("audience", audience));
+    HttpRequest req = HttpRequest.newBuilder(URI.create(impersonationURL(serviceAccount)))
+        .timeout(Timeouts.IDENTITY_EXTENDED).header("Authorization", "Bearer " + selfToken)
+        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body))
+        .build();
+    HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+    if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+      throw new IllegalStateException("GCP impersonation failed status=" + resp.statusCode());
+    }
+    String token = OM.readTree(resp.body()).path("token").asText();
+    if (token == null || token.isEmpty()) {
+      throw new IllegalStateException("GCP impersonation returned empty token");
+    }
+    return token;
+  }
+
+  private String fetchMetadataIdentityToken(HttpClient client, String audience) throws Exception {
+    String url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience="
+        + audience + "&format=full";
+    HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata-Flavor", "Google")
+        .timeout(Timeouts.IDENTITY).GET().build();
+    HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+    if (resp.statusCode() == 404) {
+      return null;
+    }
+    if (resp.statusCode() != 200 || resp.body().isEmpty()) {
+      throw new IllegalStateException(
+          "failed to get GCP identity token status=" + resp.statusCode());
+    }
+    return resp.body();
+  }
+
+  /**
+   * IAM Credentials generateIdToken URL. The email is one path segment. Encoding
+   * matches Go's {@code url.PathEscape}: a normal service-account email is
+   * unchanged, and {@code /} cannot introduce another segment.
+   */
+  static String impersonationURL(String serviceAccountEmail) {
+    return "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/"
+        + pathEscape(serviceAccountEmail) + ":generateIdToken";
+  }
+
+  // Matches net/url.PathEscape: letters, digits, and -._~$&+:=@ stay literal.
+  // Everything else, including '/', is percent-encoded.
+  static String pathEscape(String value) {
+    byte[] bytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    StringBuilder out = new StringBuilder(bytes.length);
+    for (byte raw : bytes) {
+      int c = raw & 0xff;
+      if (pathUnescaped(c)) {
+        out.append((char) c);
+      } else {
+        out.append('%');
+        out.append(Character.toUpperCase(Character.forDigit(c >>> 4, 16)));
+        out.append(Character.toUpperCase(Character.forDigit(c & 0xf, 16)));
+      }
+    }
+    return out.toString();
+  }
+
+  private static boolean pathUnescaped(int c) {
+    if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9')
+      return true;
+    switch (c) {
+      case '-':
+      case '.':
+      case '_':
+      case '~':
+      case '$':
+      case '&':
+      case '+':
+      case ':':
+      case '=':
+      case '@':
+        return true;
+      default :
+        return false;
     }
   }
   private CloudIdentity parseGCPIdentity(String jwt) {

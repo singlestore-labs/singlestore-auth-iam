@@ -101,8 +101,7 @@ public class AzureClient extends AbstractBaseClient {
   public IdentityHeadersResult getIdentityHeaders(Map<String, String> additionalParams) {
     String resource = additionalParams.getOrDefault("azure_resource",
         "https://management.azure.com/");
-    String url = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource="
-        + resource;
+    String url = imdsTokenURL(resource, assumedRole);
     HttpClient client = HttpClient.newBuilder().connectTimeout(Timeouts.IDENTITY).build();
     try {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).header("Metadata", "true")
@@ -216,5 +215,20 @@ public class AzureClient extends AbstractBaseClient {
     } catch (Exception e) {
       return new IdentityHeadersResult(null, null, e);
     }
+  }
+
+  /**
+   * IMDS token URL. {@code clientId} is the user-assigned managed identity
+   * selected by assume-role; it is query-escaped so it cannot inject extra
+   * parameters. The resource is left unescaped, matching the Go client.
+   */
+  static String imdsTokenURL(String resource, String clientId) {
+    String url = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource="
+        + resource;
+    if (clientId != null && !clientId.isEmpty()) {
+      url += "&client_id="
+          + java.net.URLEncoder.encode(clientId, java.nio.charset.StandardCharsets.UTF_8);
+    }
+    return url;
   }
 }

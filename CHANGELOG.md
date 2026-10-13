@@ -24,6 +24,20 @@ meaning, so one setting configures a mixed-language fleet. See
   way; Go does not read that variable.
 
 ### Fixed
+- **Azure assume-role selects a user-assigned managed identity in all three clients.**
+  The identifier is sent as the IMDS `client_id`, query-escaped. Go previously returned
+  `ErrAssumeRoleNotSupported` despite documenting this, and Java stored the identifier
+  without using it. Python already did this, and now also honors `azure_resource`.
+- **Java GCP assume-role impersonates the service account**, via IAM Credentials
+  `generateIdToken`, as Go and Python already did. The identity is still parsed with
+  the same format rules as a metadata token.
+- **GCP impersonation URLs escape the service-account email the same way in all three
+  clients** (`url.PathEscape`: a normal email is unchanged, `/` cannot add a path
+  segment), and the request body is JSON rather than a formatted string, so a quote in
+  the audience cannot change the request.
+- **Python database JWT requests include `workspaceGroupID` as a query parameter**, as
+  Go and Java already did. Python also parses the JWT response without requiring a JSON
+  `Content-Type`, and reports an empty token as `received empty JWT from server`.
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
   hardcoded production URL rather than `None`, so the environment override was
   unreachable through the public API. They now default to `None`.
