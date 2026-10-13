@@ -18,9 +18,10 @@ meaning, so one setting configures a mixed-language fleet. See
   still accepted but `S2IAM_SERVER_URL` wins when both are set.
 
 ### Changed
-- **`S2IAM_DEBUGGING` (and `S2IAM_DEBUG_TIMING`) are matched case-insensitively in Go and
-  Java**, as Python already did, so `true`, `True`, and `TRUE` all enable debug logging
-  everywhere. Previously only the exact lowercase `true` worked outside Python.
+- **`S2IAM_DEBUGGING` is matched case-insensitively in Go and Java**, as Python already
+  did, so `true`, `True`, and `TRUE` all enable debug logging. Previously only the exact
+  lowercase `true` worked outside Python. Java's `S2IAM_DEBUG_TIMING` is matched the same
+  way; Go does not read that variable.
 
 ### Fixed
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
