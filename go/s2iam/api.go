@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -138,7 +139,7 @@ func DetectProvider(ctx context.Context, opts ...ProviderOption) (CloudProviderC
 // detectProviderImpl implements the provider detection with pre-filled options
 func detectProviderImpl(ctx context.Context, options detectProviderOptions) (CloudProviderClient, error) {
 	// If logger is not provided, check environment variable
-	if options.logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
+	if options.logger == nil && strings.EqualFold(os.Getenv("S2IAM_DEBUGGING"), "true") {
 		options.logger = newDefaultLogger()
 	}
 

@@ -108,7 +108,8 @@ jwt, err := s2iam.GetDatabaseJWT(
 ```
 
 Precedence is explicit option > `S2IAM_IDENTITY_FORMAT_PREFERENCE` (comma-separated) >
-built-in default. Verifier operators can change the default ordering via
+built-in default. `s2iam.WithServerURL` resolves the same way, against
+`S2IAM_SERVER_URL`. Verifier operators can change the default ordering via
 `models.VerifierConfig.DefaultIdentityFormats`, a single flat preference list spanning
 providers (each token names its own provider).
 

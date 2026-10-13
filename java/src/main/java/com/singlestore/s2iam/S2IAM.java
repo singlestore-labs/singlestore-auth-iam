@@ -22,6 +22,14 @@ public final class S2IAM {
   }
 
   private static final String DEFAULT_SERVER = "https://authsvc.singlestore.com/auth/iam/:jwtType";
+
+  /**
+   * Overrides the authentication server URL when {@link Options#withServerUrl} is
+   * not given. The Go and Python clients honor the same variable, so one setting
+   * configures a mixed-language fleet. The value may use the :cloudProvider and
+   * :jwtType placeholders and must be https:// unless HTTP is explicitly allowed.
+   */
+  public static final String SERVER_URL_ENV = "S2IAM_SERVER_URL";
   private static final String LIB_NAME = "s2iam-java";
   private static final String LIB_VERSION = Optional
       .ofNullable(S2IAM.class.getPackage().getImplementationVersion()).orElse("dev");
@@ -52,10 +60,10 @@ public final class S2IAM {
     }
   }
   private static boolean debugEnabled() {
-    return "true".equals(System.getenv("S2IAM_DEBUGGING"));
+    return "true".equalsIgnoreCase(System.getenv("S2IAM_DEBUGGING"));
   }
   private static boolean timingEnabled() {
-    return "true".equals(System.getenv("S2IAM_DEBUG_TIMING"));
+    return "true".equalsIgnoreCase(System.getenv("S2IAM_DEBUG_TIMING"));
   }
 
   // Convenience API (database)
@@ -67,7 +75,6 @@ public final class S2IAM {
     JwtOptions o = new JwtOptions();
     o.jwtType = JwtOptions.JWTType.database;
     o.workspaceGroupId = workspaceGroupId;
-    o.serverUrl = DEFAULT_SERVER;
     applyJwtOptions(o, opts);
     return getJWT(o);
   }
@@ -82,7 +89,6 @@ public final class S2IAM {
   public static String getAPIJWT(JwtOption... opts) throws S2IAMException {
     JwtOptions o = new JwtOptions();
     o.jwtType = JwtOptions.JWTType.api;
-    o.serverUrl = DEFAULT_SERVER;
     applyJwtOptions(o, opts);
     return getJWT(o);
   }
@@ -401,14 +407,21 @@ public final class S2IAM {
     if (o.timeout == null)
       o.timeout = Duration.ofSeconds(5);
     if (o.serverUrl == null || o.serverUrl.isEmpty())
-      o.serverUrl = DEFAULT_SERVER;
+      o.serverUrl = resolveServerUrl();
+  }
+
+  /**
+   * Resolves the server URL from the environment, falling back to the built-in
+   * default.
+   */
+  private static String resolveServerUrl() {
+    String env = System.getenv(SERVER_URL_ENV);
+    return env == null || env.isEmpty() ? DEFAULT_SERVER : env;
   }
 
   private static String getJWT(JwtOptions o) throws S2IAMException {
-    if (o.serverUrl == null || o.serverUrl.isEmpty()) {
-      throw new S2IAMException("server URL is required");
-    }
-    String probeUrl = o.serverUrl.replace(":cloudProvider", "aws").replace(":jwtType", "database");
+    String probeUrl = o.serverUrl.replace(":cloudProvider", "aws").replace(":jwtType",
+        o.jwtType.name());
     validateAuthServerURL(probeUrl, o.allowHttp);
     if (o.provider == null) {
       try {

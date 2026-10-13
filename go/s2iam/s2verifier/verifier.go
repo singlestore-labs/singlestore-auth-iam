@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/memsql/errors"
 	"github.com/singlestore-labs/singlestore-auth-iam/go/s2iam/aws"
@@ -45,7 +46,7 @@ type Verifiers map[models.CloudProviderType]models.CloudProviderVerifier
 // CreateVerifiers creates a verifier for each cloud provider
 func CreateVerifiers(ctx context.Context, config models.VerifierConfig) (Verifiers, error) {
 	// Set default logger if debugging is enabled and no logger is provided
-	if config.Logger == nil && os.Getenv("S2IAM_DEBUGGING") == "true" {
+	if config.Logger == nil && strings.EqualFold(os.Getenv("S2IAM_DEBUGGING"), "true") {
 		config.Logger = defaultLogger{}
 	}
 
