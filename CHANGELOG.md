@@ -24,6 +24,9 @@ meaning, so one setting configures a mixed-language fleet. See
   way; Go does not read that variable.
 
 ### Fixed
+- **Go and Python escape GCP impersonation URLs the same way** (`url.PathEscape`: a
+  normal email is unchanged, `/` cannot add a path segment). Go's request body is JSON
+  rather than a formatted string, so a quote in the audience cannot change the request.
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
   hardcoded production URL rather than `None`, so the environment override was
   unreachable through the public API. They now default to `None`.

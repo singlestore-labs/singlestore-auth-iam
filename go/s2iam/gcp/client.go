@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"sync"
@@ -163,14 +164,16 @@ func (c *GCPClient) GetIdentityHeaders(ctx context.Context, additionalParams map
 			return nil, nil, errors.WithStack(models.ErrProviderDetectedNoIdentity)
 		}
 
-		// Use IAM API to impersonate the service account
-		impersonationURL := fmt.Sprintf(
-			"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateIdToken",
-			serviceAccountEmail,
-		)
+		// Use IAM API to impersonate the service account. The email is path-escaped
+		// and the body is JSON, matching the Python and Java clients, so a quote
+		// or slash in the identifier cannot change the request.
+		impersonationURL := buildImpersonationURL(serviceAccountEmail)
 
-		requestBody := fmt.Sprintf(`{"audience":"%s"}`, audience)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(requestBody))
+		reqBody, err := json.Marshal(map[string]string{"audience": audience})
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to encode impersonation request: %w", err)
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, impersonationURL, strings.NewReader(string(reqBody)))
 		if err != nil {
 			return nil, nil, errors.Errorf("failed to create impersonation request: %w", err)
 		}
@@ -288,6 +291,16 @@ func (c *GCPClient) getIdentityFromToken(ctx context.Context, token string) (*mo
 
 	// Use the shared identity extraction function to ensure consistency with verifier
 	return extractGCPIdentityFromToken(ctx, payload, c.logger)
+}
+
+// buildImpersonationURL is the IAM Credentials generateIdToken endpoint for the
+// given service-account email. PathEscape keeps @ (so a normal email is unchanged)
+// and encodes /, so the email stays a single path segment.
+func buildImpersonationURL(serviceAccountEmail string) string {
+	return fmt.Sprintf(
+		"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateIdToken",
+		neturl.PathEscape(serviceAccountEmail),
+	)
 }
 
 // AssumeRole configures the provider to use a different service account
