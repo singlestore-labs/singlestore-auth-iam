@@ -3,6 +3,7 @@
 import asyncio
 import os
 from typing import Any, Optional
+from urllib.parse import quote
 
 import aiohttp
 import jwt
@@ -20,6 +21,16 @@ from ..models import (
     ProviderIdentityUnavailable,
     ProviderNotDetected,
 )
+
+
+def impersonation_url(service_account_email: str) -> str:
+    """IAM Credentials generateIdToken URL.
+
+    The email is one path segment. The safe set matches Go's url.PathEscape: a normal
+    service-account email is unchanged, and '/' cannot introduce another segment.
+    """
+    segment = quote(service_account_email, safe="$&+:=@")
+    return "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/" f"{segment}:generateIdToken"
 
 
 class GCPClient(CloudProviderClient):
@@ -292,7 +303,10 @@ class GCPClient(CloudProviderClient):
         self_token = await self._get_identity_token("https://iamcredentials.googleapis.com/")
 
         # Request impersonated token
-        url = f"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{self._service_account_email}:generateIdToken"  # noqa: E501
+        email = self._service_account_email
+        if not email:
+            raise Exception("impersonation requires a service account email")
+        url = impersonation_url(email)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
