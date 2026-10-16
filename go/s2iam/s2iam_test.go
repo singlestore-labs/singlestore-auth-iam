@@ -629,14 +629,10 @@ func TestGetDatabaseJWT_AssumeRole_InvalidRole(t *testing.T) {
 		s2iam.WithServerURL(fakeServer.URL+"/iam/:jwtType"), s2iam.WithAllowHTTP(),
 		s2iam.WithAssumeRole(invalidRole))
 
-	// This should fail since the role doesn't exist (or AssumeRole isn't supported)
+	// This should fail since the role doesn't exist. Azure selects a user-assigned
+	// managed identity by client_id rather than rejecting AssumeRole outright, so
+	// an unknown identifier fails at the metadata service like the other providers.
 	require.Error(t, err, "AssumeRole should fail with invalid role")
-
-	// For Azure, we expect the specific "AssumeRole not supported" error
-	if client.GetType() == s2iam.ProviderAzure {
-		assert.True(t, errors.Is(err, s2iam.ErrAssumeRoleNotSupported),
-			"Azure should return ErrAssumeRoleNotSupported, got: %+v", err)
-	}
 
 	t.Logf("AssumeRole correctly failed with invalid role (%s format): %s: %v",
 		client.GetType(), invalidRole, err)
