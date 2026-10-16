@@ -24,6 +24,10 @@ meaning, so one setting configures a mixed-language fleet. See
   way; Go does not read that variable.
 
 ### Fixed
+- **Java GCP assume-role impersonates the service account**, via IAM Credentials
+  `generateIdToken`, as Go and Python already did. The identity is still parsed with
+  the same format rules as a metadata token. The service-account email is path-escaped
+  the same way as Go's `url.PathEscape`.
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
   hardcoded production URL rather than `None`, so the environment override was
   unreachable through the public API. They now default to `None`.
