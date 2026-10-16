@@ -2,8 +2,10 @@
 JWT functionality for SingleStore authentication.
 """
 
+import json
 import os
 from typing import Any, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import aiohttp
 
@@ -50,6 +52,18 @@ def _expand_server_url(server_url: str, jwt_type: JWTType, cloud_provider: str) 
     types and every provider, identically across the three clients.
     """
     return server_url.replace(":cloudProvider", cloud_provider).replace(":jwtType", jwt_type.value)
+
+
+def _with_workspace_group_query(server_url: str, workspace_group_id: str) -> str:
+    """Add workspaceGroupID the way Go and Java do: a query parameter, not only a body field.
+
+    The auth service requires the parameter on database JWT requests. Existing query
+    parameters are preserved.
+    """
+    parsed = urlparse(server_url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["workspaceGroupID"] = workspace_group_id
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 # Sentinel distinguishing "preference not supplied" (fall back to env/default)
@@ -166,6 +180,8 @@ async def get_jwt(
 
     target_url = _expand_server_url(server_url, jwt_type, identity.provider.value)
     validate_auth_server_url(target_url, allow_http=allow_http)
+    if workspace_group_id and jwt_type == JWTType.DATABASE_ACCESS:
+        target_url = _with_workspace_group_query(target_url, workspace_group_id)
 
     # Advertise the client's identity-format preference (content negotiation). The
     # verifier chooses the first supported-and-valid format; older servers ignore
@@ -204,10 +220,13 @@ async def get_jwt(
             json=request_data,
         ) as response:
             if response.status == 200:
-                response_data = await response.json()
+                try:
+                    response_data = await response.json(content_type=None)
+                except json.JSONDecodeError as exc:
+                    raise Exception(f"cannot parse response: {exc}") from exc
                 jwt_value = response_data.get("jwt")
                 if not isinstance(jwt_value, str) or not jwt_value:
-                    raise Exception("No JWT in response")
+                    raise Exception("received empty JWT from server")
 
                 if logger:
                     logger.log("Successfully obtained JWT")
