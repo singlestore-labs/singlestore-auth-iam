@@ -182,7 +182,9 @@ on-remote-test-java: check-cloud-env
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd java && mvn -q -DskipTests=false verify
+	# -B, not -q: a quiet Maven run emits nothing, so the SSH session looks idle
+	# and the runner never sees ALL_TESTS_COMPLETED_OK if the path drops it.
+	cd java && mvn -B -DskipTests=false verify
 	# Copy JaCoCo XML up one level for remote retrieval naming consistency
 	@if [ -f java/target/site/jacoco/jacoco.xml ]; then cp java/target/site/jacoco/jacoco.xml java-coverage.xml || true; fi
 
@@ -361,7 +363,9 @@ clean:
 # Variables for remote testing (can be overridden by environment or GitHub Actions)
 # Use := to evaluate once at parse time rather than each time it's used
 REMOTE_BASE_DIR ?= tests
-SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
+# ServerAlive* keeps a quiet remote command from being dropped as an idle TCP
+# session. CountMax still fails the session if sshd stops answering.
+SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=10
 # Fixed per-host cloud test lock path (not overridable).
 override S2IAM_CLOUD_TEST_LOCK_DIR := /tmp/s2iam-cloud-test.lock.d
 LOCK_MAX_WAIT_SECONDS ?= 7200
