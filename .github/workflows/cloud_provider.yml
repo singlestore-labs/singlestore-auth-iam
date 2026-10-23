@@ -106,9 +106,9 @@ jobs:
         make ssh-acquire-lock
         echo "acquired=true" >> "${GITHUB_OUTPUT}"
 
-    # A healthy leg finishes in about two minutes.
+    # AWS finishes in about four minutes. A healthy GCP leg takes about ten.
     - name: Run remote tests via Make (copy, run, download, cleanup)
-      timeout-minutes: 5
+      timeout-minutes: 12
       env:
         ENV_VARS: ${{ env.EXTRA_ENV }}
         UNIQUE_DIR: ${{ env.UNIQUE_DIR }}
