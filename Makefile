@@ -160,9 +160,17 @@ on-remote-completed:
 	@echo "ALL_TESTS_COMPLETED_OK"
 
 # Cloud test targets (designed to run ON cloud VMs)
+# /tmp on the cloud VMs is a small tmpfs. Go's build work directory defaults
+# there, and a cold compile overflows it ("disk quota exceeded").
+GOTMPDIR ?= $(HOME)/.cache/s2iam-gotmp
+export GOTMPDIR
+
+prepare-remote-tmpdir:
+	mkdir -p "$(GOTMPDIR)"
+
 on-remote-test: check-cloud-env on-remote-test-java on-remote-test-go on-remote-test-python
 
-on-remote-test-go: check-cloud-env
+on-remote-test-go: check-cloud-env prepare-remote-tmpdir
 	@echo "=== Running Go cloud tests ==="
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
@@ -177,12 +185,13 @@ on-remote-test-python: check-cloud-env
 	# Add src to PYTHONPATH so tests can import s2iam without installation
 	cd python && PYTHONPATH=src python3 -m pytest tests/ -v --tb=short --cov=src/s2iam --cov-report=xml:coverage.xml --cov-report=html:htmlcov
 
-on-remote-test-java: check-cloud-env
+on-remote-test-java: check-cloud-env prepare-remote-tmpdir
 	@echo "=== Running Java cloud tests ==="
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER=$${S2IAM_TEST_CLOUD_PROVIDER:-<unset>}"
 	@echo "Environment: S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE=$${S2IAM_TEST_CLOUD_PROVIDER_NO_ROLE:-<unset>}"
 	@echo "Environment: S2IAM_TEST_ASSUME_ROLE=$${S2IAM_TEST_ASSUME_ROLE:-<unset>}"
-	cd java && mvn -q -DskipTests=false verify
+	# -B keeps Maven output in the CI log. -q prints nothing for the whole verify.
+	cd java && mvn -B -DskipTests=false verify
 	# Copy JaCoCo XML up one level for remote retrieval naming consistency
 	@if [ -f java/target/site/jacoco/jacoco.xml ]; then cp java/target/site/jacoco/jacoco.xml java-coverage.xml || true; fi
 
@@ -361,7 +370,9 @@ clean:
 # Variables for remote testing (can be overridden by environment or GitHub Actions)
 # Use := to evaluate once at parse time rather than each time it's used
 REMOTE_BASE_DIR ?= tests
-SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10
+# ServerAlive* keeps a quiet remote command from being dropped as an idle TCP
+# session. CountMax still fails the session if sshd stops answering.
+SSH_OPTS ?= -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=10
 # Fixed per-host cloud test lock path (not overridable).
 override S2IAM_CLOUD_TEST_LOCK_DIR := /tmp/s2iam-cloud-test.lock.d
 LOCK_MAX_WAIT_SECONDS ?= 7200
@@ -383,7 +394,7 @@ ssh-run-remote-tests: check-host
 	ssh $(SSH_OPTS) $(HOST) \
 		"cd $(REMOTE_BASE_DIR)/$(UNIQUE_DIR) && env $(ENV_VARS) make $(TEST_TARGET) on-remote-completed" \
 		2>&1 | tee $(HOST)-log
-	@if grep -q "ALL_TESTS_COMPLETED_OK" $(HOST)-log; then \
+	@if grep -qx "ALL_TESTS_COMPLETED_OK" $(HOST)-log; then \
 		echo "✓ Remote tests passed on $(HOST)"; \
 	else \
 		echo "✗ Remote tests failed on $(HOST) - check $(HOST)-log"; \

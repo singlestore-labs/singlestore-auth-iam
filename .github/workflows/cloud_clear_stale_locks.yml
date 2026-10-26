@@ -46,7 +46,7 @@ jobs:
 
     env:
       SSH_KEY_SECRET: ${{ matrix.secret }}
-      SSH_OPTS: "-i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10"
+      SSH_OPTS: "-i ~/.ssh/key -o StrictHostKeyChecking=no -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=10"
       HOST: ${{ matrix.username }}@${{ matrix.hostname }}
 
     steps:
