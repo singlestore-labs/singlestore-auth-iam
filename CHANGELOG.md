@@ -24,6 +24,9 @@ meaning, so one setting configures a mixed-language fleet. See
   way; Go does not read that variable.
 
 ### Fixed
+- **Python database JWT requests include `workspaceGroupID` as a query parameter**, as
+  Go and Java already did. Python also parses the JWT response without requiring a JSON
+  `Content-Type`, and reports an empty token as `received empty JWT from server`.
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
   hardcoded production URL rather than `None`, so the environment override was
   unreachable through the public API. They now default to `None`.
