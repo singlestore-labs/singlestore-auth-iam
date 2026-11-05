@@ -24,6 +24,10 @@ meaning, so one setting configures a mixed-language fleet. See
   way; Go does not read that variable.
 
 ### Fixed
+- **Azure assume-role selects a user-assigned managed identity in all three clients.**
+  The identifier is sent as the IMDS `client_id`, query-escaped. Go previously returned
+  `ErrAssumeRoleNotSupported` despite documenting this, and Java stored the identifier
+  without using it. Python already did this, and now also honors `azure_resource`.
 - **Python:** `get_jwt_database()` and `get_jwt_api()` defaulted `server_url` to a
   hardcoded production URL rather than `None`, so the environment override was
   unreachable through the public API. They now default to `None`.
